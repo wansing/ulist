@@ -1,0 +1,11 @@
+{{ define "content" }}
+	<h1>Sign up to {{ .ListAddress }}</h1>
+	<p>The mailing list {{ .ListAddress }} allows public signup. If you enter an email address here, it will receive a confirmation link.</p>
+	<form action="" method="post">
+		<div class="form-group">
+			<label>Email address</label>
+			<input name="email" type="email" class="form-control" placeholder="Email address" value="{{ .EMail }}">
+		</div>
+		<button name="signup" value="1" type="submit" class="btn btn-primary">Sign up</button>
+	</form>
+{{ end }}

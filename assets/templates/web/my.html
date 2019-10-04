@@ -1,0 +1,49 @@
+{{ define "content" }}
+	<h1>My mailing lists</h1>
+	{{ with . }}
+		<table class="table">
+			<thead>
+				<tr>
+					<th>Address</th>
+					<th>Name</th>
+					<th></th>
+					<th></th>
+					<th></th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{{ range . }}
+					<tr>
+						<td>{{ .ListInfo.Address }}</td>
+						<td>{{ .ListInfo.Name }}</td>
+						<!-- Administration -->
+						<td>
+							{{ if .Admin }}
+								<a href="/settings/{{ .ListInfo.EscapeAddress }}">Settings</a>
+							{{ end }}
+						</td>
+						<td>
+							{{ if .Admin }}
+								<a href="/members/{{ .ListInfo.EscapeAddress }}">Members</a></td>
+							{{ end }}
+						</td>
+						<!-- Moderation -->
+						<td>
+							{{ if .Moderate }}
+								<a href="/knowns/{{ .ListInfo.EscapeAddress }}">Known senders</a>
+							{{ end }}
+						</td>
+						<td>
+							{{ if .Moderate }}
+								<a href="/mod/{{ .ListInfo.EscapeAddress }}">Moderation requests</a>
+							{{ end }}
+						</td>
+					</tr>
+				{{ end }}
+			</tbody>
+		</table>
+	{{ else }}
+		<p>No lists.</p>
+	{{ end }}
+{{ end }}

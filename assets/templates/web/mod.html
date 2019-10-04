@@ -1,0 +1,53 @@
+{{ define "content" }}
+	<h1 class="mb-3">Moderate {{ .List.Address }}</h1>
+	{{ if .Messages }}
+		<form action="" method="post">
+			{{ range .Messages }}
+				<div class="card mb-3">
+					<div class="card-body">
+						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ .TryMimeDecode (.Header.Get "Subject") }}</a></h5>
+						<p class="card-text">
+							From: {{ .Header.Get "From" }}<br> <!-- TODO ensure that multiple addresses are displayed -->
+							{{ with .Header.Get "Sender" }}
+								Sender: {{ . }}<br>
+							{{ end }}
+							To: {{ .Header.Get "To" }}<br> <!-- TODO ensure that multiple addresses are displayed -->
+							{{ with .Header.Get "Cc" }}
+								Cc: {{ . }}<br>
+							{{ end }}
+							Date: {{ .Header.Get "Date" }}<br>
+						</p>
+					</div>
+					<div class="card-footer">
+						<div class="form-check form-check-inline">
+							<input class="form-check-input"  id="msg-{{ .Filename }}-delete" type="radio" name="msg-{{ .Filename }}" value="delete">
+							<label class="form-check-label" for="msg-{{ .Filename }}-delete">Delete</label>
+						</div>
+						<div class="form-check form-check-inline">
+							<input class="form-check-input"  id="msg-{{ .Filename }}-postpone" type="radio" name="msg-{{ .Filename }}" value="postpone" checked>
+							<label class="form-check-label" for="msg-{{ .Filename }}-postpone">Postpone decision</label>
+						</div>
+						<div class="form-check form-check-inline">
+							<input class="form-check-input"  id="msg-{{ .Filename }}-pass" type="radio" name="msg-{{ .Filename }}" value="pass">
+							<label class="form-check-label" for="msg-{{ .Filename }}-pass">Pass</label>
+						</div>
+					</div>
+				</div>
+			{{ end }}
+			<button name="apply" value="1" type="submit" class="btn btn-primary">Apply</button>
+		</form>
+		{{ with .PageLinks }}
+			<nav class="mt-3">
+				<ul class="pagination justify-content-center">
+					{{ range . }}
+					<li class="page-item {{ if eq .Page $.Page }}active{{ end }}">
+						<a class="page-link" href="{{ .Url }}">{{ .Page }}</a>
+					</li>
+					{{ end }}
+				</ul>
+			</nav>
+		{{ end }}
+	{{ else }}
+		<p>No open moderation requests at the moment.</p>
+	{{ end }}
+{{ end }}

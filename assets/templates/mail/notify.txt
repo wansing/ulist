@@ -1,0 +1,5 @@
+{{ define "body" -}}
+A message at {{ .List.Address }} {{ with .List.Name -}} ({{ . }}) {{ end -}} is waiting for moderation.
+
+You can moderate it here: {{ .ModHref }}
+{{ end }}

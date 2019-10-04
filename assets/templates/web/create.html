@@ -1,0 +1,18 @@
+{{ define "content" }}
+	<h1>Create a new mailing list</h1>
+	<form action="" method="post">
+		<div class="form-group">
+			<label>List address (domain must be configured on this server)</label>
+			<input name="address" type="email" class="form-control" placeholder="List address" value="{{ .Address }}">
+		</div>
+		<div class="form-group">
+			<label>List name</label>
+			<input name="name" type="text" class="form-control" placeholder="List name" value="{{ .Name }}">
+		</div>
+		<div class="form-group">
+			<label>Members which can <strong>administrate and moderate</strong></label>
+			<textarea name="admin_mods" type="email" class="form-control" placeholder="Members which can administrate and moderate">{{ .AdminMods }}</textarea>
+		</div>
+		<button name="add" value="1" type="submit" class="btn btn-primary">Create list</button>
+	</form>
+{{ end }}

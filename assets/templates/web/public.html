@@ -1,0 +1,25 @@
+{{ define "content" }}
+	<h1>Lists available for public signup</h1>
+	{{ with . }}
+		<table class="table">
+			<thead>
+				<tr>
+					<th>Address</th>
+					<th>Name</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{{ range .}}
+					<tr>
+						<td>{{ .Address }}</td>
+						<td>{{ .Name }}</td>
+						<td><a href="/public/{{ .Address }}">Sign up</a></td>
+					</tr>
+				{{ end }}
+			</tbody>
+		</table>
+	{{ else }}
+		<p>No lists.</p>
+	{{ end }}
+{{ end }}

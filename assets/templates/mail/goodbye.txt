@@ -1,0 +1,5 @@
+{{ define "body" -}}
+You unsubscribed from the mailing list {{ . }}.
+
+Goodbye!
+{{ end }}

@@ -23,6 +23,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/shurcooL/httpfs/html/vfstemplate"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/util"
 )
 
 var ErrUnauthorized = errors.New("Unauthorized")
@@ -34,15 +35,15 @@ var sessionManager *scs.SessionManager
 
 func init() {
 	sessionManager = scs.New()
-	sessionManager.IdleTimeout = 1 * time.Hour
+	sessionManager.IdleTimeout = 2 * time.Hour
 	sessionManager.Lifetime = 12 * time.Hour
-	sessionManager.Cookie.Persist = false
+	sessionManager.Cookie.Persist = false // Don't store cookie across browser sessions. Required for GDPR cookie consent exemption criterion B. https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2012/wp194_en.pdf
 	sessionManager.Cookie.SameSite = http.SameSiteLaxMode // good CSRF protection if/because HTTP GET don't modify anything
 	sessionManager.Cookie.Secure = false // else running on localhost:8080 fails
 }
 
 func tmpl(filename string) *template.Template {
-	return template.Must(vfstemplate.ParseFiles(assets, template.New("web"), "templates/web/web.html", "templates/web/"+filename+".html"))
+	return template.Must(vfstemplate.ParseFiles(assets, template.New("web").Funcs(template.FuncMap{"TryMimeDecode": mailutil.TryMimeDecode}), "templates/web/web.html", "templates/web/"+filename+".html"))
 }
 
 var allTemplate = tmpl("all")
@@ -111,17 +112,12 @@ func (ctx *Context) Execute(t *template.Template, data interface{}) error {
 	return t.Execute(ctx.w, ctx)
 }
 
-// returns always nil, this reminds you to return from the handler as well
 func (ctx *Context) Redirect(target string) {
 	http.Redirect(ctx.w, ctx.r, target, 302)
 }
 
 func (ctx *Context) ServeFile(name string) {
 	http.ServeFile(ctx.w, ctx.r, name)
-}
-
-func (ctx *Context) FormEMail() (string, error) {
-	return mailutil.Clean(ctx.r.PostFormValue("email"))
 }
 
 func (ctx *Context) Login(email, password string) bool {
@@ -191,8 +187,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 			return
 		}
 
-		err := f(ctx)
-		if err != nil {
+		if err := f(ctx); err != nil {
 			if err != ErrUnauthorized && err != ErrNoList {
 				log.Println("[web]", err)
 			}
@@ -206,6 +201,7 @@ type Subdir struct {
 	http.FileSystem
 }
 
+// implement http.FileSystem
 func (sd Subdir) Open(name string) (http.File, error) {
 	return sd.FileSystem.Open(sd.path + name)
 }
@@ -266,10 +262,10 @@ func webui() {
 		var address string
 
 		if HttpUnix != "" {
-			_ = removeSocket(HttpUnix)
+			_ = util.RemoveSocket(HttpUnix)
 			network = "unix"
 			address = HttpUnix
-		} else if 0 < HttpTcp && HttpTcp < 65536 {
+		} else {
 			network = "tcp"
 			address = fmt.Sprintf("127.0.0.1:%d", HttpTcp)
 		}
@@ -303,43 +299,32 @@ func webui() {
 // helper functions
 
 func loadList(f func(*Context, *List) error) func(*Context) error {
-
 	return func(ctx *Context) error {
-
-		list, err := GetList(ctx.ps.ByName("list"))
-		if list == nil || err != nil {
+		if list, err := GetList(ctx.ps.ByName("list")); list != nil && err == nil { // TODO let GetList return sql.ErrNoRows
+			return f(ctx, list)
+		} else {
 			return ErrNoList // Same error as for public handlers on non-public lists, so they don't reveal whether the list exists. However SMTP can reveal it.
 		}
-
-		return f(ctx, list)
 	}
 }
 
 func requireAdminPermission(f func(*Context, *List) error) func(*Context, *List) error {
-
 	return func(ctx *Context, list *List) error {
-
-		m, _, _ := list.GetMember(ctx.User)
-
-		if m.Admin || ctx.IsSuperAdmin() {
+		if m, _, _ := list.GetMember(ctx.User); m.Admin || ctx.IsSuperAdmin() {
 			return f(ctx, list)
+		} else {
+			return ErrUnauthorized
 		}
-
-		return ErrUnauthorized
 	}
 }
 
 func requireModPermission(f func(*Context, *List) error) func(*Context, *List) error {
-
 	return func(ctx *Context, list *List) error {
-
-		m, _, _ := list.GetMember(ctx.User)
-
-		if m.Moderate || ctx.IsSuperAdmin() {
+		if m, _, _ := list.GetMember(ctx.User); m.Moderate || ctx.IsSuperAdmin() {
 			return f(ctx, list)
+		} else {
+			return ErrUnauthorized
 		}
-
-		return ErrUnauthorized
 	}
 }
 
@@ -371,7 +356,7 @@ func loginHandler(ctx *Context) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		data.Mail, _ = ctx.FormEMail()
+		data.Mail = ctx.r.PostFormValue("email")
 
 		if ctx.Login(data.Mail, ctx.r.PostFormValue("password")) {
 
@@ -549,7 +534,7 @@ func knownsHandler(ctx *Context, list *List) error {
 }
 
 type StoredListMessage struct {
-	*Message
+	*mailutil.Message
 	List     *List
 	Filename string
 }
@@ -564,48 +549,56 @@ func modHandler(ctx *Context, list *List) error {
 
 		notifyDeleted := 0
 		notifyPassed := 0
+		notifyAddedKnown := 0
 
 		for emlFilename, action := range ctx.r.PostForm {
 
-			if !strings.HasPrefix(emlFilename, "msg-") {
+			if !strings.HasPrefix(emlFilename, "action-") {
 				continue
 			}
 
-			emlFilename = strings.TrimPrefix(emlFilename, "msg-")
+			emlFilename = strings.TrimPrefix(emlFilename, "action-")
 
-			eml, err := list.Open(emlFilename)
+			m, err := list.Open(emlFilename)
 			if err != nil {
-				log.Println("[web openeml]", err)
+				log.Println("[web/openeml]", err)
 				continue
 			}
 
 			switch action[0] {
 
 			case "delete":
+
 				if err = list.DeleteModeratedMail(emlFilename); err != nil {
 					ctx.Alert(err)
 				} else {
 					notifyDeleted++
 				}
 
-			/*case "allow":
-			emlSender, err := eml.GetSender()
-			if err != nil {
-				return err
-			}
-			err = list.AddKnown(emlSender)
-			if err != nil {
-				log.Println("[web foo]", err)
-			}
-			fallthrough*/
+				if ctx.r.PostFormValue("addknown-delete-" + emlFilename) != "" {
+					if has, from := mailutil.HasSingleFrom(m.Header); has && list.ActionKnown == Reject { // same condition as in template
+						if err := list.AddKnowns(from, ctx); err == nil {
+							notifyAddedKnown++
+						}
+					}
+				}
 
 			case "pass":
-				if err = eml.Send(list); err != nil {
+
+				if err = list.Send(m); err != nil {
 					ctx.Alert(err)
 				} else {
 					log.Println("[success] Processed email successfully")
 					notifyPassed++
 					_ = list.DeleteModeratedMail(emlFilename)
+				}
+
+				if ctx.r.PostFormValue("addknown-pass-" + emlFilename) != "" {
+					if has, from := mailutil.HasSingleFrom(m.Header); has && list.ActionKnown == Pass { // same condition as in template
+						if err := list.AddKnowns(from, ctx); err == nil {
+							notifyAddedKnown++
+						}
+					}
 				}
 			}
 		}
@@ -765,7 +758,7 @@ func publicSignupHandler(ctx *Context, list *List) error {
 
 		var err error
 
-		if data.EMail, err = ctx.FormEMail(); err != nil {
+		if data.EMail, err = mailutil.Clean(ctx.r.PostFormValue("email")); err != nil {
 			ctx.Alert(err)
 		} else {
 			if err := list.sendPublicOptIn(data.EMail); err != nil {

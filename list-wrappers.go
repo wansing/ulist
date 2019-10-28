@@ -30,7 +30,7 @@ func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter
 		return err
 	}
 
-	return list.AddMembers(false, rawAdminMods, true, true, true, true, alerter) // sendWelcome == false
+	return list.AddMembers(false, rawAdminMods, true, true, true, true, alerter) // sendWelcome = false
 }
 
 // *List is nil if not found

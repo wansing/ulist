@@ -1,4 +1,12 @@
 {{ define "content" }}
+	<style>
+		.ifchecked {
+			display: none;
+		}
+		input[type="radio"]:checked~div.ifchecked {
+			display: flex;
+		}
+	</style>
 	<h1 class="mb-3">Moderate {{ .List.Address }}</h1>
 	{{ if .Messages }}
 		<form action="" method="post">
@@ -7,11 +15,11 @@
 					<div class="card-body">
 						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ .TryMimeDecode (.Header.Get "Subject") }}</a></h5>
 						<p class="card-text">
-							From: {{ .Header.Get "From" }}<br> <!-- TODO ensure that multiple addresses are displayed -->
+							From: {{ .Header.Get "From" }}<br> <!-- an email header has a single "From" field which can contain multiple addresses -->
 							{{ with .Header.Get "Sender" }}
 								Sender: {{ . }}<br>
 							{{ end }}
-							To: {{ .Header.Get "To" }}<br> <!-- TODO ensure that multiple addresses are displayed -->
+							To: {{ .Header.Get "To" }}<br> <!-- an email header has a single "To" field which can contain multiple addresses -->
 							{{ with .Header.Get "Cc" }}
 								Cc: {{ . }}<br>
 							{{ end }}
@@ -20,26 +28,42 @@
 					</div>
 					<div class="card-footer">
 						<div class="form-check form-check-inline">
-							<input class="form-check-input"  id="msg-{{ .Filename }}-delete" type="radio" name="msg-{{ .Filename }}" value="delete">
-							<label class="form-check-label" for="msg-{{ .Filename }}-delete">Delete</label>
+							<input class="form-check-input"  id="delete-{{ .Filename }}" type="radio" name="action-{{ .Filename }}" value="delete">
+							<label class="form-check-label" for="delete-{{ .Filename }}">Delete</label>
+							{{ if and .GetSingleFrom $.List.ActionKnown.EqualsReject }}
+								<div class="form-check form-check-inline ifchecked">
+									&ensp;
+									<input class="form-check-input"  id="addknown-delete-{{ .Filename }}" type="checkbox" name="addknown-delete-{{ .Filename }}" value="on">
+										<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
+									<label class="form-check-label" for="addknown-delete-{{ .Filename }}">add {{ .GetSingleFrom }} to known senders</label>
+								</div>
+							{{ end }}
 						</div>
 						<div class="form-check form-check-inline">
-							<input class="form-check-input"  id="msg-{{ .Filename }}-postpone" type="radio" name="msg-{{ .Filename }}" value="postpone" checked>
-							<label class="form-check-label" for="msg-{{ .Filename }}-postpone">Postpone decision</label>
+							<input class="form-check-input"  id="postpone-{{ .Filename }}" type="radio" name="action-{{ .Filename }}" value="postpone" checked>
+							<label class="form-check-label" for="postpone-{{ .Filename }}">Postpone decision</label>
 						</div>
 						<div class="form-check form-check-inline">
-							<input class="form-check-input"  id="msg-{{ .Filename }}-pass" type="radio" name="msg-{{ .Filename }}" value="pass">
-							<label class="form-check-label" for="msg-{{ .Filename }}-pass">Pass</label>
+							<input class="form-check-input"  id="pass-{{ .Filename }}" type="radio" name="action-{{ .Filename }}" value="pass">
+							<label class="form-check-label" for="pass-{{ .Filename }}">Pass </label>
+							{{ if and .GetSingleFrom $.List.ActionKnown.EqualsPass }}
+								<div class="form-check form-check-inline ifchecked">
+									&ensp;
+									<input class="form-check-input"  id="addknown-pass-{{ .Filename }}" type="checkbox" name="addknown-pass-{{ .Filename }}" value="on">
+										<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
+									<label class="form-check-label" for="addknown-pass-{{ .Filename }}">add {{ .GetSingleFrom }} to known senders</label>
+								</div>
+							{{ end }}
 						</div>
 					</div>
 				</div>
 			{{ end }}
 			<button name="apply" value="1" type="submit" class="btn btn-primary">Apply</button>
 		</form>
-		{{ with .PageLinks }}
+		{{ if gt (len .PageLinks) 1 }}
 			<nav class="mt-3">
 				<ul class="pagination justify-content-center">
-					{{ range . }}
+					{{ range .PageLinks }}
 					<li class="page-item {{ if eq .Page $.Page }}active{{ end }}">
 						<a class="page-link" href="{{ .Url }}">{{ .Page }}</a>
 					</li>

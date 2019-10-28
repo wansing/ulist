@@ -4,8 +4,7 @@ A mailing list service that keeps it simple.
 
 ## Build
 
-* `go generate`
-* `go build`
+See `build.sh`.
 
 ## Integration
 
@@ -86,22 +85,20 @@ END;
 
 * more unit tests
 * opt-in after adding members manually
-* GDPR: check if web ui cookie stuff requires consent
 * GDPR: log opt-in clicks separately
 * GDPR: require opt-in after n days or member won't get mails any more
 * more sophisticated bounce processing
 * append an unsubscribe link to the content
 * remove unsubscribing via email (that's prone to spoofing and can leak memberships)
-* support more database backends (e.g. Postgres)
 * support more authentication backends
 * web UI: list removal
 * web UI: list creation permissions per domain
 * prevent email loops (check `Received` or `List-...` headers)
-* web UI: moderation: checkbox "add to known senders" (reuse unsubscribe/personalFrom code)
 * reject or always moderate emails which have been flagged as spam (`X-Spam` header or so)
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)
+* Bug: rewritings ("From" munging etc) is done before moderation
 
 ## Omitted features
 

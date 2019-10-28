@@ -3,13 +3,11 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"golang.org/x/sys/unix"
 	"io"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -20,7 +18,9 @@ import (
 
 var logAlerter = util.LogAlerter{}
 
-var Db Database
+var GitCommit string // hash
+
+var Db *Database
 var HttpTcp uint
 var HttpUnix string
 var SmtpsAuthPort uint
@@ -33,10 +33,11 @@ var WebUrl string
 func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
+	log.Println("Starting ulist", GitCommit)
 
-	dbPath := flag.String("db", "ulist.sqlite3", "database with lists and memberships")
+	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
+	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "database data source name")
 	lmtpSockAddr := flag.String("lmtp", "ulist-lmtp.sock", "path of LMTP socket for accepting incoming mail")
-
 	flag.UintVar(&HttpTcp, "httptcp", 8080, "TCP port number of web listener")
 	flag.StringVar(&HttpUnix, "httpunix", "", "unix socket path of web listener (preferred over TCP)")
 	flag.UintVar(&SmtpsAuthPort, "smtps", 0, "port number for SMTPS authentication on localhost (preferred over STARTTLS)")
@@ -92,13 +93,13 @@ func main() {
 
 	// open database
 
-	Db, err = NewSQLiteDatabase(*dbPath)
+	Db, err = NewDatabase(*dbDriver, *dbDSN)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer Db.Close()
 
-	log.Println("[success] Opened database " + *dbPath)
+	log.Println(`[success] Opened ` + *dbDriver + ` database "` + *dbDSN + `"`)
 
 	// run web interface
 
@@ -106,7 +107,7 @@ func main() {
 
 	// listen via LMTP (blocking)
 
-	_ = removeSocket(*lmtpSockAddr)
+	_ = util.RemoveSocket(*lmtpSockAddr)
 
 	s := smtp.NewServer(&LMTPBackend{})
 
@@ -227,7 +228,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 		return SMTPErrUserNotExist
 	}
 
-	originalMessage, err := ReadMessage(r)
+	originalMessage, err := mailutil.ReadMessage(r)
 	if err != nil {
 		return SMTPWrapErr(442, "Error reading message", err) // 442 The connection was dropped during the transmission
 	}
@@ -363,7 +364,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			fromAddresses := []string{}
 			for _, from := range froms {
-				fromAddresses = append(fromAddresses, from.Address)
+				fromAddresses = append(fromAddresses, from.Address) // TODO don't omit the names! Foo <foo@example.com>!
 			}
 			message.Header["Reply-To"] = []string{strings.Join(fromAddresses, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
 		}
@@ -379,7 +380,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		if action == Pass {
 
-			if err = message.Send(list); err != nil {
+			if err = list.Send(message); err != nil {
 				return SMTPWrapErr(451, "Error forwarding email", err)
 			}
 
@@ -387,7 +388,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		} else if action == Mod {
 
-			err = message.SaveToFile(list)
+			err = list.Save(message)
 			if err != nil {
 				return SMTPWrapErr(471, "Error saving email to file", err) // 554 Transaction has failed
 			}
@@ -412,18 +413,4 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 func (_ *LMTPSession) Logout() error {
 	return nil
-}
-
-func removeSocket(path string) error {
-
-	fileinfo, err := os.Lstat(path)
-	if err != nil {
-		return err
-	}
-
-	if fileinfo.Mode()&os.ModeSocket == 0 {
-		return errors.New("No socket")
-	}
-
-	return os.Remove(path)
 }

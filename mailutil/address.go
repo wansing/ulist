@@ -45,7 +45,11 @@ func Cleans(rawAddresses string, limit int, alerter util.Alerter) ([]string, err
 
 		parsedAddresses, err := RobustAddressParser.ParseList(line)
 		if err != nil {
-			alerter.Alert(fmt.Errorf(`Error parsing line "%s": %s`, line, err))
+			if alerter != nil {
+				alerter.Alert(fmt.Errorf(`Error parsing line "%s": %s`, line, err))
+			} else {
+				return nil, err
+			}
 		}
 
 		for _, p := range parsedAddresses {

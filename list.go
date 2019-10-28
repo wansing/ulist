@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/mail"
 	"os"
 	"strings"
@@ -103,31 +104,74 @@ func (l *List) GetAction(froms []*mail.Address) (Action, error) {
 	return action, nil
 }
 
-func (l *List) StorageFolder() string {
-	return fmt.Sprintf("%s%d", SpoolDir, l.Id)
+func (list *List) StorageFolder() string {
+	return fmt.Sprintf("%s%d", SpoolDir, list.Id)
 }
 
-func (list *List) Open(filename string) (*Message, error) {
+func (list *List) Open(filename string) (*mailutil.Message, error) {
 
 	// sanitize filename
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return nil, errors.New("Invalid filename")
 	}
 
-	return ReadMessageFromFile(list, filename)
+	emlFile, err := os.Open(list.StorageFolder() + "/" + filename)
+	if err != nil {
+		return nil, err
+	}
+	defer emlFile.Close()
+
+	return mailutil.ReadMessage(emlFile)
+}
+
+// Saves the message into an eml file with a unique name within the storage folder. The filename is not returned.
+func (list *List) Save(m *mailutil.Message) error {
+
+	err := os.MkdirAll(list.StorageFolder(), 0700)
+	if err != nil {
+		return err
+	}
+
+	file, err := ioutil.TempFile(list.StorageFolder(), fmt.Sprintf("%010d-*.eml", time.Now().Unix()))
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if err = m.Save(file); err != nil {
+		_ = os.Remove(file.Name())
+		return err
+	}
+
+	return nil
+}
+
+func (list *List) Send(m *mailutil.Message) error {
+
+	receiverMembers, err := list.Receivers()
+	if err != nil {
+		return err
+	}
+
+	receivers := []string{}
+	for _, receiverMember := range receiverMembers {
+		receivers = append(receivers, receiverMember.MemberAddress)
+	}
+
+	// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
+	return mailutil.Send(Testmode, m.Header, m.BodyReader(), list.BounceAddress(), receivers)
 }
 
 // sends an email to a single user
 func (list *List) sendUserMail(recipient, subject string, body io.Reader) error {
 
-	msg := mailutil.NewMessage()
-	msg.Header["From"] = []string{list.RFC5322Address()}
-	msg.Header["To"] = []string{recipient}
-	msg.Header["Subject"] = []string{"[" + list.NameOrAddress() + "] " + subject}
-	msg.Header["Content-Type"] = []string{"text/plain; charset=utf-8"}
-	msg.Body = body
+	header := make(mail.Header)
+	header["From"] = []string{list.RFC5322Address()}
+	header["To"] = []string{recipient}
+	header["Subject"] = []string{"[" + list.NameOrAddress() + "] " + subject}
+	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
-	return mailutil.Send(Testmode, msg, list.BounceAddress(), []string{recipient})
+	return mailutil.Send(Testmode, header, body, list.BounceAddress(), []string{recipient})
 }
 
 // Wraps List.sendUserMail with these changes:
@@ -227,7 +271,7 @@ func (list *List) sendNotification(recipient string) error {
 func (list *List) DeleteModeratedMail(filename string) error {
 
 	if filename == "" {
-		return errors.New("ListMessage.Delete: invalid filename")
+		return errors.New("Delete: empty filename")
 	}
 
 	return os.Remove(list.StorageFolder() + "/" + filename)

@@ -15,7 +15,7 @@ See `build.sh`.
   * cons of SMTP delivery: `localhost:25` usually accepts mail for localhost only and might drop emails for other recipients. `localhost:587` usually requires authentication and SSL/TLS.
 * Web UI: ulist listens to `tcp://127.0.0.1:port` or a unix socket.
 * Web UI authentication: ulist authenticates against a local SMTP server
-* Database: SQLite
+* Supported databases: SQLite, PostgreSQL (untested), MySQL/MariaDB (untested)
 
 ## Example with nginx and postfix
 
@@ -80,6 +80,11 @@ END;
 
 * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address.
 * As `From` is rewritten, it's feasible to modify the email. We can prepend the list name to the subject and add an unsubscribe footer to the content.
+
+## Considerations on Security
+
+* We can't hide the existence of a list. Maybe in the web interface, but not via SMTP.
+* Even though the credentials are usually the same, authentication is done via SMTP, not IMAP. We don't want to get access to stored emails.
 
 ## TODO
 

@@ -1,5 +1,7 @@
 package main
 
+import "database/sql"
+
 type Status int
 
 const (
@@ -11,15 +13,15 @@ const (
 
 func (l *List) GetStatus(address string) (Status, error) {
 
-	m, isMember, err := l.GetMember(address)
+	m, err := l.GetMember(address)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return Member, nil
+		}
 		return Unknown, err
 	}
 	if m.Moderate {
 		return Moderator, nil
-	}
-	if isMember {
-		return Member, nil
 	}
 
 	isKnown, err := l.IsKnown(address)

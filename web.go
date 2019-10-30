@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/hmac"
+	"database/sql"
 	"encoding/base64"
 	"encoding/gob"
 	"errors"
@@ -35,11 +36,11 @@ var sessionManager *scs.SessionManager
 
 func init() {
 	sessionManager = scs.New()
-	sessionManager.IdleTimeout = 2 * time.Hour
-	sessionManager.Lifetime = 12 * time.Hour
 	sessionManager.Cookie.Persist = false // Don't store cookie across browser sessions. Required for GDPR cookie consent exemption criterion B. https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2012/wp194_en.pdf
 	sessionManager.Cookie.SameSite = http.SameSiteLaxMode // good CSRF protection if/because HTTP GET don't modify anything
 	sessionManager.Cookie.Secure = false // else running on localhost:8080 fails
+	sessionManager.IdleTimeout = 2 * time.Hour
+	sessionManager.Lifetime = 12 * time.Hour
 }
 
 func tmpl(filename string) *template.Template {
@@ -122,14 +123,9 @@ func (ctx *Context) ServeFile(name string) {
 
 func (ctx *Context) Login(email, password string) bool {
 
-	var success bool = false
-
-	if SmtpsAuthPort > 0 {
-		success, _ = smtpsAuth(email, password)
-	}
-
-	if !success && StarttlsAuthPort > 0 {
-		success, _ = starttlsAuth(email, password)
+	success, err := authenticators.Authenticate(email, password)
+	if err != nil {
+		ctx.Alert(err)
 	}
 
 	if Testmode {
@@ -300,17 +296,17 @@ func webui() {
 
 func loadList(f func(*Context, *List) error) func(*Context) error {
 	return func(ctx *Context) error {
-		if list, err := GetList(ctx.ps.ByName("list")); list != nil && err == nil { // TODO let GetList return sql.ErrNoRows
+		if list, err := GetList(ctx.ps.ByName("list")); err == nil {
 			return f(ctx, list)
 		} else {
-			return ErrNoList // Same error as for public handlers on non-public lists, so they don't reveal whether the list exists. However SMTP can reveal it.
+			return ErrNoList
 		}
 	}
 }
 
 func requireAdminPermission(f func(*Context, *List) error) func(*Context, *List) error {
 	return func(ctx *Context, list *List) error {
-		if m, _, _ := list.GetMember(ctx.User); m.Admin || ctx.IsSuperAdmin() {
+		if m, _ := list.GetMember(ctx.User); m.Admin || ctx.IsSuperAdmin() {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -320,7 +316,7 @@ func requireAdminPermission(f func(*Context, *List) error) func(*Context, *List)
 
 func requireModPermission(f func(*Context, *List) error) func(*Context, *List) error {
 	return func(ctx *Context, list *List) error {
-		if m, _, _ := list.GetMember(ctx.User); m.Moderate || ctx.IsSuperAdmin() {
+		if m, _ := list.GetMember(ctx.User); m.Moderate || ctx.IsSuperAdmin() {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -332,7 +328,7 @@ func requireModPermission(f func(*Context, *List) error) func(*Context, *List) e
 
 func myListsHandler(ctx *Context) error {
 
-	memberships, err := Db.Memberships(ctx.User)
+	memberships, err := Memberships(ctx.User)
 	if err != nil {
 		return err
 	}
@@ -351,7 +347,7 @@ func loginHandler(ctx *Context) error {
 		CanLogin bool
 		Mail     string
 	}{
-		CanLogin: SmtpsAuthPort != 0 || StarttlsAuthPort != 0 || Testmode,
+		CanLogin: authenticators.Available() || Testmode,
 	}
 
 	if ctx.r.Method == http.MethodPost {
@@ -409,7 +405,7 @@ func allHandler(ctx *Context) error {
 		return errors.New("Unauthorized")
 	}
 
-	allLists, err := Db.AllLists()
+	allLists, err := AllLists()
 	if err != nil {
 		return err
 	}
@@ -474,12 +470,12 @@ func memberHandler(ctx *Context, list *List) error {
 
 	memberAddress := ctx.ps.ByName("email")
 
-	m, isMember, err := list.GetMember(memberAddress)
+	m, err := list.GetMember(memberAddress)
 	if err != nil {
+		if err == sql.ErrNoRows {
+			return errors.New("This person is not a member of the list")
+		}
 		return err
-	}
-	if !isMember {
-		return errors.New("This person is not a member of the list")
 	}
 
 	if ctx.r.Method == http.MethodPost {
@@ -733,7 +729,7 @@ func viewHandler(ctx *Context, list *List) error {
 
 func publicListsHandler(ctx *Context) error {
 
-	publicLists, err := Db.PublicLists()
+	publicLists, err := PublicLists()
 	if err != nil {
 		return err
 	}
@@ -796,17 +792,17 @@ func publicOptInHandler(ctx *Context, list *List) error {
 		return errors.New("Wrong HMAC")
 	}
 
-	_, isMember, err := list.GetMember(mail)
-	if err != nil {
-		return err
-	}
-
-	if isMember {
+	_, err = list.GetMember(mail)
+	switch err {
+	case nil: // member
 		ctx.Alert(errors.New("You are already a member of this list."))
-	} else {
-		if err = list.AddMember(true, mail, ctx); err != nil {
+	case sql.ErrNoRows: // not a member
+		// When the HMAC was created, Clean() ensured that there is only one email address. So we can call AddMembers here safely.
+		if err = list.AddMembers(true, mail, true, false, false, false, ctx); err != nil {
 			return err
 		}
+	default: // error
+		return err
 	}
 
 	data := struct {

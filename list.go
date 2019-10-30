@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha512"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -40,7 +42,9 @@ func IsBounceAddress(address string) (cleaned string, is bool) {
 }
 
 type List struct {
-	ListStub
+	ListInfo
+	Id            int
+	HMACKey       []byte // [32]byte would require check when reading from database
 	PublicSignup  bool // default: false
 	HideFrom      bool // default: false
 	ActionMod     Action
@@ -59,6 +63,24 @@ var goodbyeTemplate = texttmpl("goodbye")
 var signUpTemplate = texttmpl("signup")
 var notifyTemplate = texttmpl("notify")
 var welcomeTemplate = texttmpl("welcome")
+
+func (l *List) HMAC(address string) ([]byte, error) {
+
+	if len(l.HMACKey) == 0 {
+		return nil, errors.New("[ListStub] HMACKey is empty")
+	}
+
+	if bytes.Compare(l.HMACKey, make([]byte, 32)) == 0 {
+		return nil, errors.New("[ListStub] HMACKey is all zeroes")
+	}
+
+	mac := hmac.New(sha512.New, l.HMACKey)
+	mac.Write([]byte(l.Address))
+	mac.Write([]byte{0}) // separator
+	mac.Write([]byte(address))
+
+	return mac.Sum(nil), nil
+}
 
 // returns max action depending on From addresses
 func (l *List) GetAction(froms []*mail.Address) (Action, error) {
@@ -200,12 +222,7 @@ func (list *List) sendPublicOptIn(recipient string) error {
 		return errors.New("sendPublicOptIn is designed for public signup lists only")
 	}
 
-	recipient, err := mailutil.Clean(recipient)
-	if err != nil {
-		return err
-	}
-
-	if m, _, _ := list.GetMember(recipient); m.Receive {
+	if m, _ := list.GetMember(recipient); m.Receive {
 		return nil // Already receiving. This might leak timing information on whether the person is a member of the list. However this applies only to public-signup lists.
 	}
 

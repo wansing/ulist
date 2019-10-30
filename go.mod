@@ -4,6 +4,7 @@ go 1.12
 
 require (
 	github.com/alexedwards/scs/v2 v2.1.0
+	github.com/emersion/go-sasl v0.0.0-20161116183048-7e096a0a6197
 	github.com/emersion/go-smtp v0.11.1
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/julienschmidt/httprouter v1.2.0

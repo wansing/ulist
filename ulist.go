@@ -3,6 +3,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"golang.org/x/sys/unix"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
+	"github.com/wansing/ulist/auth"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
@@ -20,12 +22,15 @@ var logAlerter = util.LogAlerter{}
 
 var GitCommit string // hash
 
+var smtpsAuth = &auth.Smtps{}
+var starttlsAuth = &auth.Starttls{}
+var saslPlainAuth = &auth.SASLPlain{}
+var authenticators = auth.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // first sql, then smtp
+
 var Db *Database
 var HttpTcp uint
 var HttpUnix string
-var SmtpsAuthPort uint
 var SpoolDir string
-var StarttlsAuthPort uint
 var Superadmin string // can create new mailing lists and modify all mailing lists
 var Testmode bool
 var WebUrl string
@@ -35,17 +40,27 @@ func main() {
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
 	log.Println("Starting ulist", GitCommit)
 
+	// database
 	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
 	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "database data source name")
+
+	// mail flow
 	lmtpSockAddr := flag.String("lmtp", "ulist-lmtp.sock", "path of LMTP socket for accepting incoming mail")
+	flag.StringVar(&SpoolDir, "spool", "/var/spool/ulist", "spool folder for unmoderated messages")
+
+	// web interface
 	flag.UintVar(&HttpTcp, "httptcp", 8080, "TCP port number of web listener")
 	flag.StringVar(&HttpUnix, "httpunix", "", "unix socket path of web listener (preferred over TCP)")
-	flag.UintVar(&SmtpsAuthPort, "smtps", 0, "port number for SMTPS authentication on localhost (preferred over STARTTLS)")
-	flag.StringVar(&SpoolDir, "spool", "/var/spool/ulist", "spool folder for unmoderated messages")
-	flag.UintVar(&StarttlsAuthPort, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost")
-	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
-	flag.BoolVar(&Testmode, "testmode", false, "accept any credentials at login and don't send emails")
 	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface (for opt-in link)")
+
+	// authentication
+	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
+	flag.StringVar(&saslPlainAuth.Socket, "sasl", "", "socket path for SASL PLAIN authentication (first choice)")
+	flag.UintVar(&smtpsAuth.Port, "smtps", 0, "port number for SMTPS authentication on localhost (number-two choice)")
+	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost (If you specify -smtps and -starttls, then two queries will be made.)")
+
+	// debug
+	flag.BoolVar(&Testmode, "testmode", false, "accept any credentials at login and don't send emails")
 
 	flag.Parse()
 
@@ -72,34 +87,26 @@ func main() {
 		log.Fatalln("Spool directory " + SpoolDir + " is not writeable")
 	}
 
-	// validate smtpsAuthPort and starttlsAuthPort
-
-	if SmtpsAuthPort > 65535 {
-		SmtpsAuthPort = 0
-	}
-
-	if StarttlsAuthPort > 65535 {
-		StarttlsAuthPort = 0
-	}
-
-	if SmtpsAuthPort == 0 && StarttlsAuthPort == 0 && !Testmode {
-		log.Println("[warning] Neither -smtps nor -starttls are given. Users won't be able to log into the web interface.")
-	}
-
-	if Testmode {
-		Superadmin = "test@example.com"
-		log.Println("[warning] ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
-	}
-
 	// open database
 
-	Db, err = NewDatabase(*dbDriver, *dbDSN)
+	Db, err = OpenDatabase(*dbDriver, *dbDSN)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer Db.Close()
 
 	log.Println(`[success] Opened ` + *dbDriver + ` database "` + *dbDSN + `"`)
+
+	// authenticator availability
+
+	if !authenticators.Available() && !Testmode {
+		log.Println("[warning] There are no authenticators available. Users won't be able to log into the web interface.")
+	}
+
+	if Testmode {
+		Superadmin = "test@example.com"
+		log.Println("[warning] ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
+	}
 
 	// run web interface
 
@@ -156,22 +163,22 @@ func (s *LMTPSession) Reset() {
 }
 
 // "MAIL FROM". Starts a new mail transaction.
-func (s *LMTPSession) Mail(from string) error {
+func (s *LMTPSession) Mail(envelopeFrom string) error {
 
 	s.Reset() // just in case
 
-	from = strings.TrimSpace(from)
+	envelopeFrom = strings.TrimSpace(envelopeFrom)
 
-	if from == "" {
+	if envelopeFrom == "" {
 		s.isBounce = true
 	} else {
 		var err error
-		if from, err = mailutil.Clean(from); err != nil {
-			return SMTPWrapErr(510, `Error parsing Envelope-From address "`+from+`"`, err) // 510 Bad email address
+		if envelopeFrom, err = mailutil.Clean(envelopeFrom); err != nil {
+			return SMTPWrapErr(510, `Error parsing Envelope-From address "`+envelopeFrom+`"`, err) // 510 Bad email address
 		}
 	}
 
-	s.envelopeFrom = from
+	s.envelopeFrom = envelopeFrom
 	return nil
 }
 
@@ -199,10 +206,10 @@ func (s *LMTPSession) rcpt(to string) error {
 	}
 
 	list, err := GetList(to)
-	if list == nil {
-		return SMTPErrUserNotExist // Reveals wheter a list exist. We can't avoid that.
-	}
-	if err != nil {
+	switch {
+	case err == sql.ErrNoRows:
+		return SMTPErrUserNotExist
+	case err != nil:
 		return SMTPWrapErr(451, "Error getting list from database", err) // 451 Aborted – Local error in processing
 	}
 
@@ -293,21 +300,22 @@ func (s *LMTPSession) data(r io.Reader) error {
 				}
 			}
 
-			_, isMember, err := list.GetMember(personalFrom)
-			if err != nil {
+			_, err := list.GetMember(personalFrom)
+			switch err {
+			case nil: // member
+				if command == "unsubscribe" { // might leak membership
+					if err = list.RemoveMembers(true, personalFrom, logAlerter); err != nil {
+						return SMTPWrapErr(451, "Error unsubscribing", err)
+					}
+				}
+			case sql.ErrNoRows: // not a member
+				if command == "subscribe" && list.PublicSignup {
+					if err = list.AddMembers(true, personalFrom, true, false, false, false, logAlerter); err != nil {
+						return SMTPWrapErr(451, "Error subscribing", err)
+					}
+				}
+			default: // error
 				return SMTPWrapErr(451, "Error getting membership from database", err)
-			}
-
-			if command == "subscribe" && list.PublicSignup && !isMember {
-				if err = list.AddMember(true, personalFrom, logAlerter); err != nil {
-					return SMTPWrapErr(451, "Error subscribing", err)
-				}
-			}
-
-			if command == "unsubscribe" && isMember { // might leak membership
-				if err = list.RemoveMember(true, personalFrom, logAlerter); err != nil {
-					return SMTPWrapErr(451, "Error unsubscribing", err)
-				}
 			}
 		}
 
@@ -362,11 +370,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 			//
 			// If you use rspamd to filter outgoing mail, you should disable the Symbol "SPOOF_REPLYTO" in the "Symbols" menu, see https://github.com/rspamd/rspamd/issues/1891
 
-			fromAddresses := []string{}
+			replyTo := []string{}
 			for _, from := range froms {
-				fromAddresses = append(fromAddresses, from.Address) // TODO don't omit the names! Foo <foo@example.com>!
+				replyTo = append(replyTo, from.String())
 			}
-			message.Header["Reply-To"] = []string{strings.Join(fromAddresses, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
+			message.Header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
 		}
 
 		// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."

@@ -41,3 +41,7 @@ func (s *SASLPlain) Authenticate(email, password string) (success bool, err erro
 func (s *SASLPlain) Available() bool {
 	return s.Socket != ""
 }
+
+func (s *SASLPlain) Name() string {
+	return "SASL PLAIN"
+}

@@ -39,3 +39,7 @@ func (s *Starttls) Authenticate(email, password string) (success bool, err error
 func (s *Starttls) Available() bool {
 	return s.Port >= 1 && s.Port <= 65535
 }
+
+func (s *Starttls) Name() string {
+	return "STARTTLS"
+}

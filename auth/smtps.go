@@ -41,3 +41,7 @@ func (s *Smtps) Authenticate(email, password string) (success bool, err error) {
 func (s *Smtps) Available() bool {
 	return s.Port >= 1 && s.Port <= 65535
 }
+
+func (s *Smtps) Name() string {
+	return "SMTPS"
+}

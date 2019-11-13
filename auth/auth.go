@@ -7,6 +7,7 @@ type Authenticators []Authenticator
 type Authenticator interface {
 	Authenticate(email, password string) (success bool, err error)
 	Available() bool
+	Name() string
 }
 
 func (as Authenticators) Authenticate(email, password string) (success bool, err error) {
@@ -16,7 +17,7 @@ func (as Authenticators) Authenticate(email, password string) (success bool, err
 			break
 		}
 		if err != nil {
-			log.Println("Authentication error: ", err)
+			log.Printf("Error authenticating with %s authenticator: %v", a.Name(), err)
 		}
 	}
 	return

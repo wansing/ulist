@@ -11,7 +11,13 @@ type Authenticator interface {
 }
 
 func (as Authenticators) Authenticate(email, password string) (success bool, err error) {
+
 	for _, a := range as {
+
+		if !a.Available () {
+			continue
+		}
+
 		success, err = a.Authenticate(email, password)
 		if success {
 			break

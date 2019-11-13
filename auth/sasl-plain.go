@@ -15,6 +15,10 @@ type SASLPlain struct {
 
 func (s *SASLPlain) Authenticate(email, password string) (success bool, err error) {
 
+	if !s.Available() {
+		return
+	}
+
 	conn, err := net.Dial("unix", s.Socket)
 	if err != nil {
 		return

@@ -22,16 +22,18 @@ func (s *Smtps) Authenticate(email, password string) (success bool, err error) {
 	}
 	defer tlsConn.Close()
 
-	smtpClient, err := smtp.NewClient(tlsConn, "localhost")
+	client, err := smtp.NewClient(tlsConn, "localhost")
 	if err != nil {
 		return
 	}
-	defer smtpClient.Close()
+	defer client.Close()
 
-	err = smtpClient.Auth(smtp.PlainAuth("", email, password, "localhost"))
+	err = client.Auth(smtp.PlainAuth("", email, password, "localhost")) // hostname must be the same as in NewClient
 	if err == nil {
 		success = true
-	} // else err is probably "C 535 5.7.8 Error: authentication failed"
+	} else {
+		err = nil // err was probably "C 535 5.7.8 Error: authentication failed"
+	}
 
 	return
 }

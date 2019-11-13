@@ -8,6 +8,7 @@ import (
 	"github.com/emersion/go-sasl"
 )
 
+// Authenticates against an unix socket which receivers a SASL PLAIN request and returns "authenticated" if authentication was successful.
 type SASLPlain struct {
 	Socket string
 }

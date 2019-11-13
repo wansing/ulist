@@ -16,7 +16,7 @@ func (s *Starttls) Authenticate(email, password string) (success bool, err error
 		return
 	}
 
-	client, err := smtp.Dial("127.0.0.1:" + fmt.Sprint(s.Port))
+	client, err := smtp.Dial("localhost:" + fmt.Sprint(s.Port))
 	if err != nil {
 		return
 	}
@@ -26,9 +26,11 @@ func (s *Starttls) Authenticate(email, password string) (success bool, err error
 		return
 	}
 
-	err = client.Auth(smtp.PlainAuth("", email, password, ""))
+	err = client.Auth(smtp.PlainAuth("", email, password, "localhost")) // hostname must be the same as in NewClient
 	if err == nil {
 		success = true
+	} else {
+		err = nil // err was probably "authentication failed"
 	}
 
 	return

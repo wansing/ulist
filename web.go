@@ -257,13 +257,13 @@ func webui() {
 		var network string
 		var address string
 
-		if HttpUnix != "" {
-			_ = util.RemoveSocket(HttpUnix)
-			network = "unix"
-			address = HttpUnix
-		} else {
+		if port, err := strconv.Atoi(HttpAddr); err == nil {
 			network = "tcp"
-			address = fmt.Sprintf("127.0.0.1:%d", HttpTcp)
+			address = fmt.Sprintf("127.0.0.1:%d", port)
+		} else {
+			network = "unix"
+			address = HttpAddr
+			_ = util.RemoveSocket(address) // remove old socket
 		}
 
 		listener, err = net.Listen(network, address)

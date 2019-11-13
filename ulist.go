@@ -25,11 +25,10 @@ var GitCommit string // hash
 var smtpsAuth = &auth.Smtps{}
 var starttlsAuth = &auth.Starttls{}
 var saslPlainAuth = &auth.SASLPlain{}
-var authenticators = auth.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // first sql, then smtp
+var authenticators = auth.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
 
 var Db *Database
-var HttpTcp uint
-var HttpUnix string
+var HttpAddr string
 var SpoolDir string
 var Superadmin string // can create new mailing lists and modify all mailing lists
 var Testmode bool
@@ -45,19 +44,18 @@ func main() {
 	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "database data source name")
 
 	// mail flow
-	lmtpSockAddr := flag.String("lmtp", "ulist-lmtp.sock", "path of LMTP socket for accepting incoming mail")
-	flag.StringVar(&SpoolDir, "spool", "/var/spool/ulist", "spool folder for unmoderated messages")
+	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "path of LMTP socket for accepting incoming mail")
+	flag.StringVar(&SpoolDir, "spool", "spool", "spool folder for unmoderated messages")
 
 	// web interface
-	flag.UintVar(&HttpTcp, "httptcp", 8080, "TCP port number of web listener")
-	flag.StringVar(&HttpUnix, "httpunix", "", "unix socket path of web listener (preferred over TCP)")
+	flag.StringVar(&HttpAddr, "http", "8080", "port number or socket path of HTTP web listener")
 	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface (for opt-in link)")
 
 	// authentication
 	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
 	flag.StringVar(&saslPlainAuth.Socket, "sasl", "", "socket path for SASL PLAIN authentication (first choice)")
 	flag.UintVar(&smtpsAuth.Port, "smtps", 0, "port number for SMTPS authentication on localhost (number-two choice)")
-	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost (If you specify -smtps and -starttls, then two queries will be made.)")
+	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost")
 
 	// debug
 	flag.BoolVar(&Testmode, "testmode", false, "accept any credentials at login and don't send emails")

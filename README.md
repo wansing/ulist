@@ -76,6 +76,46 @@ query = SELECT CASE
 END;
 ```
 
+## Example with apache and qmail (on uberspace.de)
+
+You need an LMTP wrapper script, for example `qmail-lmtp` from `mailman`:
+
+```
+wget -P ~/bin "https://gitlab.com/mailman/mailman/raw/master/contrib/qmail-lmtp"
+chmod +x ~/bin/qmail-lmtp
+```
+
+### `~/.qmail-lists-default`
+
+Assuming `lists` is the namespace of your lists domain.
+
+```
+|qmail-lmtp 8024 2 /home/example/ulist/lmtp.sock
+```
+
+* Parameters of `qmail-lmtp`
+  * LMTP port, ignored because we connect to a socket
+  * ext index ("EXT2 is the portion of EXT following the first dash"), used to crop the namespace (`lists-`) from the recipient address
+  * LMTP host or absolute path to an unix socket
+
+### `~/service/ulist/run`
+
+```
+#!/bin/sh
+exec 2>&1
+(cd ~/ulist && exec ulist -http 61234 -starttls 587 -superadmin you@example.com -weburl "https://lists.example.com")
+```
+
+### `.htaccess`
+
+```
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteBase /
+RewriteRule ^(.*)$ http://127.0.0.1:61234/$1 [P]
+RequestHeader set X-Forwarded-Proto https env=HTTPS
+```
+
 ## Decisions on From-Munging
 
 * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address.

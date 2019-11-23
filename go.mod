@@ -3,7 +3,7 @@ module github.com/wansing/ulist
 go 1.13
 
 require (
-	github.com/alexedwards/scs/v2 v2.3.0
+	github.com/alexedwards/scs/v2 v2.2.0
 	github.com/emersion/go-smtp v0.12.0
 	github.com/go-sql-driver/mysql v1.4.1
 	github.com/julienschmidt/httprouter v1.3.0

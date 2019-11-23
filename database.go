@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"fmt"
+	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
@@ -102,7 +103,8 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 }
 
 func (db *Database) Close() error {
-	return db.Close()
+	log.Println("Closing database")
+	return db.DB.Close()
 }
 
 // Arguments of stmt must be (address, args...).

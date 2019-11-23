@@ -9,23 +9,28 @@ import (
 	"golang.org/x/sys/unix"
 	"io"
 	"log"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
-	"github.com/wansing/ulist/auth"
+	"github.com/wansing/auth/client"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
+
+const WarnFormat = "\033[1;31m%s\033[0m"
 
 var logAlerter = util.LogAlerter{}
 
 var GitCommit string // hash
 
-var smtpsAuth = &auth.Smtps{}
-var starttlsAuth = &auth.Starttls{}
-var saslPlainAuth = &auth.SASLPlain{}
-var authenticators = auth.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
+var smtpsAuth = &client.SMTPS{}
+var starttlsAuth = &client.STARTTLS{}
+var saslPlainAuth = &client.SASLPlain{}
+var authenticators = client.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
 
 var Db *Database
 var HttpAddr string
@@ -37,7 +42,7 @@ var WebUrl string
 func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
-	log.Println("Starting ulist", GitCommit)
+	log.Printf("Starting ulist %s", GitCommit)
 
 	// database
 	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
@@ -69,7 +74,7 @@ func main() {
 	if Superadmin != "" {
 		Superadmin, err = mailutil.Clean(Superadmin)
 		if err != nil {
-			log.Fatalln(err)
+			log.Fatalf("Error processing superadmin address: %v", err)
 		}
 	}
 
@@ -80,9 +85,9 @@ func main() {
 	}
 
 	if unix.Access(SpoolDir, unix.W_OK) == nil {
-		log.Println("[success] Using spool directory " + SpoolDir)
+		log.Printf("Spool directory: %s", SpoolDir)
 	} else {
-		log.Fatalln("Spool directory " + SpoolDir + " is not writeable")
+		log.Fatalf("Spool directory %s is not writeable", SpoolDir)
 	}
 
 	// open database
@@ -93,17 +98,17 @@ func main() {
 	}
 	defer Db.Close()
 
-	log.Println(`[success] Opened ` + *dbDriver + ` database "` + *dbDSN + `"`)
+	log.Printf(`Database: %s "%s"`, *dbDriver, *dbDSN)
 
 	// authenticator availability
 
 	if !authenticators.Available() && !Testmode {
-		log.Println("[warning] There are no authenticators available. Users won't be able to log into the web interface.")
+		log.Printf(WarnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
 	}
 
 	if Testmode {
 		Superadmin = "test@example.com"
-		log.Println("[warning] ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
+		log.Printf(WarnFormat, "ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
 	// run web interface
@@ -125,10 +130,29 @@ func main() {
 	s.MaxRecipients = 50                 // value in go-smtp example code is 50, postfix lmtp_destination_recipient_limit is 50
 	s.AllowInsecureAuth = true
 
-	log.Println("[success] ulist started at", s.Addr)
-	if err := s.ListenAndServe(); err != nil {
-		log.Fatalln(err)
-	}
+	sigintChannel := make(chan os.Signal, 1)
+
+	go func() {
+		log.Printf("LMTP listener: %s", s.Addr)
+		if err := s.ListenAndServe(); err != nil {
+
+			// don't panic, we want a graceful shutdown
+			if !strings.Contains(err.Error(), "use of closed network connection") {
+				log.Printf("Error Listening: %v", err)
+			}
+
+			// ensure graceful shutdown
+			sigintChannel <- os.Interrupt
+		}
+	}()
+
+	// graceful shutdown
+
+	signal.Notify(sigintChannel, os.Interrupt, syscall.SIGTERM) // SIGINT (Interrupt) or SIGTERM
+	<-sigintChannel
+
+	log.Println("Received shutdown signal")
+	s.Close()
 }
 
 type LMTPBackend struct{}
@@ -161,7 +185,7 @@ func (s *LMTPSession) Reset() {
 }
 
 // "MAIL FROM". Starts a new mail transaction.
-func (s *LMTPSession) Mail(envelopeFrom string) error {
+func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
 
@@ -184,7 +208,7 @@ func (s *LMTPSession) Mail(envelopeFrom string) error {
 func (s *LMTPSession) Rcpt(to string) error {
 	err := s.rcpt(to)
 	if err != nil {
-		log.Println("[error] [rcpt]", err)
+		log.Println("[rcpt]", err)
 	}
 	return err
 }
@@ -220,7 +244,7 @@ func (s *LMTPSession) rcpt(to string) error {
 func (s *LMTPSession) Data(r io.Reader) error {
 	err := s.data(r)
 	if err != nil {
-		log.Println("[error] [data]", err)
+		log.Println("[data]", err)
 	}
 	return err
 }
@@ -264,7 +288,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			for _, admin := range admins {
 				err = list.sendUserMail(admin.MemberAddress, "Bounce notification: "+message.Header.Get("Subject"), message.BodyReader())
 				if err != nil {
-					log.Println("[warning]", err)
+					log.Printf(WarnFormat, err)
 				}
 			}
 
@@ -390,7 +414,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPWrapErr(451, "Error forwarding email", err)
 			}
 
-			log.Println("[success] Sent email over", list.Address)
+			log.Println("Sent email over", list.Address)
 
 		} else if action == Mod {
 
@@ -406,11 +430,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			for _, notifiedMember := range notifiedMembers {
 				if err = list.sendNotification(notifiedMember.MemberAddress); err != nil {
-					log.Println("[warning]", err)
+					log.Printf(WarnFormat, err)
 				}
 			}
 
-			log.Println("[success] Stored email for", list.RFC5322Address())
+			log.Println("Stored email for", list.RFC5322Address())
 		}
 	}
 

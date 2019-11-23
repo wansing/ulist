@@ -110,7 +110,11 @@ exec 2>&1
 
 ```
 RewriteEngine On
-RewriteCond %{REQUEST_FILENAME} !-f
+
+RewriteCond %{HTTPS} !=on
+RewriteCond %{ENV:HTTPS} !=on
+RewriteRule ^(.*)$ https://%{SERVER_NAME}%{REQUEST_URI} [R=301,L]
+
 RewriteBase /
 RewriteRule ^(.*)$ http://127.0.0.1:61234/$1 [P]
 RequestHeader set X-Forwarded-Proto https env=HTTPS

@@ -268,7 +268,7 @@ func webui() {
 
 		listener, err = net.Listen(network, address)
 		if err == nil {
-			log.Println("[success] Opened web interface listener at " + network + "://" + address)
+			log.Printf("Web listener: %s://%s ", network, address)
 		} else {
 			log.Fatalln(err)
 		}
@@ -277,7 +277,7 @@ func webui() {
 			if err := os.Chmod(address, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
 				log.Fatalln(err)
 			} else {
-				log.Println("[success] set permissions of", address, "to", os.ModePerm)
+				log.Println("Set permissions of", address, "to", os.ModePerm)
 			}
 		}
 
@@ -584,7 +584,7 @@ func modHandler(ctx *Context, list *List) error {
 				if err = list.Send(m); err != nil {
 					ctx.Alert(err)
 				} else {
-					log.Println("[success] Processed email successfully")
+					log.Println("Processed email successfully")
 					notifyPassed++
 					_ = list.DeleteModeratedMail(emlFilename)
 				}

@@ -325,20 +325,26 @@ func (s *LMTPSession) data(r io.Reader) error {
 			_, err := list.GetMember(personalFrom)
 			switch err {
 			case nil: // member
-				if command == "unsubscribe" { // might leak membership
-					if err = list.RemoveMembers(true, personalFrom, logAlerter); err != nil {
+				if command == "unsubscribe" {
+					if err = list.RemoveMembers(true, personalFrom, logAlerter); err == nil {
+						return nil
+					} else {
 						return SMTPWrapErr(451, "Error unsubscribing", err)
 					}
 				}
 			case sql.ErrNoRows: // not a member
 				if command == "subscribe" && list.PublicSignup {
-					if err = list.AddMembers(true, personalFrom, true, false, false, false, logAlerter); err != nil {
+					if err = list.AddMembers(true, personalFrom, true, false, false, false, logAlerter); err == nil {
+						return nil
+					} else {
 						return SMTPWrapErr(451, "Error subscribing", err)
 					}
 				}
 			default: // error
 				return SMTPWrapErr(451, "Error getting membership from database", err)
 			}
+
+			// Go on or always return? Both might leak whether you're a member of the list.
 		}
 
 		// determine action by "From" addresses

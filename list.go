@@ -94,11 +94,11 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 
 	// max status
 
-	maxStatus := Unknown
-
 	if len(froms) > 8 {
 		froms = froms[:8] // DoS prevention
 	}
+
+	maxStatus := Unknown
 
 	for _, from := range froms {
 		var status Status
@@ -107,14 +107,14 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 			return
 		}
 		if maxStatus < status {
-			reason = from.Address
+			reason = mailutil.NameOrUser(from)
 			maxStatus = status
 		}
 	}
 
 	// action
 
-	// TODO assumes that l.Action* is monotonic!
+	// TODO this assumes that l.Action... is monotonic!
 
 	switch maxStatus {
 	case Moderator:
@@ -127,7 +127,7 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 		reason += " is known and can " + string(l.ActionUnknown)
 		action = l.ActionKnown
 	case Unknown:
-		reason += " is unknown and can " + string(l.ActionUnknown)
+		reason += "all senders are unknown and can " + string(l.ActionUnknown)
 		action = l.ActionUnknown
 	}
 
@@ -198,7 +198,7 @@ func (list *List) sendUserMail(recipient, subject string, body io.Reader) error 
 	header := make(mail.Header)
 	header["From"] = []string{list.RFC5322Address()}
 	header["To"] = []string{recipient}
-	header["Subject"] = []string{"[" + list.NameOrAddress() + "] " + subject}
+	header["Subject"] = []string{"[" + list.NameOrUser() + "] " + subject}
 	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
 	return mailutil.Send(Testmode, header, body, list.BounceAddress(), []string{recipient})

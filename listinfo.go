@@ -4,6 +4,8 @@ import (
 	"net/mail"
 	"net/url"
 	"strings"
+
+	"github.com/wansing/ulist/mailutil"
 )
 
 type ListInfo mail.Address // Name, Address string
@@ -21,16 +23,12 @@ func (li *ListInfo) EscapeAddress() string {
 }
 
 // returns the lists name if it is not empty, else the address
-func (li *ListInfo) NameOrAddress() string {
-	if name := strings.TrimSpace(li.Name); name != "" {
-		return name
-	} else {
-		return li.Address
-	}
+func (li *ListInfo) NameOrUser() string {
+	return mailutil.NameOrUser((*mail.Address)(li))
 }
 
 func (list *ListInfo) PrefixSubject(subject string) string {
-	var prefix = "[" + list.NameOrAddress() + "]"
+	var prefix = "[" + list.NameOrUser() + "]"
 	if firstSquareBracket := strings.Index(subject, "["); firstSquareBracket == -1 || firstSquareBracket != strings.Index(subject, prefix) { // square bracket not found or before prefix
 		subject = prefix + " " + subject
 	}

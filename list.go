@@ -311,9 +311,3 @@ func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from string) {
 
 	return
 }
-
-// wrapper for use in templates
-func (list *List) TmplGetSingleFrom(m *mailutil.Message) string{
-	_, from := list.GetSingleFrom(m)
-	return from
-}

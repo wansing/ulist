@@ -535,6 +535,12 @@ type StoredListMessage struct {
 	Filename string
 }
 
+// wrapper for use in templates
+func (s *StoredListMessage) GetSingleFrom() string{
+	_, from := s.List.GetSingleFrom(s.Message)
+	return from
+}
+
 func modHandler(ctx *Context, list *List) error {
 
 	var err error

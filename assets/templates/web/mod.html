@@ -13,7 +13,7 @@
 			{{ range .Messages }}
 				<div class="card mb-3">
 					<div class="card-body">
-						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ .TryMimeDecode (.Header.Get "Subject") }}</a></h5>
+						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ TryMimeDecode (.Header.Get "Subject") }}</a></h5>
 						<p class="card-text">
 							From: {{ .Header.Get "From" }}<br> <!-- an email header has a single "From" field which can contain multiple addresses -->
 							{{ with .Header.Get "Sender" }}

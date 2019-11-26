@@ -572,7 +572,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-delete-" + emlFilename) != "" {
-					if has, from := mailutil.HasSingleFrom(m.Header); has && list.ActionKnown == Reject { // same condition as in template
+					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Reject { // same condition as in template
 						if err := list.AddKnowns(from, ctx); err == nil {
 							notifyAddedKnown++
 						}
@@ -590,7 +590,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-pass-" + emlFilename) != "" {
-					if has, from := mailutil.HasSingleFrom(m.Header); has && list.ActionKnown == Pass { // same condition as in template
+					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Pass { // same condition as in template
 						if err := list.AddKnowns(from, ctx); err == nil {
 							notifyAddedKnown++
 						}

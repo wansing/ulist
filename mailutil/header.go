@@ -242,10 +242,11 @@ func ToOrCcContains(header mail.Header, address string) (bool, error) {
 	return false, nil
 }
 
-func HasSingleFrom(header mail.Header) (has bool, from string) {
-	if froms, err := Cleans(header.Get("From"), 2, nil); len(froms) == 1 && err == nil {
+// For usage in mod.html. Currently the message is rewritten before moderation, so the this is useless here
+/*func HasSingleFrom(header mail.Header) (has bool, from string) {
+	if froms, err := Cleans(header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}
 	return
-}
+}*/

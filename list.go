@@ -293,3 +293,27 @@ func (list *List) DeleteModeratedMail(filename string) error {
 
 	return os.Remove(list.StorageFolder() + "/" + filename)
 }
+
+// for usage in templates
+//
+// As the message is currently rewritten before moderation, we have to find the actual from address here. That should be changed. Then we could move this back to mailutil/message.go.
+func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from string) {
+
+	if list.HideFrom {
+		// we can't recover the actual from address
+		return
+	}
+
+	if froms, err := mailutil.Cleans(m.Header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
+		has = true
+		from = froms[0]
+	}
+
+	return
+}
+
+// wrapper for use in templates
+func (list *List) TmplGetSingleFrom(m *mailutil.Message) string{
+	_, from := list.GetSingleFrom(m)
+	return from
+}

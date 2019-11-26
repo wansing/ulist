@@ -74,9 +74,3 @@ func (m *Message) Copy() *Message {
 
 	return c
 }
-
-// for usage in templates
-func (m *Message) GetSingleFrom() string {
-	_, singleFrom := HasSingleFrom(m.Header)
-	return singleFrom
-}

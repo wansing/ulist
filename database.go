@@ -92,7 +92,7 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	db.getKnownsStmt = db.MustPrepare("SELECT k.address FROM list l, known k WHERE l.address = ? AND l.id = k.list ORDER BY k.address")
 	db.getListStmt = db.MustPrepare("SELECT address, id, name, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known FROM list WHERE address = ?")
 	db.getMemberStmt = db.MustPrepare("SELECT m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.address = ? AND l.id = m.list AND m.address = ?")
-	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM list l, known k WHERE l.address = ? AND l.id = k.list AND k.address = ?")
+	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM list l, known k WHERE l.address = ? AND l.id = k.list AND k.address = ?") // never returns sql.ErrNoRows
 	db.membershipsStmt = db.MustPrepare("SELECT l.address, l.name, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.address")
 	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE address = ? AND list = ?")
 	db.removeMemberStmt = db.MustPrepare("DELETE FROM member WHERE address = ? AND list = ?")

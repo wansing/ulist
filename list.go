@@ -83,10 +83,13 @@ func (l *List) HMAC(address string) ([]byte, error) {
 }
 
 // returns max action depending on From addresses
-func (l *List) GetAction(froms []*mail.Address) (Action, error) {
+func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, err error) {
+
+	action = Reject
 
 	if len(froms) == 0 {
-		return Reject, errors.New("GetAction: no From addresses given")
+		err = errors.New("GetAction: no From addresses given")
+		return
 	}
 
 	// max status
@@ -94,36 +97,41 @@ func (l *List) GetAction(froms []*mail.Address) (Action, error) {
 	maxStatus := Unknown
 
 	if len(froms) > 8 {
-		froms = froms[:8] // DDOS prevention
+		froms = froms[:8] // DoS prevention
 	}
 
 	for _, from := range froms {
 		var status Status
-		status, err := l.GetStatus(from.Address)
+		status, err = l.GetStatus(from.Address)
 		if err != nil {
-			return Reject, err
+			return
 		}
 		if maxStatus < status {
+			reason = from.Address
 			maxStatus = status
 		}
 	}
 
 	// action
 
-	action := Reject
+	// TODO assumes that l.Action* is monotonic!
 
 	switch maxStatus {
 	case Moderator:
+		reason += " is a moderator and can " + string(l.ActionMod)
 		action = l.ActionMod
 	case Member:
+		reason += " is a member and can " + string(l.ActionMember)
 		action = l.ActionMember
 	case Known:
+		reason += " is known and can " + string(l.ActionUnknown)
 		action = l.ActionKnown
 	case Unknown:
+		reason += " is unknown and can " + string(l.ActionUnknown)
 		action = l.ActionUnknown
 	}
 
-	return action, nil
+	return
 }
 
 func (list *List) StorageFolder() string {

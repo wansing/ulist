@@ -352,12 +352,12 @@ func (s *LMTPSession) data(r io.Reader) error {
 		// The SMTP envelope sender is ignored, because it's actually something different and also not relevant for DKIM.
 		// Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html
 
-		action, err := list.GetAction(froms)
+		action, reason, err := list.GetAction(froms)
 		if err != nil {
 			return SMTPWrapErr(451, "Error getting user status from database", err)
 		}
 
-		log.Printf("Incoming mail: Envelope-From: %s, From: %v, List: %s, Action: %s", s.envelopeFrom, froms, list.Address, action)
+		log.Printf("Incoming mail: Envelope-From: %s, From: %v, List: %s, Action: %s, Reason: %s", s.envelopeFrom, froms, list.Address, action, reason)
 
 		if action == Reject {
 			return SMTPErrUserNotExist

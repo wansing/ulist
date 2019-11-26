@@ -64,14 +64,23 @@ func Cleans(rawAddresses string, limit int, alerter util.Alerter) ([]string, err
 	return cleanedAddresses, nil
 }
 
+// Returns a.Name if it exists, else the user part of a.Address
+//
 // rspamd has the rule "SPOOF_DISPLAY_NAME" which yields a huge penalty if the "From" field looks like "foo@example.net via List<list@example.com>".
 // See also: https://github.com/rspamd/rspamd/blob/master/rules/misc.lua#L517
 //
-// This function is designed to avoid that. To be on the safe side, we crop the input at the first "@", if any.
-func Unspoof(name string) string {
-	if index := strings.Index(name, "@"); index == -1 {
-		return name
+// To be on the safe side, we crop the input at the first "@", if any.
+func NameOrUser(a *mail.Address) (result string) {
+
+	if a.Name != "" {
+		result = a.Name
 	} else {
-		return name[:index]
+		result = a.Address
 	}
+
+	if index := strings.Index(result, "@"); index != -1 {
+		result = result[:index]
+	}
+
+	return
 }

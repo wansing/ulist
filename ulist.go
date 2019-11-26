@@ -9,6 +9,7 @@ import (
 	"golang.org/x/sys/unix"
 	"io"
 	"log"
+	"net/mail"
 	"os"
 	"os/signal"
 	"strings"
@@ -379,17 +380,12 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			// From
 
+			nameSuffix := "via " + mailutil.NameOrUser((*mail.Address)(&list.ListInfo))
+
 			message.Header["From"] = make([]string, len(froms))
 			for i, from := range froms {
-
-				name := from.Name
-				if name == "" {
-					name = from.Address
-				}
-				name = mailutil.Unspoof(name)
-
 				message.Header["From"][i] = (&ListInfo{
-					Name:    name + " via " + list.Name,
+					Name:    mailutil.NameOrUser(from) + nameSuffix,
 					Address: list.Address,
 				}).RFC5322Address()
 			}

@@ -72,7 +72,7 @@ func main() {
 	var err error
 
 	if Superadmin != "" {
-		Superadmin, err = mailutil.Clean(Superadmin)
+		Superadmin, err = mailutil.ExtractAddress(Superadmin)
 		if err != nil {
 			log.Fatalf("Error processing superadmin address: %v", err)
 		}
@@ -189,13 +189,13 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
 
-	envelopeFrom = strings.TrimSpace(envelopeFrom)
+	envelopeFrom = mailutil.CanonicalizeAddress(envelopeFrom)
 
 	if envelopeFrom == "" {
 		s.isBounce = true
 	} else {
 		var err error
-		if envelopeFrom, err = mailutil.Clean(envelopeFrom); err != nil {
+		if envelopeFrom, err = mailutil.ExtractAddress(envelopeFrom); err != nil {
 			return SMTPWrapErr(510, `Error parsing Envelope-From address "`+envelopeFrom+`"`, err) // 510 Bad email address
 		}
 	}
@@ -215,7 +215,7 @@ func (s *LMTPSession) Rcpt(to string) error {
 
 func (s *LMTPSession) rcpt(to string) error {
 
-	to, err := mailutil.Clean(to)
+	to, err := mailutil.ExtractAddress(to)
 	if err != nil {
 		return SMTPWrapErr(510, `Error parsing Envelope-To address "`+to+`"`, err) // 510 Bad email address
 	}
@@ -317,7 +317,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			personalFrom := froms[0].Address
 
 			if senders, _ := mailutil.RobustAddressParser.ParseList(message.Header.Get("Sender")); len(senders) > 0 {
-				if sender := strings.ToLower(senders[0].Address); sender != personalFrom {
+				if sender := mailutil.CanonicalizeAddress(senders[0].Address); sender != personalFrom {
 					return SMTPErr(513, fmt.Sprintf("From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", personalFrom, sender))
 				}
 			}

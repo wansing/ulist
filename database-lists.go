@@ -35,7 +35,7 @@ func PublicLists() ([]ListInfo, error) {
 
 func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter) error {
 
-	listAddress, err := mailutil.Clean(listAddress)
+	listAddress, err := mailutil.ExtractAddress(listAddress)
 	if err != nil {
 		return err
 	}

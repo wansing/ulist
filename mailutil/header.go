@@ -202,8 +202,8 @@ func GetAddresses(header mail.Header, field string) ([]*mail.Address, error) {
 		return nil, err
 	}
 
-	for i := range addresses {
-		addresses[i].Address = strings.ToLower(addresses[i].Address) // spaces have probably been trimmed by ParseList
+	for i, a := range addresses {
+		addresses[i].Address = CanonicalizeAddress(a.Address)
 	}
 
 	return addresses, nil
@@ -212,7 +212,7 @@ func GetAddresses(header mail.Header, field string) ([]*mail.Address, error) {
 // see GetAddresses
 func addressListContains(header mail.Header, field, needle string) (bool, error) {
 
-	needle, err := Clean(needle)
+	needle, err := ExtractAddress(needle)
 	if err != nil {
 		return false, err
 	}
@@ -244,7 +244,7 @@ func ToOrCcContains(header mail.Header, address string) (bool, error) {
 
 // For usage in mod.html. Currently the message is rewritten before moderation, so the this is useless here
 /*func HasSingleFrom(header mail.Header) (has bool, from string) {
-	if froms, err := Cleans(header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
+	if froms, err := ExtractAddresses(header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

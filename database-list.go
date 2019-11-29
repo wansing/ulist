@@ -87,7 +87,7 @@ func (l *List) Knowns() ([]string, error) {
 
 func (l *List) AddMembers(sendWelcome bool, rawAddresses string, receive, moderate, notify, admin bool, alerter util.Alerter) error {
 
-	addresses, err := mailutil.Cleans(rawAddresses, BatchLimit, alerter)
+	addresses, err := mailutil.ExtractAddresses(rawAddresses, BatchLimit, alerter)
 	if err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (l *List) AddMembers(sendWelcome bool, rawAddresses string, receive, modera
 
 func (l *List) UpdateMember(rawAddress string, receive, moderate, notify, admin bool) error {
 
-	address, err := mailutil.Clean(rawAddress)
+	address, err := mailutil.ExtractAddress(rawAddress)
 	if err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func (l *List) UpdateMember(rawAddress string, receive, moderate, notify, admin 
 
 func (l *List) RemoveMembers(sendGoodbye bool, rawAddresses string, alerter util.Alerter) error {
 
-	addresses, err := mailutil.Cleans(rawAddresses, BatchLimit, alerter)
+	addresses, err := mailutil.ExtractAddresses(rawAddresses, BatchLimit, alerter)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ func (l *List) RemoveMembers(sendGoodbye bool, rawAddresses string, alerter util
 
 func (l *List) AddKnowns(rawAddresses string, alerter util.Alerter) error {
 
-	addresses, err := mailutil.Cleans(rawAddresses, BatchLimit, alerter)
+	addresses, err := mailutil.ExtractAddresses(rawAddresses, BatchLimit, alerter)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (l *List) AddKnowns(rawAddresses string, alerter util.Alerter) error {
 
 func (l *List) IsKnown(rawAddress string) (bool, error) {
 
-	address, err := mailutil.Clean(rawAddress)
+	address, err := mailutil.ExtractAddress(rawAddress)
 	if err != nil {
 		return false, err
 	}
@@ -152,7 +152,7 @@ func (l *List) IsKnown(rawAddress string) (bool, error) {
 
 func (l *List) RemoveKnowns(rawAddresses string, alerter util.Alerter) error {
 
-	addresses, err := mailutil.Cleans(rawAddresses, BatchLimit, alerter)
+	addresses, err := mailutil.ExtractAddresses(rawAddresses, BatchLimit, alerter)
 	if err != nil {
 		return err
 	}

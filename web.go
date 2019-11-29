@@ -123,6 +123,8 @@ func (ctx *Context) ServeFile(name string) {
 
 func (ctx *Context) Login(email, password string) bool {
 
+	email = mailutil.CanonicalizeAddress(email)
+
 	success, err := authenticators.Authenticate(email, password)
 	if err != nil {
 		ctx.Alert(err)
@@ -167,7 +169,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 
 		for i := range ps {
 			if ps[i].Key == "list" || ps[i].Key == "email" {
-				ps[i].Value = strings.ToLower(ps[i].Value)
+				ps[i].Value = mailutil.CanonicalizeAddress(ps[i].Value)
 			}
 		}
 
@@ -760,7 +762,7 @@ func publicSignupHandler(ctx *Context, list *List) error {
 
 		var err error
 
-		if data.EMail, err = mailutil.Clean(ctx.r.PostFormValue("email")); err != nil {
+		if data.EMail, err = mailutil.ExtractAddress(ctx.r.PostFormValue("email")); err != nil {
 			ctx.Alert(err)
 		} else {
 			if err := list.sendPublicOptIn(data.EMail); err != nil {
@@ -803,7 +805,7 @@ func publicOptInHandler(ctx *Context, list *List) error {
 	case nil: // member
 		ctx.Alert(errors.New("You are already a member of this list."))
 	case sql.ErrNoRows: // not a member
-		// When the HMAC was created, Clean() ensured that there is only one email address. So we can call AddMembers here safely.
+		// When the HMAC was created, ExtractAddress() ensured that there is only one email address. So we can call AddMembers here safely.
 		if err = list.AddMembers(true, mail, true, false, false, false, ctx); err != nil {
 			return err
 		}

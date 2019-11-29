@@ -17,25 +17,29 @@ var RobustAddressParser = mail.AddressParser{
 
 var ErrInvalidAddress = errors.New("Invalid email address")
 
-// Input: an address like "Alice <alice@example.org>", "<alice@example.org>" or "alice@example.org"
-// Output: canonicalized address (address only, lowercase, without leading or trailing spaces)
-//
-// It is recommended to run clean on all input data (from form post data, url parameters, SMTP commands, header fields).
-func Clean(rfc5322Address string) (string, error) {
+func CanonicalizeAddress(address string) string {
+	return strings.ToLower(strings.TrimSpace(address))
+}
 
-	parsed, err := RobustAddressParser.Parse(rfc5322Address) // ParseAddress seems to trim spaces
+// parses an address like "Alice <alice@example.org>", "<alice@example.org>" or "alice@example.org"
+// returns the canonicalized address
+//
+// It is recommended to canonicalize or parse all input data (from form post data, url parameters, SMTP commands, header fields).
+func ExtractAddress(rfc5322Address string) (string, error) {
+
+	parsed, err := RobustAddressParser.Parse(rfc5322Address)
 	if err != nil {
 		return "", ErrInvalidAddress
 	}
 
-	return strings.ToLower(parsed.Address), nil
+	return CanonicalizeAddress(parsed.Address), nil
 }
 
 // one RFC 5322 address-list per line
 // errors on single addresses are removed
-func Cleans(rawAddresses string, limit int, alerter util.Alerter) ([]string, error) {
+func ExtractAddresses(rawAddresses string, limit int, alerter util.Alerter) ([]string, error) {
 
-	var cleanedAddresses = []string{}
+	var result = []string{}
 
 	for _, line := range strings.Split(rawAddresses, "\r\n") {
 
@@ -53,15 +57,19 @@ func Cleans(rawAddresses string, limit int, alerter util.Alerter) ([]string, err
 		}
 
 		for _, p := range parsedAddresses {
-			cleanedAddresses = append(cleanedAddresses, strings.ToLower(p.Address))
+			result = append(result, p.Address)
 		}
 
-		if len(cleanedAddresses) > limit {
+		if len(result) > limit {
 			return nil, fmt.Errorf("Please enter not more than %d addresses.", limit)
 		}
 	}
 
-	return cleanedAddresses, nil
+	for i, a := range result {
+		result[i] = CanonicalizeAddress(a)
+	}
+
+	return result, nil
 }
 
 // Returns a.Name if it exists, else the user part of a.Address

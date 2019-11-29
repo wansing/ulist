@@ -32,7 +32,7 @@ func TestDecode(t *testing.T) {
 	}
 }
 
-func TestClean(t *testing.T) {
+func TestExtractAddress(t *testing.T) {
 
 	tests := []struct {
 		input    string
@@ -47,38 +47,15 @@ func TestClean(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if output, err := Clean(test.input); output != test.expected || err != nil {
+		if output, err := ExtractAddress(test.input); output != test.expected || err != nil {
 			t.Errorf("got %s %v, want %s", output, err, test.expected)
 		}
 	}
 }
 
-func TestCleanEmpty(t *testing.T) {
+func TestExtractAddressEmpty(t *testing.T) {
 
-	if _, err := Clean(""); err.Error() != ErrInvalidAddress.Error() {
+	if _, err := ExtractAddress(""); err.Error() != ErrInvalidAddress.Error() {
 		t.Errorf("got %v, want %v", err, ErrInvalidAddress)
-	}
-}
-
-func TestUnspoof(t *testing.T) {
-
-	tests := []struct {
-		input    string
-		expected string
-	}{
-		{"", ""},
-		{"@", ""},
-		{"@foo@bar", ""},
-		{"foo", "foo"},
-		{"foo@", "foo"},
-		{"foo@example", "foo"},
-		{"foo@example.com", "foo"},
-		{"foo@example.com@example.net", "foo"},
-	}
-
-	for _, test := range tests {
-		if output := Unspoof(test.input); output != test.expected {
-			t.Errorf("got %s, want %s", output, test.expected)
-		}
 	}
 }

@@ -53,7 +53,7 @@ type List struct {
 	ActionUnknown Action
 }
 
-var sentOptInMails = make(map[string]int64) // cleaned recipient address => unix time
+var sentOptInMails = make(map[string]int64) // canonicalized recipient address => unix time
 
 func texttmpl(filename string) *template.Template {
 	return template.Must(vfstemplate.ParseFiles(assets, template.New("body"), "templates/mail/"+filename+".txt"))
@@ -107,7 +107,7 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 			return
 		}
 		if maxStatus < status {
-			reason = mailutil.NameOrUser(from)
+			reason = from.Address
 			maxStatus = status
 		}
 	}
@@ -118,16 +118,16 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 
 	switch maxStatus {
 	case Moderator:
-		reason += " is a moderator and can " + string(l.ActionMod)
+		reason += " is a moderator"
 		action = l.ActionMod
 	case Member:
-		reason += " is a member and can " + string(l.ActionMember)
+		reason += " is a member"
 		action = l.ActionMember
 	case Known:
-		reason += " is known and can " + string(l.ActionUnknown)
+		reason += " is known"
 		action = l.ActionKnown
 	case Unknown:
-		reason += "all senders are unknown and can " + string(l.ActionUnknown)
+		reason += "all from addresses are unknown"
 		action = l.ActionUnknown
 	}
 
@@ -312,7 +312,7 @@ func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from string) {
 		return
 	}
 
-	if froms, err := mailutil.Cleans(m.Header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
+	if froms, err := mailutil.ExtractAddresses(m.Header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

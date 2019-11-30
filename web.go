@@ -49,6 +49,7 @@ func tmpl(filename string) *template.Template {
 
 var allTemplate = tmpl("all")
 var createTemplate = tmpl("create")
+var deleteTemplate = tmpl("delete")
 var membersTemplate = tmpl("members")
 var knownsTemplate = tmpl("knowns")
 var errorTemplate = tmpl("error")
@@ -231,9 +232,14 @@ func webui() {
 	mux.GET("/create", middleware(true, createHandler))
 	mux.POST("/create", middleware(true, createHandler))
 
-	// list admin
+	// everyone
 
 	mux.GET("/my", middleware(true, myListsHandler))
+
+	// list admin
+
+	mux.GET("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
+	mux.POST("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
 	mux.GET("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
 	mux.POST("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
 	mux.GET("/members/:list/:email", middleware(true, loadList(requireAdminPermission(memberHandler))))
@@ -442,6 +448,27 @@ func createHandler(ctx *Context) error {
 	}
 
 	return ctx.Execute(createTemplate, data)
+}
+
+func deleteHandler(ctx *Context, list *List) error {
+
+	if ctx.r.Method == http.MethodPost && ctx.r.PostFormValue("delete") == "delete" {
+
+		if ctx.r.PostFormValue("confirm") == "yes" {
+			if err := list.Delete(); err != nil {
+				ctx.Alert(err)
+			} else {
+				log.Printf("%s deleted the mailing list: %s\n", ctx.User, list.Address)
+				ctx.Success("The mailing list " + list.Address + " has been deleted.")
+				ctx.Redirect("/")
+				return nil
+			}
+		} else {
+			ctx.Alert(errors.New("You must confirm the checkbox in order to delete the list."))
+		}
+	}
+
+	return ctx.Execute(deleteTemplate, list)
 }
 
 func membersHandler(ctx *Context, list *List) error {

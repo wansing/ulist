@@ -160,3 +160,31 @@ func (l *List) RemoveKnowns(rawAddresses string, alerter util.Alerter) error {
 	Db.withAddresses(Db.removeKnownStmt, alerter, "%d known addresses have been removed from the mailing list "+l.Address+".", addresses, l.Id)
 	return nil
 }
+
+func (l *List) Delete() error {
+
+	tx, err := Db.Begin()
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Stmt(Db.removeListStmt).Exec(l.Id)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Stmt(Db.removeListKnownsStmt).Exec(l.Id)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Stmt(Db.removeListMembersStmt).Exec(l.Id)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	return tx.Commit()
+}

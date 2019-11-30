@@ -1,0 +1,12 @@
+{{ define "content" }}
+	<h1>Delete list {{ .Address }}</h1>
+	<form action="" method="post">
+		<div class="form-check mb-3">
+			<input class="form-check-input" type="checkbox" id="confirm" name="confirm" value="yes">
+			<label class="form-check-label" for="confirm">
+				Yes, delete the mailing list {{ .Address }}
+			</label>
+		</div>
+		<button name="delete" value="delete" type="submit" class="btn btn-primary">Delete mailing list</button>
+	</form>
+{{ end }}

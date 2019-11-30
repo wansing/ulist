@@ -16,18 +16,21 @@ const BatchLimit = 10000
 
 type Database struct {
 	*sql.DB
-	addKnownStmt     *sql.Stmt
-	removeKnownStmt  *sql.Stmt
-	addMemberStmt    *sql.Stmt
-	createListStmt   *sql.Stmt
-	getKnownsStmt    *sql.Stmt
-	getListStmt      *sql.Stmt
-	getMemberStmt    *sql.Stmt
-	isKnownStmt      *sql.Stmt
-	membershipsStmt  *sql.Stmt
-	removeMemberStmt *sql.Stmt
-	updateListStmt   *sql.Stmt
-	updateMemberStmt *sql.Stmt
+	addKnownStmt          *sql.Stmt
+	addMemberStmt         *sql.Stmt
+	createListStmt        *sql.Stmt
+	getKnownsStmt         *sql.Stmt
+	getListStmt           *sql.Stmt
+	getMemberStmt         *sql.Stmt
+	isKnownStmt           *sql.Stmt
+	membershipsStmt       *sql.Stmt
+	removeKnownStmt       *sql.Stmt
+	removeListStmt        *sql.Stmt
+	removeListKnownsStmt  *sql.Stmt
+	removeListMembersStmt *sql.Stmt
+	removeMemberStmt      *sql.Stmt
+	updateListStmt        *sql.Stmt
+	updateMemberStmt      *sql.Stmt
 }
 
 func (db *Database) MustPrepare(query string) *sql.Stmt {
@@ -46,9 +49,6 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	}
 
 	_, err = sqlDB.Exec(`
-
-		-- User categories: admin, moderator, member, known, unknown.
-		-- Members (receivers, moderators, admins) usually are usually associated to each other, so they share a database table. Known users have a separate table.
 
 		CREATE TABLE IF NOT EXISTS list (
 			id               INTEGER PRIMARY KEY,
@@ -94,6 +94,9 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	db.getMemberStmt = db.MustPrepare("SELECT m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.address = ? AND l.id = m.list AND m.address = ?")
 	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM list l, known k WHERE l.address = ? AND l.id = k.list AND k.address = ?") // never returns sql.ErrNoRows
 	db.membershipsStmt = db.MustPrepare("SELECT l.address, l.name, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.address")
+	db.removeListStmt = db.MustPrepare("DELETE FROM list WHERE id = ?")
+	db.removeListKnownsStmt = db.MustPrepare("DELETE FROM known WHERE list = ?")
+	db.removeListMembersStmt = db.MustPrepare("DELETE FROM member WHERE list = ?")
 	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE address = ? AND list = ?")
 	db.removeMemberStmt = db.MustPrepare("DELETE FROM member WHERE address = ? AND list = ?")
 	db.updateListStmt = db.MustPrepare("UPDATE list SET name = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? WHERE list.address = ?")

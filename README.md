@@ -9,15 +9,15 @@ See `build.sh`.
 ## Integration
 
 * mail submission: ulist listens to an LMTP socket
-* mail delivery to system's MTA: ulist executes /usr/sbin/sendmail
-  * pro: no recipient limit
-  * con: when running in a jail, you need access to `/etc/postfix`, `/var/log/postfix` and `/var/spool/postfix/maildrop`
-  * cons of SMTP delivery: `localhost:25` usually accepts mail for localhost only and might drop emails for other recipients. `localhost:587` usually requires authentication and SSL/TLS.
+* mail delivery to system's MTA: ulist executes `/usr/sbin/sendmail`
+  * advantage: no recipient limit
+  * disadvantage: when running in a jail, you need access to `/etc/postfix`, `/var/log/postfix` and `/var/spool/postfix/maildrop`
+  * disadvantages of SMTP delivery: `localhost:25` usually accepts mail for localhost only and might drop emails for other recipients. `localhost:587` usually requires authentication and SSL/TLS.
 * Web UI: ulist listens to `tcp://127.0.0.1:port` or a unix socket.
-* Web UI authentication: ulist authenticates against a local SMTP server
+* Web UI authentication: against a local database or SMTP server, see [auth](https://github.com/wansing/auth)
 * Supported databases: SQLite, PostgreSQL (untested), MySQL/MariaDB (untested)
 
-## Example with nginx and postfix
+## Example using nginx and postfix
 
 ### `/etc/systemd/system/ulist.service`
 
@@ -76,7 +76,7 @@ query = SELECT CASE
 END;
 ```
 
-## Example with apache and qmail (on uberspace.de)
+## Example using apache and qmail (on uberspace.de)
 
 You need an LMTP wrapper script, for example `qmail-lmtp` from `mailman`:
 
@@ -125,10 +125,9 @@ RequestHeader set X-Forwarded-Proto https env=HTTPS
 * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address.
 * As `From` is rewritten, it's feasible to modify the email. We can prepend the list name to the subject and add an unsubscribe footer to the content.
 
-## Considerations on Security
+## Security Considerations
 
 * We can't hide the existence of a list. Maybe in the web interface, but not via SMTP.
-* Even though the credentials are usually the same, authentication is done via SMTP, not IMAP. We don't want to get access to stored emails.
 
 ## TODO
 
@@ -139,15 +138,13 @@ RequestHeader set X-Forwarded-Proto https env=HTTPS
 * more sophisticated bounce processing
 * append an unsubscribe link to the content
 * remove unsubscribing via email (that's prone to spoofing and can leak memberships)
-* support more authentication backends
-* web UI: list removal
 * web UI: list creation permissions per domain
 * prevent email loops (check `Received` or `List-...` headers)
 * reject or always moderate emails which have been flagged as spam (`X-Spam` header or so)
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)
-* Bug: rewritings ("From" munging etc) is done before moderation
+* Bug: rewriting ("From" munging etc) is done before moderation
 
 ## Omitted features
 

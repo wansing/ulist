@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	"errors"
 	"sort"
 
 	"github.com/wansing/ulist/mailutil"
@@ -33,6 +34,7 @@ func (l *List) membersWhere(condition string) ([]Membership, error) {
 
 // *List is never nil, error can be sql.ErrNoRows
 func GetList(listAddress string) (*List, error) {
+	listAddress = mailutil.CanonicalizeAddress(listAddress)
 	l := &List{}
 	return l, Db.getListStmt.QueryRow(listAddress).Scan(&l.Address, &l.Id, &l.Name, &l.HMACKey, &l.PublicSignup, &l.HideFrom, &l.ActionMod, &l.ActionMember, &l.ActionUnknown, &l.ActionKnown)
 }
@@ -92,6 +94,10 @@ func (l *List) AddMembers(sendWelcome bool, rawAddresses string, receive, modera
 		return err
 	}
 
+	if util.RemoveElement(&addresses, l.Address) {
+		alerter.Alert(errors.New("You can't add the list address as a member."))
+	}
+
 	Db.withAddresses(Db.addMemberStmt, alerter, "%d members have been added to the mailing list "+l.Address+".", addresses, l.Id, receive, moderate, notify, admin)
 
 	if sendWelcome {
@@ -133,6 +139,10 @@ func (l *List) AddKnowns(rawAddresses string, alerter util.Alerter) error {
 	addresses, err := mailutil.ExtractAddresses(rawAddresses, BatchLimit, alerter)
 	if err != nil {
 		return err
+	}
+
+	if util.RemoveElement(&addresses, l.Address) {
+		alerter.Alert(errors.New("You can't add the list address as a known sender."))
 	}
 
 	Db.withAddresses(Db.addKnownStmt, alerter, "%d known addresses have been added to the mailing list "+l.Address+".", addresses, l.Id)

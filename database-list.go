@@ -45,7 +45,7 @@ func (l *List) Update(name string, publicSignup, hideFrom bool, actionMod, actio
 }
 
 func (l *List) Admins() ([]Membership, error) {
-	return l.membersWhere("m.admin = 1")
+	return l.membersWhere("AND m.admin = 1")
 }
 
 // *Membership is never nil, error can be sql.ErrNoRows

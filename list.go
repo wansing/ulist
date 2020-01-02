@@ -20,33 +20,12 @@ import (
 	"github.com/wansing/ulist/util"
 )
 
-const BounceAddressSuffix = "+bounces"
-
-// cleaned: the address, without the BounceAddressSuffix if possible
-func IsBounceAddress(address string) (cleaned string, is bool) {
-	cleaned = address
-	var atIndex = strings.LastIndex(address, "@")
-	if atIndex == -1 {
-		return
-	}
-	var suffixIndex = atIndex - len(BounceAddressSuffix)
-	if suffixIndex < 0 {
-		return
-	}
-	if address[suffixIndex:atIndex] != BounceAddressSuffix {
-		return
-	}
-	cleaned = address[:suffixIndex] + address[atIndex:]
-	is = true
-	return
-}
-
 type List struct {
 	ListInfo
 	Id            int
 	HMACKey       []byte // [32]byte would require check when reading from database
-	PublicSignup  bool // default: false
-	HideFrom      bool // default: false
+	PublicSignup  bool   // default: false
+	HideFrom      bool   // default: false
 	ActionMod     Action
 	ActionMember  Action
 	ActionKnown   Action
@@ -56,7 +35,7 @@ type List struct {
 var sentOptInMails = make(map[string]int64) // canonicalized recipient address => unix time
 
 func texttmpl(filename string) *template.Template {
-	return template.Must(vfstemplate.ParseFiles(assets, template.New("body"), "templates/mail/"+filename+".txt"))
+	return template.Must(vfstemplate.ParseFiles(assets, template.New(filename+".txt"), "templates/mail/"+filename+".txt"))
 }
 
 var goodbyeTemplate = texttmpl("goodbye")
@@ -70,12 +49,12 @@ func (l *List) HMAC(address string) ([]byte, error) {
 		return nil, errors.New("[ListStub] HMACKey is empty")
 	}
 
-	if bytes.Compare(l.HMACKey, make([]byte, 32)) == 0 {
+	if bytes.Equal(l.HMACKey, make([]byte, 32)) {
 		return nil, errors.New("[ListStub] HMACKey is all zeroes")
 	}
 
 	mac := hmac.New(sha512.New, l.HMACKey)
-	mac.Write([]byte(l.Address))
+	mac.Write([]byte(l.RFC5322AddrSpec()))
 	mac.Write([]byte{0}) // separator
 	mac.Write([]byte(address))
 
@@ -83,7 +62,7 @@ func (l *List) HMAC(address string) ([]byte, error) {
 }
 
 // returns max action depending on From addresses
-func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, err error) {
+func (l *List) GetAction(froms []*mailutil.Addr) (action Action, reason string, err error) {
 
 	action = Reject
 
@@ -102,12 +81,12 @@ func (l *List) GetAction(froms []*mail.Address) (action Action, reason string, e
 
 	for _, from := range froms {
 		var status Status
-		status, err = l.GetStatus(from.Address)
+		status, err = l.GetStatus(from.RFC5322AddrSpec())
 		if err != nil {
 			return
 		}
 		if maxStatus < status {
-			reason = from.Address
+			reason = from.RFC5322AddrSpec()
 			maxStatus = status
 		}
 	}
@@ -142,7 +121,7 @@ func (list *List) Open(filename string) (*mailutil.Message, error) {
 
 	// sanitize filename
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
-		return nil, errors.New("Invalid filename")
+		return nil, errors.New("invalid filename")
 	}
 
 	emlFile, err := os.Open(list.StorageFolder() + "/" + filename)
@@ -193,12 +172,12 @@ func (list *List) Send(m *mailutil.Message) error {
 }
 
 // sends an email to a single user
-func (list *List) sendUserMail(recipient, subject string, body io.Reader) error {
+func (list *List) sendUserMail(recipient string, subject string, body io.Reader) error {
 
 	header := make(mail.Header)
-	header["From"] = []string{list.RFC5322Address()}
+	header["From"] = []string{list.RFC5322NameAddr()}
 	header["To"] = []string{recipient}
-	header["Subject"] = []string{"[" + list.NameOrUser() + "] " + subject}
+	header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] " + subject}
 	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
 	return mailutil.Send(Testmode, header, body, list.BounceAddress(), []string{recipient})
@@ -208,17 +187,17 @@ func (list *List) sendUserMail(recipient, subject string, body io.Reader) error 
 // - multiple recipients
 // - body is a template
 // - errors are notified only
-func (l *List) sendUsersMailTemplate(recipients []string, subject string, body *template.Template, alerter util.Alerter) {
+func (l *List) sendUsersMailTemplate(recipients []*mailutil.Addr, subject string, body *template.Template, alerter util.Alerter) {
 
 	bodybuf := &bytes.Buffer{}
-	if err := body.ExecuteTemplate(bodybuf, "body", l.Address); err != nil {
-		alerter.Alert(err)
+	if err := body.Execute(bodybuf, l.RFC5322AddrSpec()); err != nil {
+		alerter.Alertf("error executing email template: %v", err)
 		return
 	}
 
 	for _, recipient := range recipients {
-		if err := l.sendUserMail(recipient, subject, bodybuf); err != nil {
-			alerter.Alert(err)
+		if err := l.sendUserMail(recipient.RFC5322AddrSpec(), subject, bodybuf); err != nil {
+			alerter.Alertf("error sending email to user: %v", err)
 		}
 	}
 }
@@ -254,18 +233,18 @@ func (list *List) sendPublicOptIn(recipient string) error {
 		MailAddress string
 		Url         string
 	}{
-		ListAddress: list.Address,
+		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: recipient,
-		Url:         WebUrl + "/public/" + list.Address + "/" + recipient + "/" + base64.RawURLEncoding.EncodeToString(hmac),
+		Url:         WebUrl + "/public/" + list.EscapeAddress() + "/" + recipient + "/" + base64.RawURLEncoding.EncodeToString(hmac),
 	}
 
 	body := &bytes.Buffer{}
 
-	if err = signUpTemplate.ExecuteTemplate(body, "body", mailData); err != nil {
+	if err = signUpTemplate.Execute(body, mailData); err != nil {
 		return err
 	}
 
-	if err = list.sendUserMail(recipient, "Please confirm to join the mailing list "+list.Address, body); err != nil {
+	if err = list.sendUserMail(recipient, "Please confirm to join the mailing list "+list.RFC5322AddrSpec(), body); err != nil {
 		return err
 	}
 
@@ -286,7 +265,7 @@ func (list *List) sendNotification(recipient string) error {
 		ModHref: WebUrl + "/mod/" + list.EscapeAddress(),
 	}
 
-	if err := notifyTemplate.ExecuteTemplate(body, "body", data); err != nil {
+	if err := notifyTemplate.Execute(body, data); err != nil {
 		return err
 	}
 
@@ -302,17 +281,15 @@ func (list *List) DeleteModeratedMail(filename string) error {
 	return os.Remove(list.StorageFolder() + "/" + filename)
 }
 
-// for usage in templates
-//
 // As the message is currently rewritten before moderation, we have to find the actual from address here. That should be changed. Then we could move this back to mailutil/message.go.
-func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from string) {
+func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from *mailutil.Addr) {
 
 	if list.HideFrom {
-		// we can't recover the actual from address
+		// we can't recover the real from address
 		return
 	}
 
-	if froms, err := mailutil.ExtractAddresses(m.Header.Get("Reply-To"), 2, nil); len(froms) == 1 && err == nil {
+	if froms, err := mailutil.ParseAddresses(m.Header.Get("Reply-To"), 2, false); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

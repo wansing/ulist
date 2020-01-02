@@ -22,7 +22,7 @@ func headerWritelnFold(w io.Writer, name, body string) error {
 
 	name = strings.TrimSpace(name)
 	if len(name) > 995 { // "longname: x\r\n" would be > 1000 chars
-		return errors.New("Header field name too long")
+		return errors.New("header field name too long")
 	}
 
 	// written shall always refer to the current line
@@ -86,7 +86,7 @@ func headerWritelnFold(w io.Writer, name, body string) error {
 		}
 
 		if crop < 1 {
-			return errors.New("Could not crop header line") // should never happen
+			return errors.New("could not crop header line") // should never happen
 		}
 
 		if _, err := w.Write([]byte(strings.TrimSpace(body[:crop]))); err != nil { // effectively trim slice at the end only, that should be okay
@@ -108,7 +108,7 @@ func WriteHeader(w io.Writer, header mail.Header) error {
 	// sort keys (else we'd use random map iteration)
 
 	keys := []string{}
-	for k, _ := range header {
+	for k := range header {
 		if k == "Received" {
 			continue
 		}
@@ -186,59 +186,27 @@ func Send(testmode bool, header mail.Header, body io.Reader, envelopeFrom string
 	return nil
 }
 
-// field: "To", "Cc", "Bcc", maybe others, can be empty
-func GetAddresses(header mail.Header, field string) ([]*mail.Address, error) {
+func ToOrCcContains(header mail.Header, needle *Addr) (bool, error) {
 
-	from := header.Get(field)
-	if from == "" {
-		return nil, mail.ErrHeaderNotPresent
-	}
+	for _, fieldName := range []string{"To", "Cc"} {
 
-	addresses, err := RobustAddressParser.ParseList(from)
-	if err != nil {
-		if err.Error() == "mail: no address" {
-			return nil, nil
+		fromField := header.Get(fieldName)
+		if fromField == "" {
+			continue // missing header field is okay
 		}
-		return nil, err
-	}
 
-	for i, a := range addresses {
-		addresses[i].Address = CanonicalizeAddress(a.Address)
-	}
+		addresses, errs := ParseAddresses(fromField, 10000, false) // strict parsing
+		if len(errs) > 0 {
+			return false, errs[0]
+		}
 
-	return addresses, nil
-}
-
-// see GetAddresses
-func addressListContains(header mail.Header, field, needle string) (bool, error) {
-
-	needle, err := ExtractAddress(needle)
-	if err != nil {
-		return false, err
-	}
-
-	addresses, err := GetAddresses(header, field)
-	if err != nil {
-		return false, err
-	}
-
-	for _, item := range addresses {
-		if item.Address == needle {
-			return true, nil
+		for _, addr := range addresses {
+			if addr.Equals(needle) {
+				return true, nil
+			}
 		}
 	}
 
-	return false, nil
-}
-
-// see addressListContains
-func ToOrCcContains(header mail.Header, address string) (bool, error) {
-	if contains, err := addressListContains(header, "To", address); contains || err != nil {
-		return contains, err
-	}
-	if contains, err := addressListContains(header, "Cc", address); contains || err != nil {
-		return contains, err
-	}
 	return false, nil
 }
 

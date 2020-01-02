@@ -2,13 +2,11 @@ package main
 
 import (
 	"database/sql"
-	"fmt"
 	"log"
 
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
-	"github.com/wansing/ulist/util"
 )
 
 // add/remove up to 10000 rows at once
@@ -19,11 +17,15 @@ type Database struct {
 	addKnownStmt          *sql.Stmt
 	addMemberStmt         *sql.Stmt
 	createListStmt        *sql.Stmt
+	getAdminsStmt         *sql.Stmt
 	getKnownsStmt         *sql.Stmt
 	getListStmt           *sql.Stmt
 	getMemberStmt         *sql.Stmt
+	getMembersStmt        *sql.Stmt
+	getMembershipsStmt    *sql.Stmt
+	getNotifiedsStmt      *sql.Stmt
+	getReceiversStmt      *sql.Stmt
 	isKnownStmt           *sql.Stmt
-	membershipsStmt       *sql.Stmt
 	removeKnownStmt       *sql.Stmt
 	removeListStmt        *sql.Stmt
 	removeListKnownsStmt  *sql.Stmt
@@ -52,8 +54,9 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 
 		CREATE TABLE IF NOT EXISTS list (
 			id               INTEGER PRIMARY KEY,
-			address          TEXT NOT NULL,
-			name             TEXT NOT NULL,
+			display          TEXT NOT NULL, -- display-name of list address, list name
+			local            TEXT NOT NULL, -- local-part of list address
+			domain           TEXT NOT NULL, -- domain of list address
 			hmac_key         TEXT NOT NULL,
 			public_signup    BOOLEAN NOT NULL,
 			hide_from        BOOLEAN NOT NULL,
@@ -61,7 +64,7 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 			action_member    TEXT NOT NULL,
 			action_known     TEXT NOT NULL,
 			action_unknown   TEXT NOT NULL,
-			UNIQUE(address)
+			UNIQUE(local, domain)
 		);
 
 		CREATE TABLE IF NOT EXISTS member (
@@ -86,21 +89,32 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 
 	db := &Database{DB: sqlDB}
 
+	// known
 	db.addKnownStmt = db.MustPrepare("INSERT INTO known (address, list) VALUES (?, ?)")
-	db.addMemberStmt = db.MustPrepare("INSERT INTO member (address, list, receive, moderate, notify, admin) VALUES (?, ?, ?, ?, ?, ?)")
-	db.createListStmt = db.MustPrepare("INSERT INTO list (address, name, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) VALUES (?, ?, ?, 0, 0, ?, ?, ?, ?)")
-	db.getKnownsStmt = db.MustPrepare("SELECT k.address FROM list l, known k WHERE l.address = ? AND l.id = k.list ORDER BY k.address")
-	db.getListStmt = db.MustPrepare("SELECT address, id, name, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known FROM list WHERE address = ?")
-	db.getMemberStmt = db.MustPrepare("SELECT m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.address = ? AND l.id = m.list AND m.address = ?")
-	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM list l, known k WHERE l.address = ? AND l.id = k.list AND k.address = ?") // never returns sql.ErrNoRows
-	db.membershipsStmt = db.MustPrepare("SELECT l.address, l.name, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.address")
+	db.getKnownsStmt = db.MustPrepare("SELECT address FROM known WHERE list = ? ORDER BY address")
+	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM known WHERE list = ? AND address = ?") // "select count(1)" never returns sql.ErrNoRows
+	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE address = ? AND list = ?")
+
+	// list
+	db.createListStmt = db.MustPrepare("INSERT INTO list (display, local, domain, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)")
+	db.getListStmt = db.MustPrepare("SELECT id, display, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known FROM list WHERE local = ? AND domain = ?")
+	db.getAdminsStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND admin = 1 ORDER BY address")
+	db.getMembersStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? ORDER BY address")
+	db.getNotifiedsStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND notify = 1 ORDER BY address")
+	db.getReceiversStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND receive = 1 ORDER BY address")
 	db.removeListStmt = db.MustPrepare("DELETE FROM list WHERE id = ?")
 	db.removeListKnownsStmt = db.MustPrepare("DELETE FROM known WHERE list = ?")
 	db.removeListMembersStmt = db.MustPrepare("DELETE FROM member WHERE list = ?")
-	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE address = ? AND list = ?")
+	db.updateListStmt = db.MustPrepare("UPDATE list SET display = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? WHERE list.id = ?")
+
+	// member
+	db.addMemberStmt = db.MustPrepare("INSERT INTO member (address, list, receive, moderate, notify, admin) VALUES (?, ?, ?, ?, ?, ?)")
+	db.getMemberStmt = db.MustPrepare("SELECT receive, moderate, notify, admin FROM member WHERE list = ? AND address = ?")
 	db.removeMemberStmt = db.MustPrepare("DELETE FROM member WHERE address = ? AND list = ?")
-	db.updateListStmt = db.MustPrepare("UPDATE list SET name = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? WHERE list.address = ?")
 	db.updateMemberStmt = db.MustPrepare("UPDATE member SET receive = ?, moderate = ?, notify = ?, admin = ? WHERE list = ? AND address = ?")
+
+	// user
+	db.getMembershipsStmt = db.MustPrepare("SELECT l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.domain, l.local")
 
 	return db, nil
 }
@@ -108,22 +122,4 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 func (db *Database) Close() error {
 	log.Println("Closing database")
 	return db.DB.Close()
-}
-
-// Arguments of stmt must be (address, args...).
-// Alerts on errors.
-func (db *Database) withAddresses(stmt *sql.Stmt, alerter util.Alerter, successText string, addresses []string, args ...interface{}) {
-	var rowsAffected int64
-	for _, address := range addresses {
-		if result, err := stmt.Exec(append([]interface{}{address}, args...)...); err == nil {
-			if ra, err := result.RowsAffected(); err == nil {
-				rowsAffected += ra
-			}
-		} else {
-			alerter.Alert(err)
-		}
-	}
-	if rowsAffected > 0 {
-		alerter.Success(fmt.Sprintf(successText, rowsAffected))
-	}
 }

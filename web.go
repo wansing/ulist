@@ -27,8 +27,8 @@ import (
 	"github.com/wansing/ulist/util"
 )
 
-var ErrUnauthorized = errors.New("Unauthorized")
-var ErrNoList = errors.New("No list or list error") // generic error so we don't reveal whether a non-public list exists
+var ErrUnauthorized = errors.New("unauthorized")
+var ErrNoList = errors.New("no list or list error") // generic error so we don't reveal whether a non-public list exists
 
 const modPerPage = 10
 
@@ -36,11 +36,15 @@ var sessionManager *scs.SessionManager
 
 func init() {
 	sessionManager = scs.New()
-	sessionManager.Cookie.Persist = false // Don't store cookie across browser sessions. Required for GDPR cookie consent exemption criterion B. https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2012/wp194_en.pdf
+	sessionManager.Cookie.Persist = false                 // Don't store cookie across browser sessions. Required for GDPR cookie consent exemption criterion B. https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2012/wp194_en.pdf
 	sessionManager.Cookie.SameSite = http.SameSiteLaxMode // good CSRF protection if/because HTTP GET don't modify anything
-	sessionManager.Cookie.Secure = false // else running on localhost:8080 fails
+	sessionManager.Cookie.Secure = false                  // else running on localhost:8080 fails
 	sessionManager.IdleTimeout = 2 * time.Hour
 	sessionManager.Lifetime = 12 * time.Hour
+}
+
+func canonicalizeAddress(a string) string {
+	return strings.ToLower(strings.TrimSpace(a))
 }
 
 func tmpl(filename string) *template.Template {
@@ -86,13 +90,13 @@ type Context struct {
 }
 
 // implement Alerter
-func (ctx *Context) Alert(err error) {
-	ctx.addNotification(err.Error(), "danger")
+func (ctx *Context) Alertf(format string, a ...interface{}) {
+	ctx.addNotification(fmt.Sprintf(format, a...), "danger")
 }
 
 // implement Alerter
-func (ctx *Context) Success(text string) {
-	ctx.addNotification(text, "success")
+func (ctx *Context) Successf(format string, a ...interface{}) {
+	ctx.addNotification(fmt.Sprintf(format, a...), "success")
 }
 
 // style should be a bootstrap alert style without the leading "alert-"
@@ -115,7 +119,7 @@ func (ctx *Context) Execute(t *template.Template, data interface{}) error {
 }
 
 func (ctx *Context) Redirect(target string) {
-	http.Redirect(ctx.w, ctx.r, target, 302)
+	http.Redirect(ctx.w, ctx.r, target, http.StatusFound)
 }
 
 func (ctx *Context) ServeFile(name string) {
@@ -124,11 +128,11 @@ func (ctx *Context) ServeFile(name string) {
 
 func (ctx *Context) Login(email, password string) bool {
 
-	email = mailutil.CanonicalizeAddress(email)
+	email = canonicalizeAddress(email)
 
 	success, err := authenticators.Authenticate(email, password)
 	if err != nil {
-		ctx.Alert(err)
+		ctx.Alertf("Error loggin in: %v", err)
 	}
 
 	if Testmode {
@@ -138,9 +142,9 @@ func (ctx *Context) Login(email, password string) bool {
 
 	if success {
 		sessionManager.Put(ctx.r.Context(), "user", email)
-		ctx.Success("Welcome!")
+		ctx.Successf("Welcome!")
 	} else {
-		ctx.Alert(errors.New("Wrong email address or password"))
+		ctx.Alertf("Wrong email address or password")
 	}
 
 	return success
@@ -169,16 +173,16 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 		for i := range ps {
-			if ps[i].Key == "list" || ps[i].Key == "email" {
-				ps[i].Value = mailutil.CanonicalizeAddress(ps[i].Value)
+			if ps[i].Key == "email" { // TODO remove this?
+				ps[i].Value = canonicalizeAddress(ps[i].Value)
 			}
 		}
 
 		ctx := &Context{
-			w:         w,
-			r:         r,
-			ps:        ps,
-			User:      sessionManager.GetString(r.Context(), "user"),
+			w:    w,
+			r:    r,
+			ps:   ps,
+			User: sessionManager.GetString(r.Context(), "user"),
 		}
 
 		if mustBeLoggedIn && !ctx.LoggedIn() {
@@ -304,7 +308,13 @@ func webui() {
 
 func loadList(f func(*Context, *List) error) func(*Context) error {
 	return func(ctx *Context) error {
-		if list, err := GetList(ctx.ps.ByName("list")); err == nil {
+
+		listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+		if err != nil {
+			return ErrNoList
+		}
+
+		if list, err := GetList(listAddr); err == nil {
 			return f(ctx, list)
 		} else {
 			return ErrNoList
@@ -395,9 +405,9 @@ func settingsHandler(ctx *Context, list *List) error {
 			ParseAction(ctx.r.PostFormValue("action_known")),
 			ParseAction(ctx.r.PostFormValue("action_unknown")),
 		); err != nil {
-			ctx.Alert(err)
+			ctx.Alertf("Error saving settings: %v", err)
 		} else {
-			ctx.Success("Your changes to the settings of " + list.Address + " have been saved.")
+			ctx.Successf("Your changes to the settings of %s have been saved.", list)
 		}
 
 		ctx.Redirect("/settings/" + list.EscapeAddress()) // reload in order to see the effect
@@ -428,7 +438,8 @@ func createHandler(ctx *Context) error {
 	}
 
 	data := struct {
-		ListInfo
+		Address   string
+		Name      string
 		AdminMods string
 	}{}
 
@@ -438,12 +449,12 @@ func createHandler(ctx *Context) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		if err := CreateList(data.Address, data.Name, data.AdminMods, ctx); err != nil {
-			ctx.Alert(err)
-		} else {
-			ctx.Success("The mailing list " + data.Address + " has been created.")
-			ctx.Redirect("/members/" + data.EscapeAddress())
+		if list, err := CreateList(data.Address, data.Name, data.AdminMods, ctx); err == nil {
+			ctx.Successf("The mailing list %s has been created.", data.Address)
+			ctx.Redirect("/members/" + list.EscapeAddress())
 			return nil
+		} else {
+			ctx.Alertf("Error creating list: %v", err)
 		}
 	}
 
@@ -456,15 +467,15 @@ func deleteHandler(ctx *Context, list *List) error {
 
 		if ctx.r.PostFormValue("confirm") == "yes" {
 			if err := list.Delete(); err != nil {
-				ctx.Alert(err)
+				ctx.Alertf("Error deleting list: %v", err)
 			} else {
-				log.Printf("%s deleted the mailing list: %s\n", ctx.User, list.Address)
-				ctx.Success("The mailing list " + list.Address + " has been deleted.")
+				log.Printf("%s deleted the mailing list: %s", ctx.User, list)
+				ctx.Successf("The mailing list %s has been deleted.", list)
 				ctx.Redirect("/")
 				return nil
 			}
 		} else {
-			ctx.Alert(errors.New("You must confirm the checkbox in order to delete the list."))
+			ctx.Alertf("You must confirm the checkbox in order to delete the list.")
 		}
 	}
 
@@ -475,17 +486,17 @@ func membersHandler(ctx *Context, list *List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		rawAddresses := ctx.r.PostFormValue("emails")
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit, true)
+		for _, err := range errs {
+			ctx.Alertf("Error parsing email address: %v", err)
+		}
+
 		sendWelcomeGoodbye := ctx.r.PostFormValue("send_welcome_goodbye") != ""
 
 		if ctx.r.PostFormValue("add") != "" {
-			if err := list.AddMembers(sendWelcomeGoodbye, rawAddresses, true, false, false, false, ctx); err != nil {
-				ctx.Alert(err)
-			}
+			list.AddMembers(sendWelcomeGoodbye, addrs, true, false, false, false, ctx)
 		} else if ctx.r.PostFormValue("remove") != "" {
-			if err := list.RemoveMembers(sendWelcomeGoodbye, rawAddresses, ctx); err != nil {
-				ctx.Alert(err)
-			}
+			list.RemoveMembers(sendWelcomeGoodbye, addrs, ctx)
 		}
 
 		ctx.Redirect("/members/" + list.EscapeAddress())
@@ -519,7 +530,7 @@ func memberHandler(ctx *Context, list *List) error {
 			log.Println("[web updatemember]", err)
 		}
 
-		ctx.Success("The membership settings of " + m.MemberAddress + " in " + list.Address + " have been saved.")
+		ctx.Successf("The membership settings of %s in %s have been saved.", m.MemberAddress, list)
 		ctx.Redirect("/members/" + list.EscapeAddress() + "/" + m.EscapeMemberAddress())
 		return nil
 	}
@@ -539,16 +550,15 @@ func knownsHandler(ctx *Context, list *List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		rawAddresses := ctx.r.PostFormValue("emails")
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit, true)
+		for _, err := range errs {
+			ctx.Alertf("Error parsing email address: %v", err)
+		}
 
 		if ctx.r.PostFormValue("add") != "" {
-			if err := list.AddKnowns(rawAddresses, ctx); err != nil {
-				ctx.Alert(err)
-			}
+			list.AddKnowns(addrs, ctx)
 		} else if ctx.r.PostFormValue("remove") != "" {
-			if err := list.RemoveKnowns(rawAddresses, ctx); err != nil {
-				ctx.Alert(err)
-			}
+			list.RemoveKnowns(addrs, ctx)
 		}
 
 		ctx.Redirect("/knowns/" + list.EscapeAddress())
@@ -565,9 +575,9 @@ type StoredListMessage struct {
 }
 
 // wrapper for use in templates
-func (s *StoredListMessage) GetSingleFrom() string{
+func (s *StoredListMessage) GetSingleFromStr() string {
 	_, from := s.List.GetSingleFrom(s.Message)
-	return from
+	return from.RFC5322AddrSpec()
 }
 
 func modHandler(ctx *Context, list *List) error {
@@ -601,15 +611,17 @@ func modHandler(ctx *Context, list *List) error {
 			case "delete":
 
 				if err = list.DeleteModeratedMail(emlFilename); err != nil {
-					ctx.Alert(err)
+					ctx.Alertf("Error deleting email: %v", err)
 				} else {
 					notifyDeleted++
 				}
 
-				if ctx.r.PostFormValue("addknown-delete-" + emlFilename) != "" {
+				if ctx.r.PostFormValue("addknown-delete-"+emlFilename) != "" {
 					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Reject { // same condition as in template
-						if err := list.AddKnowns(from, ctx); err == nil {
+						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
+						} else {
+							ctx.Alertf("Error adding known sender: %v", err)
 						}
 					}
 				}
@@ -617,17 +629,19 @@ func modHandler(ctx *Context, list *List) error {
 			case "pass":
 
 				if err = list.Send(m); err != nil {
-					ctx.Alert(err)
+					ctx.Alertf("Error sending email over list: %v", err)
 				} else {
 					log.Println("Processed email successfully")
 					notifyPassed++
 					_ = list.DeleteModeratedMail(emlFilename)
 				}
 
-				if ctx.r.PostFormValue("addknown-pass-" + emlFilename) != "" {
+				if ctx.r.PostFormValue("addknown-pass-"+emlFilename) != "" {
 					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Pass { // same condition as in template
-						if err := list.AddKnowns(from, ctx); err == nil {
+						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
+						} else {
+							ctx.Alertf("Error adding known sender: %v", err)
 						}
 					}
 				}
@@ -639,7 +653,7 @@ func modHandler(ctx *Context, list *List) error {
 		successNotification := ""
 
 		if notifyPassed > 0 {
-			successNotification += fmt.Sprintf("Passed %d messages. ", notifyPassed)
+			successNotification += fmt.Sprintf("Let pass %d messages. ", notifyPassed)
 		}
 
 		if notifyDeleted > 0 {
@@ -647,7 +661,7 @@ func modHandler(ctx *Context, list *List) error {
 		}
 
 		if successNotification != "" {
-			ctx.Success(successNotification)
+			ctx.Successf(successNotification)
 		}
 
 		ctx.Redirect("/mod/" + list.EscapeAddress())
@@ -782,20 +796,20 @@ func publicSignupHandler(ctx *Context, list *List) error {
 		EMail       string
 		ListAddress string
 	}{
-		ListAddress: list.Address,
+		ListAddress: list.RFC5322AddrSpec(),
 	}
 
 	if ctx.r.Method == http.MethodPost {
 
-		var err error
+		data.EMail = ctx.r.PostFormValue("email")
 
-		if data.EMail, err = mailutil.ExtractAddress(ctx.r.PostFormValue("email")); err != nil {
-			ctx.Alert(err)
+		if email, err := mailutil.ParseAddress(data.EMail); err != nil {
+			ctx.Alertf("Error parsing email address: %v", err)
 		} else {
-			if err := list.sendPublicOptIn(data.EMail); err != nil {
-				ctx.Alert(err)
+			if err := list.sendPublicOptIn(email.RFC5322AddrSpec()); err != nil {
+				ctx.Alertf("Error sending opt-in email: %v", err)
 			} else {
-				ctx.Success("An opt-in link was sent to your address.")
+				ctx.Successf("An opt-in link was sent to your address.")
 				ctx.Redirect("/public/" + list.EscapeAddress())
 				return nil
 			}
@@ -811,14 +825,17 @@ func publicOptInHandler(ctx *Context, list *List) error {
 		return ErrNoList
 	}
 
-	mail := ctx.ps.ByName("email")
+	addr, err := mailutil.ParseAddress(ctx.ps.ByName("email"))
+	if err != nil {
+		return ErrNoList
+	}
 
 	inputHMAC, err := base64.RawURLEncoding.DecodeString(ctx.ps.ByName("hmacbase64"))
 	if err != nil {
 		return err
 	}
 
-	expectedHMAC, err := list.HMAC(mail)
+	expectedHMAC, err := list.HMAC(addr.RFC5322AddrSpec())
 	if err != nil {
 		return err
 	}
@@ -827,15 +844,15 @@ func publicOptInHandler(ctx *Context, list *List) error {
 		return errors.New("Wrong HMAC")
 	}
 
-	_, err = list.GetMember(mail)
+	_, err = list.GetMember(addr.RFC5322AddrSpec())
 	switch err {
 	case nil: // member
-		ctx.Alert(errors.New("You are already a member of this list."))
+		ctx.Alertf("You are already a member of this list.")
 	case sql.ErrNoRows: // not a member
 		// When the HMAC was created, ExtractAddress() ensured that there is only one email address. So we can call AddMembers here safely.
-		if err = list.AddMembers(true, mail, true, false, false, false, ctx); err != nil {
+		if err = list.AddMember(addr, true, false, false, false); err != nil {
 			return err
-		}
+		} // TODO
 	default: // error
 		return err
 	}
@@ -844,8 +861,8 @@ func publicOptInHandler(ctx *Context, list *List) error {
 		ListAddress   string
 		MemberAddress string
 	}{
-		ListAddress:   list.Address,
-		MemberAddress: mail,
+		ListAddress:   list.RFC5322AddrSpec(),
+		MemberAddress: addr.RFC5322AddrSpec(),
 	}
 
 	return ctx.Execute(optInTemplate, data)

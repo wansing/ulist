@@ -1,5 +1,3 @@
-{{ define "body" -}}
-A message at {{ .List.Address }} {{ with .List.Name -}} ({{ . }}) {{ end -}} is waiting for moderation.
+A message at {{ .List.RFC5322NameAddr }} is waiting for moderation.
 
 You can moderate it here: {{ .ModHref }}
-{{ end }}

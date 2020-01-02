@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 )
 
@@ -17,23 +19,12 @@ import (
 // 552 Requested mail action aborted: exceeded storage allocation
 // 554 Transaction failed, maybe spam/blacklisted or
 
-var SMTPErrUserNotExist = &smtp.SMTPError{
-	Code:         550,
-	EnhancedCode: smtp.EnhancedCodeNotSet,
-	Message:      "User not found",
-}
+var SMTPErrUserNotExist = SMTPErrorf(550, "User not found")
 
-func SMTPErr(code int, message string) error {
+func SMTPErrorf(code int, format string, a ...interface{}) error {
 	return &smtp.SMTPError{
 		Code:         code,
 		EnhancedCode: smtp.EnhancedCodeNotSet,
-		Message:      message,
+		Message:      fmt.Sprintf(format, a...),
 	}
-}
-
-func SMTPWrapErr(code int, message string, err error) error {
-	if err == nil {
-		return nil
-	}
-	return SMTPErr(code, message+": "+err.Error())
 }

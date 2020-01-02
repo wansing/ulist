@@ -7,7 +7,7 @@
 			display: flex;
 		}
 	</style>
-	<h1 class="mb-3">Moderate {{ .List.Address }}</h1>
+	<h1 class="mb-3">Moderate {{ .List.RFC5322AddrSpec }}</h1>
 	{{ if .Messages }}
 		<form action="" method="post">
 			{{ range .Messages }}
@@ -30,12 +30,12 @@
 						<div class="form-check form-check-inline">
 							<input class="form-check-input"  id="delete-{{ .Filename }}" type="radio" name="action-{{ .Filename }}" value="delete">
 							<label class="form-check-label" for="delete-{{ .Filename }}">Delete</label>
-							{{ if and .GetSingleFrom $.List.ActionKnown.EqualsReject }}
+							{{ if and .GetSingleFromStr $.List.ActionKnown.EqualsReject }}
 								<div class="form-check form-check-inline ifchecked">
 									&ensp;
 									<input class="form-check-input"  id="addknown-delete-{{ .Filename }}" type="checkbox" name="addknown-delete-{{ .Filename }}" value="on">
 										<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
-									<label class="form-check-label" for="addknown-delete-{{ .Filename }}">add {{ .GetSingleFrom }} to known senders</label>
+									<label class="form-check-label" for="addknown-delete-{{ .Filename }}">add {{ .GetSingleFromStr }} to known senders</label>
 								</div>
 							{{ end }}
 						</div>
@@ -46,12 +46,12 @@
 						<div class="form-check form-check-inline">
 							<input class="form-check-input"  id="pass-{{ .Filename }}" type="radio" name="action-{{ .Filename }}" value="pass">
 							<label class="form-check-label" for="pass-{{ .Filename }}">Pass </label>
-							{{ if and .GetSingleFrom $.List.ActionKnown.EqualsPass }}
+							{{ if and .GetSingleFromStr $.List.ActionKnown.EqualsPass }}
 								<div class="form-check form-check-inline ifchecked">
 									&ensp;
 									<input class="form-check-input"  id="addknown-pass-{{ .Filename }}" type="checkbox" name="addknown-pass-{{ .Filename }}" value="on">
 										<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
-									<label class="form-check-label" for="addknown-pass-{{ .Filename }}">add {{ .GetSingleFrom }} to known senders</label>
+									<label class="form-check-label" for="addknown-pass-{{ .Filename }}">add {{ .GetSingleFromStr }} to known senders</label>
 								</div>
 							{{ end }}
 						</div>

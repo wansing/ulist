@@ -5,7 +5,6 @@ package main
 import (
 	"database/sql"
 	"flag"
-	"fmt"
 	"golang.org/x/sys/unix"
 	"io"
 	"log"
@@ -22,8 +21,6 @@ import (
 )
 
 const WarnFormat = "\033[1;31m%s\033[0m"
-
-var logAlerter = util.LogAlerter{}
 
 var GitCommit string // hash
 
@@ -69,13 +66,12 @@ func main() {
 
 	// post-process Superadmin
 
-	var err error
-
 	if Superadmin != "" {
-		Superadmin, err = mailutil.ExtractAddress(Superadmin)
+		superadminAddr, err := mailutil.ParseAddress(Superadmin)
 		if err != nil {
 			log.Fatalf("Error processing superadmin address: %v", err)
 		}
+		Superadmin = superadminAddr.RFC5322AddrSpec()
 	}
 
 	// validate SpoolDir
@@ -92,6 +88,7 @@ func main() {
 
 	// open database
 
+	var err error
 	Db, err = OpenDatabase(*dbDriver, *dbDSN)
 	if err != nil {
 		log.Fatalln(err)
@@ -157,18 +154,15 @@ func main() {
 
 type LMTPBackend struct{}
 
-func (_ LMTPBackend) Login(_ *smtp.ConnectionState, _, _ string) (smtp.Session, error) {
+func (LMTPBackend) Login(_ *smtp.ConnectionState, _, _ string) (smtp.Session, error) {
 	return nil, smtp.ErrAuthUnsupported
 }
 
-func (_ LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error) {
+func (LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error) {
 	s := &LMTPSession{}
 	s.Reset()
 	return s, nil
 }
-
-//var ErrAlreadySaved = errors.New("EMail is already stored as eml file")
-//var ErrNotSaved = errors.New("EMail has not been stored as eml file")
 
 // implements smtp.Session
 type LMTPSession struct {
@@ -189,14 +183,15 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
 
-	envelopeFrom = mailutil.CanonicalizeAddress(envelopeFrom)
+	envelopeFrom = strings.TrimSpace(envelopeFrom) // bounce detection does not require parsing
 
 	if envelopeFrom == "" {
 		s.isBounce = true
 	} else {
-		var err error
-		if envelopeFrom, err = mailutil.ExtractAddress(envelopeFrom); err != nil {
-			return SMTPWrapErr(510, `Error parsing Envelope-From address "`+envelopeFrom+`"`, err) // 510 Bad email address
+		if envelopeFromAddr, err := mailutil.ParseAddress(envelopeFrom); err == nil {
+			envelopeFrom = envelopeFromAddr.RFC5322AddrSpec()
+		} else {
+			return SMTPErrorf(510, `Error parsing Envelope-From address "%s": %v`, envelopeFrom, err) // 510 Bad email address
 		}
 	}
 
@@ -213,18 +208,16 @@ func (s *LMTPSession) Rcpt(to string) error {
 	return err
 }
 
-func (s *LMTPSession) rcpt(to string) error {
+func (s *LMTPSession) rcpt(toStr string) error {
 
-	to, err := mailutil.ExtractAddress(to)
+	to, err := mailutil.ParseAddress(toStr)
 	if err != nil {
-		return SMTPWrapErr(510, `Error parsing Envelope-To address "`+to+`"`, err) // 510 Bad email address
+		return SMTPErrorf(510, `Error parsing Envelope-To address "%s": %v`, to, err) // 510 Bad email address
 	}
 
-	if cleaned, isBounceAddress := IsBounceAddress(to); isBounceAddress {
-		if !s.isBounce {
-			return SMTPErr(541, `Bounce address "`+to+`" accepts only bounce notifications (with empty Envelope-From), got: "`+s.envelopeFrom+`"`) // 541 The recipient address rejected your message
-		}
-		to = cleaned
+	if strings.HasSuffix(to.Local, BounceAddressSuffix) && !s.isBounce {
+		return SMTPErrorf(541, `Bounce address "%s" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "%s"`, to, s.envelopeFrom)
+		// 541 The recipient address rejected your message
 	}
 
 	list, err := GetList(to)
@@ -232,7 +225,7 @@ func (s *LMTPSession) rcpt(to string) error {
 	case err == sql.ErrNoRows:
 		return SMTPErrUserNotExist
 	case err != nil:
-		return SMTPWrapErr(451, "Error getting list from database", err) // 451 Aborted – Local error in processing
+		return SMTPErrorf(451, "Error getting list from database: %v", err) // 451 Aborted – Local error in processing
 	}
 
 	s.Lists = append(s.Lists, list)
@@ -259,7 +252,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	originalMessage, err := mailutil.ReadMessage(r)
 	if err != nil {
-		return SMTPWrapErr(442, "Error reading message", err) // 442 The connection was dropped during the transmission
+		return SMTPErrorf(442, "Error reading message: %v", err) // 442 The connection was dropped during the transmission
 	}
 
 	for _, list := range s.Lists {
@@ -270,10 +263,10 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// listAddress must be in To or Cc in order to avoid spam
 
-		if toOrCcContains, err := mailutil.ToOrCcContains(message.Header, list.Address); err != nil {
-			return SMTPWrapErr(510, "Error parsing To/Cc addresses", err) // 510 Bad email address
+		if toOrCcContains, err := mailutil.ToOrCcContains(message.Header, &list.Addr); err != nil {
+			return SMTPErrorf(510, "Error parsing To/Cc addresses: %v", err) // 510 Bad email address
 		} else if !toOrCcContains {
-			return SMTPErr(541, "The list address is not in To or Cc") // 541 The recipient address rejected your message
+			return SMTPErrorf(541, "The list address is not in To or Cc") // 541 The recipient address rejected your message
 		}
 
 		// catch bounces
@@ -282,7 +275,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			admins, err := list.Admins()
 			if err != nil {
-				return SMTPWrapErr(451, "Error getting list admins from database", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "Error getting list admins from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			for _, admin := range admins {
@@ -297,9 +290,14 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// get froms
 
-		froms, err := mailutil.GetAddresses(message.Header, "From")
-		if err != nil {
-			return SMTPWrapErr(510, `Error parsing From header "`+message.Header.Get("From")+`"`, err) // 510 Bad email address
+		fromField := message.Header.Get("From")
+		if fromField == "" {
+			return SMTPErrorf(510, `"From" header missing`)
+		}
+
+		froms, errs := mailutil.ParseAddresses(fromField, 10, false) // up to 10 From addresses, be strict on errors
+		if len(errs) > 0 {
+			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, fromField, err) // 510 Bad email address
 		}
 
 		// catch special subjects
@@ -311,37 +309,37 @@ func (s *LMTPSession) data(r io.Reader) error {
 			// Subscribe and unsubscribe can only be done personally. So there must be one From address and no different Sender address.
 
 			if len(froms) != 1 {
-				return SMTPErr(513, fmt.Sprintf(`Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms)))
+				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
-			personalFrom := froms[0].Address
-
-			if senders, _ := mailutil.RobustAddressParser.ParseList(message.Header.Get("Sender")); len(senders) > 0 {
-				if sender := mailutil.CanonicalizeAddress(senders[0].Address); sender != personalFrom {
-					return SMTPErr(513, fmt.Sprintf("From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", personalFrom, sender))
+			if senders, errs := mailutil.ParseAddresses(message.Header.Get("Sender"), 2, false); len(errs) == 0 && len(senders) > 0 {
+				if froms[0].Equals(senders[0]) {
+					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
 				}
 			}
 
-			_, err := list.GetMember(personalFrom)
+			personalFrom := froms[0]
+
+			_, err := list.GetMember(personalFrom.RFC5322AddrSpec())
 			switch err {
 			case nil: // member
 				if command == "unsubscribe" {
-					if err = list.RemoveMembers(true, personalFrom, logAlerter); err == nil {
+					if err = list.RemoveMember(personalFrom); err == nil {
 						return nil
 					} else {
-						return SMTPWrapErr(451, "Error unsubscribing", err)
+						return SMTPErrorf(451, `Error unsubscribing: %v`, err)
 					}
 				}
 			case sql.ErrNoRows: // not a member
 				if command == "subscribe" && list.PublicSignup {
-					if err = list.AddMembers(true, personalFrom, true, false, false, false, logAlerter); err == nil {
+					if err = list.AddMember(personalFrom, true, false, false, false); err == nil {
 						return nil
 					} else {
-						return SMTPWrapErr(451, "Error subscribing", err)
+						return SMTPErrorf(451, `Error subscribing: %v`, err)
 					}
 				}
 			default: // error
-				return SMTPWrapErr(451, "Error getting membership from database", err)
+				return SMTPErrorf(451, `Error getting membership from database: %v`, err)
 			}
 
 			// Go on or always return? Both might leak whether you're a member of the list.
@@ -354,10 +352,10 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		action, reason, err := list.GetAction(froms)
 		if err != nil {
-			return SMTPWrapErr(451, "Error getting user status from database", err)
+			return SMTPErrorf(451, "Error getting user status from database: %v", err)
 		}
 
-		log.Printf("Incoming mail: Envelope-From: %s, From: %v, List: %s, Action: %s, Reason: %s", s.envelopeFrom, froms, list.Address, action, reason)
+		log.Printf("Incoming mail: Envelope-From: %s, From: %v, List: %s, Action: %s, Reason: %s", s.envelopeFrom, froms, list, action, reason)
 
 		if action == Reject {
 			return SMTPErrUserNotExist
@@ -373,29 +371,29 @@ func (s *LMTPSession) data(r io.Reader) error {
 		// rewrite "From" because the original value would not pass the DKIM check
 
 		if list.HideFrom {
-			message.Header["From"] = []string{list.RFC5322Address()}
+			message.Header["From"] = []string{list.RFC5322NameAddr()}
 			message.Header["Reply-To"] = []string{} // defaults to From
 		} else {
 
 			// From
 
-			nameSuffix := " via " + list.NameOrUser()
-
-			message.Header["From"] = make([]string, len(froms))
-			for i, from := range froms {
-				message.Header["From"][i] = (&ListInfo{
-					Name:    mailutil.NameOrUser(from) + nameSuffix,
-					Address: list.Address,
-				}).RFC5322Address()
+			from := []string{}
+			for _, f := range froms {
+				a := &mailutil.Addr{}
+				a.Display = f.DisplayOrLocal() + " via " + list.DisplayOrLocal()
+				a.Local = list.Local
+				a.Domain = list.Domain
+				from = append(from, a.RFC5322NameAddr())
 			}
+			message.Header["From"] = []string{strings.Join(from, ",")}
 
 			// Reply-To. Without rewriting "From", "Reply-To" would default to the from addresses, so let's mimic that.
 			//
 			// If you use rspamd to filter outgoing mail, you should disable the Symbol "SPOOF_REPLYTO" in the "Symbols" menu, see https://github.com/rspamd/rspamd/issues/1891
 
 			replyTo := []string{}
-			for _, from := range froms {
-				replyTo = append(replyTo, from.String())
+			for _, f := range froms {
+				replyTo = append(replyTo, f.RFC5322NameAddr())
 			}
 			message.Header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
 		}
@@ -403,30 +401,30 @@ func (s *LMTPSession) data(r io.Reader) error {
 		// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."
 		message.Header["Sender"] = []string{}
 
-		message.Header["List-Id"] = []string{list.RFC5322Address()}
-		message.Header["List-Post"] = []string{list.RFC6068Address("")}                           // required for "Reply to list" button in Thunderbird
-		message.Header["List-Unsubscribe"] = []string{list.RFC6068Address("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
+		message.Header["List-Id"] = []string{list.RFC5322NameAddr()}
+		message.Header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
+		message.Header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
 
 		// do action
 
 		if action == Pass {
 
 			if err = list.Send(message); err != nil {
-				return SMTPWrapErr(451, "Error forwarding email", err)
+				return SMTPErrorf(451, "Error forwarding email: %v", err)
 			}
 
-			log.Println("Sent email over", list.Address)
+			log.Printf("Sent email over list: %s", list)
 
 		} else if action == Mod {
 
 			err = list.Save(message)
 			if err != nil {
-				return SMTPWrapErr(471, "Error saving email to file", err) // 554 Transaction has failed
+				return SMTPErrorf(471, "Error saving email to file: %v", err) // 554 Transaction has failed
 			}
 
 			notifiedMembers, err := list.Notifieds()
 			if err != nil {
-				return SMTPWrapErr(451, "Error getting list notifieds from database", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "Error getting list notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			for _, notifiedMember := range notifiedMembers {
@@ -435,13 +433,13 @@ func (s *LMTPSession) data(r io.Reader) error {
 				}
 			}
 
-			log.Println("Stored email for", list.RFC5322Address())
+			log.Printf("Stored email for list: %s", list)
 		}
 	}
 
 	return nil
 }
 
-func (_ *LMTPSession) Logout() error {
+func (*LMTPSession) Logout() error {
 	return nil
 }

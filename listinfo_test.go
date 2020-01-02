@@ -1,6 +1,9 @@
 package main
 
-import "testing"
+import (
+	"github.com/wansing/ulist/mailutil"
+	"testing"
+)
 
 func TestBounceAddress(t *testing.T) {
 
@@ -8,8 +11,12 @@ func TestBounceAddress(t *testing.T) {
 		input    ListInfo
 		expected string
 	}{
-		{ListInfo{Address: `foo@example.com`}, `foo+bounces@example.com`},
-		{ListInfo{Address: `"foo@bar"@example.com`}, `"foo@bar"+bounces@example.com`},
+		{ListInfo{mailutil.Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
+		{ListInfo{mailutil.Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
+		{ListInfo{mailutil.Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
+		{ListInfo{mailutil.Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{mailutil.Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{mailutil.Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
 	}
 
 	for _, test := range tests {
@@ -19,31 +26,10 @@ func TestBounceAddress(t *testing.T) {
 	}
 }
 
-func TestIsBounceAddress(t *testing.T) {
-
-	tests := []struct {
-		input   string
-		cleaned string
-		is      bool
-	}{
-		{``, ``, false},
-		{`foo`, `foo`, false},
-		{`foo+bounces`, `foo+bounces`, false},
-		{`foo@example.com`, `foo@example.com`, false},
-		{`foo+bounces@example.com`, `foo@example.com`, true},
-	}
-
-	for _, test := range tests {
-		if cleaned, is := IsBounceAddress(test.input); cleaned != test.cleaned || is != test.is {
-			t.Errorf("got %s %t, want %s %t", cleaned, is, test.cleaned, test.is)
-		}
-	}
-}
-
 func TestPrefixSubject(t *testing.T) {
 
 	list := &List{}
-	list.Name = "List"
+	list.Display = "List"
 
 	tests := []struct {
 		input    string

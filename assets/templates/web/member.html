@@ -1,5 +1,5 @@
 {{ define "content" }}
-	<h1>Members of {{ .List.Address }}</h1>
+	<h1>Members of {{ .List.RFC5322AddrSpec }}</h1>
 	<a href="/members/{{ .List.EscapeAddress }}#{{ .Member.MemberAddress }}">Back to member list</a> <!-- looks like go escapes MemberAddress automatically if it's the anchor -->
 	{{ with .Member }}
 		<h2>Member {{ .MemberAddress }}</h2>

@@ -11,6 +11,7 @@ const (
 	Moderator // max
 )
 
+// TODO argument address mailutil.Addr?
 func (l *List) GetStatus(address string) (Status, error) {
 
 	m, err := l.GetMember(address)

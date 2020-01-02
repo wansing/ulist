@@ -65,9 +65,7 @@ func (m *Message) Copy() *Message {
 	}
 
 	for k, vals := range m.Header {
-		for _, val := range vals {
-			c.Header[k] = append(c.Header[k], val)
-		}
+		c.Header[k] = append(c.Header[k], vals...)
 	}
 
 	copy(c.Body, m.Body)

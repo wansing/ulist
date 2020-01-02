@@ -16,8 +16,8 @@
 			<tbody>
 				{{ range . }}
 					<tr>
-						<td>{{ .Address }}</td>
-						<td>{{ .Name }}</td>
+						<td>{{ .RFC5322AddrSpec }}</td>
+						<td>{{ .Display }}</td>
 						<!-- Administration -->
 						<td>
 							<a href="/settings/{{ .EscapeAddress }}">Settings</a>

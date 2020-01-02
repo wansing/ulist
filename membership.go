@@ -3,7 +3,7 @@ package main
 import "net/url"
 
 type Membership struct {
-	ListInfo
+	ListInfo      // not List because we had to fetch all of them from the database in Memberships()
 	MemberAddress string
 	Receive       bool
 	Moderate      bool

@@ -15,8 +15,8 @@
 			<tbody>
 				{{ range . }}
 					<tr>
-						<td>{{ .ListInfo.Address }}</td>
-						<td>{{ .ListInfo.Name }}</td>
+						<td>{{ .RFC5322AddrSpec }}</td>
+						<td>{{ .Display }}</td>
 						<!-- Administration -->
 						<td>
 							{{ if .Admin }}

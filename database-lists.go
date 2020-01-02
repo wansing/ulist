@@ -9,7 +9,7 @@ import (
 
 func listsWhere(condition string) ([]ListInfo, error) {
 
-	rows, err := Db.Query("SELECT address, name FROM list WHERE " + condition + " ORDER BY address")
+	rows, err := Db.Query("SELECT display, local, domain FROM list WHERE " + condition + " ORDER BY domain, local")
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -18,7 +18,7 @@ func listsWhere(condition string) ([]ListInfo, error) {
 	lists := []ListInfo{}
 	for rows.Next() {
 		var l ListInfo
-		rows.Scan(&l.Address, &l.Name)
+		rows.Scan(&l.Display, &l.Local, &l.Domain)
 		lists = append(lists, l)
 	}
 
@@ -33,26 +33,37 @@ func PublicLists() ([]ListInfo, error) {
 	return listsWhere("public_signup = 1")
 }
 
-func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter) error {
+func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter) (*List, error) {
 
-	listAddress, err := mailutil.ExtractAddress(listAddress)
+	listAddr, err := mailutil.ParseAddress(listAddress)
 	if err != nil {
-		return err
+		return nil, err
+	}
+
+	if listName != "" {
+		listAddr.Display = listName // override parsed
+	}
+
+	adminMods, errs := mailutil.ParseAddresses(rawAdminMods, BatchLimit, true)
+	for _, err := range errs {
+		alerter.Alertf("error parsing email address: %v", err)
 	}
 
 	hmacKey, err := util.RandomString32()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	if _, err := Db.createListStmt.Exec(listAddress, listName, hmacKey, Pass, Pass, Pass, Mod); err != nil {
-		return err
+	if _, err := Db.createListStmt.Exec(listAddr.Display, listAddr.Local, listAddr.Domain, hmacKey, Pass, Pass, Pass, Mod); err != nil {
+		return nil, err
 	}
 
-	list, err := GetList(listAddress)
+	list, err := GetList(listAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return list.AddMembers(false, rawAdminMods, true, true, true, true, alerter) // sendWelcome = false
+	list.AddMembers(false, adminMods, true, true, true, true, alerter) // sendWelcome = false
+
+	return list, nil
 }

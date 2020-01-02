@@ -32,30 +32,30 @@ func TestDecode(t *testing.T) {
 	}
 }
 
-func TestExtractAddress(t *testing.T) {
+func TestParseAddress(t *testing.T) {
 
 	tests := []struct {
 		input    string
-		expected string
+		expected Addr
 	}{
-		{`alice@example.com`, `alice@example.com`},
-		{`ALICE@EXAMPLE.COM`, `alice@example.com`},
-		{`Alice <alice@example.com>`, `alice@example.com`},
-		{`ALICE <ALICE@EXAMPLE.COM>`, `alice@example.com`},
-		{`"Alice" <alice@example.com>`, `alice@example.com`},
-		{`"ALICE" <ALICE@EXAMPLE.COM>`, `alice@example.com`},
+		{`alice@example.com`, Addr{"", "alice", "example.com"}},
+		{`ALICE@EXAMPLE.COM`, Addr{"", "alice", "example.com"}},
+		{`Alice <alice@example.com>`, Addr{"Alice", "alice", "example.com"}},
+		{`ALICE <ALICE@EXAMPLE.COM>`, Addr{"ALICE", "alice", "example.com"}},
+		{`"Alice" <alice@example.com>`, Addr{"Alice", "alice", "example.com"}},
+		{`"ALICE" <ALICE@EXAMPLE.COM>`, Addr{"ALICE", "alice", "example.com"}},
+		{`"Alice at home" <"Alice@Home"@EXAMPLE.COM>`, Addr{"Alice at home", "alice@home", "example.com"}},
 	}
 
 	for _, test := range tests {
-		if output, err := ExtractAddress(test.input); output != test.expected || err != nil {
-			t.Errorf("got %s %v, want %s", output, err, test.expected)
+		if result, err := ParseAddress(test.input); err != nil || *result != test.expected {
+			t.Errorf("got %v %v, want %s", result, err, test.expected)
 		}
 	}
 }
 
 func TestExtractAddressEmpty(t *testing.T) {
-
-	if _, err := ExtractAddress(""); err.Error() != ErrInvalidAddress.Error() {
+	if _, err := ParseAddress(""); err.Error() != ErrInvalidAddress.Error() {
 		t.Errorf("got %v, want %v", err, ErrInvalidAddress)
 	}
 }

@@ -1,5 +1,3 @@
-{{ define "body" -}}
 Welcome to the mailing list {{ . }}.
 
 If you want to unsubscribe, please send an email with the subject "unsubscribe" to {{ . }}.
-{{ end }}

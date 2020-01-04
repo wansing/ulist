@@ -149,6 +149,59 @@ func (list *List) Save(m *mailutil.Message) error {
 
 func (list *List) Send(m *mailutil.Message) error {
 
+	// rewrite message
+	// Header keys use this notation: https://golang.org/pkg/net/textproto/#CanonicalMIMEHeaderKey
+
+	m.Header["List-Id"] = []string{list.RFC5322NameAddr()}
+	m.Header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
+	m.Header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
+	m.Header["Subject"] = []string{list.PrefixSubject(m.Header.Get("Subject"))}
+
+	// DKIM signatures usually sign "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field and we should drop it. See RFC 6376 B.2.3.
+
+	m.Header["Dkim-Signature"] = []string{}
+
+	// rewrite "From" because the original value would not pass the DKIM check
+
+	if list.HideFrom {
+		m.Header["From"] = []string{list.RFC5322NameAddr()}
+		m.Header["Reply-To"] = []string{} // defaults to From
+	} else {
+
+		oldFroms, err := mailutil.ParseHeaderAddresses(m.Header, "From", 10)
+		if err != nil {
+			return err
+		}
+
+		// From
+
+		froms := []string{}
+		for _, oldFrom := range oldFroms {
+			a := &mailutil.Addr{}
+			a.Display = oldFrom.DisplayOrLocal() + " via " + list.DisplayOrLocal()
+			a.Local = list.Local
+			a.Domain = list.Domain
+			froms = append(froms, a.RFC5322NameAddr())
+		}
+		m.Header["From"] = []string{strings.Join(froms, ",")}
+
+		// Reply-To
+		// Without rewriting "From", "Reply-To" would default to the from addresses, so let's mimic that.
+		// If you use rspamd to filter outgoing mail, you should disable the Symbol "SPOOF_REPLYTO" in the "Symbols" menu, see https://github.com/rspamd/rspamd/issues/1891
+
+		replyTo := []string{}
+		for _, oldFrom := range oldFroms {
+			replyTo = append(replyTo, oldFrom.RFC5322NameAddr())
+		}
+		m.Header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
+	}
+
+	// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."
+
+	m.Header["Sender"] = []string{}
+
+	// send
+
 	receiverMembers, err := list.Receivers()
 	if err != nil {
 		return err
@@ -281,7 +334,7 @@ func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from *mailutil.A
 		return
 	}
 
-	if froms, err := mailutil.ParseAddresses(m.Header.Get("Reply-To"), 2); len(froms) == 1 && err == nil {
+	if froms, err := mailutil.ParseHeaderAddresses(m.Header, "Reply-To", 2); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

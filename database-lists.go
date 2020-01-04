@@ -44,7 +44,7 @@ func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter
 		listAddr.Display = listName // override parsed
 	}
 
-	adminMods, errs := mailutil.ParseAddressesLax(rawAdminMods, BatchLimit)
+	adminMods, errs := mailutil.ParseAddresses(rawAdminMods, BatchLimit)
 	for _, err := range errs {
 		alerter.Alertf("error parsing email address: %v", err)
 	}

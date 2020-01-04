@@ -497,7 +497,7 @@ func membersHandler(ctx *Context, list *List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddressesLax(ctx.r.PostFormValue("emails"), BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email address: %v", err)
 		}
@@ -559,7 +559,7 @@ func knownsHandler(ctx *Context, list *List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddressesLax(ctx.r.PostFormValue("emails"), BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email address: %v", err)
 		}

@@ -290,14 +290,9 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// get froms
 
-		fromField := message.Header.Get("From")
-		if fromField == "" {
-			return SMTPErrorf(510, `"From" header missing`)
-		}
-
-		froms, errs := mailutil.ParseAddresses(fromField, 10) // up to 10 From addresses
-		if len(errs) > 0 {
-			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, fromField, err) // 510 Bad email address
+		froms, err := mailutil.ParseHeaderAddresses(message.Header, "From", 10)
+		if err != nil {
+			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
 		}
 
 		// catch special subjects
@@ -312,7 +307,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
-			if senders, errs := mailutil.ParseAddresses(message.Header.Get("Sender"), 2); len(errs) == 0 && len(senders) > 0 {
+			if senders, err := mailutil.ParseHeaderAddresses(message.Header, "Sender", 2); len(senders) > 0 && err == nil {
 				if froms[0].Equals(senders[0]) {
 					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
 				}
@@ -360,50 +355,6 @@ func (s *LMTPSession) data(r io.Reader) error {
 		if action == Reject {
 			return SMTPErrUserNotExist
 		}
-
-		// Rewrite message for resending. DKIM signatures usually sign "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field. See RFC 6376 B.2.3.
-		// Header keys use this notation: https://golang.org/pkg/net/textproto/#CanonicalMIMEHeaderKey
-
-		message.Header["Subject"] = []string{list.PrefixSubject(message.Header.Get("Subject"))}
-
-		message.Header["Dkim-Signature"] = []string{} // drop old DKIM signature
-
-		// rewrite "From" because the original value would not pass the DKIM check
-
-		if list.HideFrom {
-			message.Header["From"] = []string{list.RFC5322NameAddr()}
-			message.Header["Reply-To"] = []string{} // defaults to From
-		} else {
-
-			// From
-
-			from := []string{}
-			for _, f := range froms {
-				a := &mailutil.Addr{}
-				a.Display = f.DisplayOrLocal() + " via " + list.DisplayOrLocal()
-				a.Local = list.Local
-				a.Domain = list.Domain
-				from = append(from, a.RFC5322NameAddr())
-			}
-			message.Header["From"] = []string{strings.Join(from, ",")}
-
-			// Reply-To. Without rewriting "From", "Reply-To" would default to the from addresses, so let's mimic that.
-			//
-			// If you use rspamd to filter outgoing mail, you should disable the Symbol "SPOOF_REPLYTO" in the "Symbols" menu, see https://github.com/rspamd/rspamd/issues/1891
-
-			replyTo := []string{}
-			for _, f := range froms {
-				replyTo = append(replyTo, f.RFC5322NameAddr())
-			}
-			message.Header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
-		}
-
-		// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."
-		message.Header["Sender"] = []string{}
-
-		message.Header["List-Id"] = []string{list.RFC5322NameAddr()}
-		message.Header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
-		message.Header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
 
 		// do action
 

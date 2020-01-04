@@ -96,21 +96,10 @@ func ParseAddress(rfc5322Address string) (*Addr, error) {
 	return NewAddr(parsed)
 }
 
-// for email headers
-func ParseAddresses(rawAddresses string, limit int) ([]*Addr, []error) {
-	return parseAddresses(rawAddresses, limit, false)
-}
+// expects one RFC 5322 address-list per line, lax parsing, for user input
+func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error) {
 
-// for user input
-func ParseAddressesLax(rawAddresses string, limit int) ([]*Addr, []error) {
-	return parseAddresses(rawAddresses, limit, true)
-}
-
-// expects one RFC 5322 address-list per line
-func parseAddresses(rawAddresses string, limit int, lax bool) ([]*Addr, []error) {
-
-	result := []*Addr{}
-	errs := []error{}
+	//return parseAddresses(rawAddresses, limit, true)
 
 	for _, line := range strings.Split(rawAddresses, "\r\n") {
 
@@ -121,37 +110,25 @@ func parseAddresses(rawAddresses string, limit int, lax bool) ([]*Addr, []error)
 		parsedAddresses, err := RobustAddressParser.ParseList(line)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(`error parsing line "%s": %s`, line, err))
-			if lax {
-				continue
-			} else {
-				return nil, errs
-			}
+			continue
 		}
 
 		for _, p := range parsedAddresses {
 			address, err := NewAddr(p)
 			if err != nil {
 				errs = append(errs, fmt.Errorf(`error parsing address "%s": %s`, p, err))
-				if lax {
-					continue
-				} else {
-					return nil, errs
-				}
+				continue
 			}
-			result = append(result, address)
+			addrs = append(addrs, address)
 		}
 
-		if len(result) > limit {
+		if len(addrs) > limit {
 			errs = append(errs, fmt.Errorf("please enter not more than %d addresses", limit))
-			if lax {
-				return result, errs
-			} else {
-				return nil, errs
-			}
+			return
 		}
 	}
 
-	return result, errs
+	return
 }
 
 // Returns a.Display if it exists, else a.Local.

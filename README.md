@@ -144,7 +144,6 @@ RequestHeader set X-Forwarded-Proto https env=HTTPS
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)
-* Bug: rewriting ("From" munging etc) is done before moderation
 
 ## Omitted features
 

@@ -19,7 +19,7 @@ import (
 // 552 Requested mail action aborted: exceeded storage allocation
 // 554 Transaction failed, maybe spam/blacklisted or
 
-var SMTPErrUserNotExist = SMTPErrorf(550, "User not found")
+var SMTPErrUserNotExist = SMTPErrorf(550, "user not found")
 
 func SMTPErrorf(code int, format string, a ...interface{}) error {
 	return &smtp.SMTPError{

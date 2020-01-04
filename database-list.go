@@ -68,10 +68,9 @@ func (l *List) Knowns() ([]string, error) {
 	return knowns, nil
 }
 
-// always sends welcome
+// always sends welcome email
 func (l *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admin bool) error {
 
-	// TODO check if .Execute(...) selectes the right template!
 	body := &bytes.Buffer{}
 	if err := welcomeTemplate.Execute(body, l.RFC5322AddrSpec()); err != nil {
 		return err

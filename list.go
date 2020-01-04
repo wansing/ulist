@@ -43,7 +43,7 @@ var signUpTemplate = texttmpl("signup")
 var notifyTemplate = texttmpl("notify")
 var welcomeTemplate = texttmpl("welcome")
 
-func (l *List) HMAC(address string) ([]byte, error) {
+func (l *List) HMAC(addr *mailutil.Addr) ([]byte, error) {
 
 	if len(l.HMACKey) == 0 {
 		return nil, errors.New("[ListStub] HMACKey is empty")
@@ -56,61 +56,53 @@ func (l *List) HMAC(address string) ([]byte, error) {
 	mac := hmac.New(sha512.New, l.HMACKey)
 	mac.Write([]byte(l.RFC5322AddrSpec()))
 	mac.Write([]byte{0}) // separator
-	mac.Write([]byte(address))
+	mac.Write([]byte(addr.RFC5322AddrSpec()))
 
 	return mac.Sum(nil), nil
 }
 
 // returns max action depending on From addresses
-func (l *List) GetAction(froms []*mailutil.Addr) (action Action, reason string, err error) {
+func (l *List) GetAction(froms []*mailutil.Addr) (Action, string, error) {
 
-	action = Reject
+	action := l.ActionUnknown
+	reason := `all "From" addresses are unknown`
 
 	if len(froms) == 0 {
-		err = errors.New("GetAction: no From addresses given")
-		return
+		return Reject, "", errors.New("GetAction: no From addresses given")
 	}
-
-	// max status
 
 	if len(froms) > 8 {
-		froms = froms[:8] // DoS prevention
+		froms = froms[:8] // DoS mitigation
 	}
-
-	maxStatus := Unknown
 
 	for _, from := range froms {
-		var status Status
-		status, err = l.GetStatus(from.RFC5322AddrSpec())
+
+		statuses, err := l.GetStatus(from.RFC5322AddrSpec())
 		if err != nil {
-			return
+			return Reject, "", err
 		}
-		if maxStatus < status {
-			reason = from.RFC5322AddrSpec()
-			maxStatus = status
+
+		for _, status := range statuses {
+
+			var fromAction Action = Reject
+
+			switch status {
+			case Known:
+				fromAction = l.ActionKnown
+			case Member:
+				fromAction = l.ActionMember
+			case Moderator:
+				fromAction = l.ActionMod
+			}
+
+			if action < fromAction {
+				action = fromAction
+				reason = fmt.Sprintf("%s is %s", from, status)
+			}
 		}
 	}
 
-	// action
-
-	// TODO this assumes that l.Action... is monotonic!
-
-	switch maxStatus {
-	case Moderator:
-		reason += " is a moderator"
-		action = l.ActionMod
-	case Member:
-		reason += " is a member"
-		action = l.ActionMember
-	case Known:
-		reason += " is known"
-		action = l.ActionKnown
-	case Unknown:
-		reason += "all from addresses are unknown"
-		action = l.ActionUnknown
-	}
-
-	return
+	return action, reason, nil
 }
 
 func (list *List) StorageFolder() string {
@@ -203,19 +195,19 @@ func (l *List) sendUsersMailTemplate(recipients []*mailutil.Addr, subject string
 }
 
 // for lists with public signup
-func (list *List) sendPublicOptIn(recipient string) error {
+func (list *List) sendPublicOptIn(recipient *mailutil.Addr) error {
 
 	if !list.PublicSignup {
 		return errors.New("sendPublicOptIn is designed for public signup lists only")
 	}
 
-	if m, _ := list.GetMember(recipient); m.Receive {
+	if m, _ := list.GetMember(recipient.RFC5322AddrSpec()); m.Receive {
 		return nil // Already receiving. This might leak timing information on whether the person is a member of the list. However this applies only to public-signup lists.
 	}
 
-	// prevent spamming via POST request
+	// prevent spamming
 
-	if lastSentTimestamp, ok := sentOptInMails[recipient]; ok {
+	if lastSentTimestamp, ok := sentOptInMails[recipient.RFC5322AddrSpec()]; ok {
 		if lastSentTimestamp < time.Now().AddDate(0, 0, 14).Unix() {
 			return errors.New(`An opt-in request has already been sent to this email address. In order to prevent spamming, opt-in requests can be sent every 14 days only. Alternatively you can send a message with the subject "subscribe" to the list address.`)
 		}
@@ -234,8 +226,8 @@ func (list *List) sendPublicOptIn(recipient string) error {
 		Url         string
 	}{
 		ListAddress: list.RFC5322AddrSpec(),
-		MailAddress: recipient,
-		Url:         WebUrl + "/public/" + list.EscapeAddress() + "/" + recipient + "/" + base64.RawURLEncoding.EncodeToString(hmac),
+		MailAddress: recipient.RFC5322AddrSpec(),
+		Url:         WebUrl + "/public/" + list.EscapeAddress() + "/" + recipient.EscapeAddress() + "/" + base64.RawURLEncoding.EncodeToString(hmac),
 	}
 
 	body := &bytes.Buffer{}
@@ -244,11 +236,11 @@ func (list *List) sendPublicOptIn(recipient string) error {
 		return err
 	}
 
-	if err = list.sendUserMail(recipient, "Please confirm to join the mailing list "+list.RFC5322AddrSpec(), body); err != nil {
+	if err = list.sendUserMail(recipient.RFC5322AddrSpec(), "Please confirm to join the mailing list "+list.RFC5322AddrSpec(), body); err != nil {
 		return err
 	}
 
-	sentOptInMails[recipient] = time.Now().Unix()
+	sentOptInMails[recipient.RFC5322AddrSpec()] = time.Now().Unix()
 
 	return nil
 }

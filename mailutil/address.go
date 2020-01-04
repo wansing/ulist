@@ -59,6 +59,11 @@ func (a *Addr) RFC6068URI(query string) string {
 	return "<" + u.String() + ">" // "URIs are enclosed in '<' and '>'"
 }
 
+// for URLs
+func (a *Addr) EscapeAddress() string {
+	return url.QueryEscape(a.RFC5322AddrSpec())
+}
+
 func (a *Addr) String() string {
 	return a.RFC5322AddrSpec()
 }

@@ -5,37 +5,49 @@ import "database/sql"
 type Status int
 
 const (
-	Unknown Status = iota // default
-	Known
+	Known Status = iota
 	Member
-	Moderator // max
+	Moderator
 )
 
-// TODO argument address mailutil.Addr?
-func (l *List) GetStatus(address string) (Status, error) {
+func (s Status) String() string {
+	switch s {
+	case Known:
+		return "known"
+	case Member:
+		return "member"
+	case Moderator:
+		return "moderator"
+	default:
+		return "<unknown>"
+	}
+}
+
+func (l *List) GetStatus(address string) ([]Status, error) {
+
+	var s = []Status{}
 
 	m, err := l.GetMember(address)
 	switch err {
 	case nil:
 		if m.Moderate {
-			return Moderator, nil
+			s = append(s, Moderator)
 		} else {
-			return Member, nil
+			s = append(s, Member)
 		}
 	case sql.ErrNoRows:
-		// no member, go on
+		// not a member, go on
 	default:
-		return Unknown, err
+		return nil, err
 	}
 
 	isKnown, err := l.IsKnown(address)
 	if err != nil {
-		return Unknown, err
+		return nil, err
+	}
+	if isKnown {
+		s = append(s, Known)
 	}
 
-	if isKnown {
-		return Known, nil
-	} else {
-		return Unknown, nil
-	}
+	return s, nil
 }

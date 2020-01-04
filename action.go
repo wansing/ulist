@@ -1,21 +1,55 @@
 package main
 
-type Action string
-
-const (
-	Mod    Action = "mod"
-	Pass   Action = "pass"
-	Reject Action = "reject" // mails should be rejected if an error occurred
+import (
+	"database/sql/driver"
+	"errors"
 )
 
-func ParseAction(s string) Action {
+type Action int
+
+var ErrUnknownActionString = errors.New("unknown action string")
+
+const (
+	// ordered, order is required for list.GetAction
+	Reject Action = iota
+	Mod
+	Pass
+)
+
+// implement sql.Scanner
+func (a *Action) Scan(value interface{}) (err error) {
+	*a, err = ParseAction(value.(string))
+	return
+}
+
+// implement sql/driver.Valuer
+func (a Action) Value() (driver.Value, error) {
+	return a.String(), nil
+}
+
+func ParseAction(s string) (Action, error) {
 	switch s {
-	case string(Pass):
-		return Pass
-	case string(Reject):
-		return Reject
+	case Reject.String():
+		return Reject, nil
+	case Mod.String():
+		return Mod, nil
+	case Pass.String():
+		return Pass, nil
 	default:
-		return Mod
+		return Mod, ErrUnknownActionString
+	}
+}
+
+func (a Action) String() string {
+	switch a {
+	case Reject:
+		return "reject"
+	case Mod:
+		return "mod"
+	case Pass:
+		return "pass"
+	default:
+		return "<unknown>"
 	}
 }
 

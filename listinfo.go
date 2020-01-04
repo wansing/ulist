@@ -1,7 +1,6 @@
 package main
 
 import (
-	"net/url"
 	"strings"
 
 	"github.com/wansing/ulist/mailutil"
@@ -17,11 +16,6 @@ func (li *ListInfo) BounceAddress() string {
 	copy := li.Addr
 	copy.Local += BounceAddressSuffix
 	return copy.RFC5322AddrSpec()
-}
-
-// for URLs
-func (li *ListInfo) EscapeAddress() string {
-	return url.QueryEscape(li.RFC5322AddrSpec())
 }
 
 func (li *ListInfo) PrefixSubject(subject string) string {

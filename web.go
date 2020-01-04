@@ -43,10 +43,6 @@ func init() {
 	sessionManager.Lifetime = 12 * time.Hour
 }
 
-func canonicalizeAddress(a string) string {
-	return strings.ToLower(strings.TrimSpace(a))
-}
-
 func tmpl(filename string) *template.Template {
 	return template.Must(vfstemplate.ParseFiles(assets, template.New("web").Funcs(template.FuncMap{"TryMimeDecode": mailutil.TryMimeDecode}), "templates/web/web.html", "templates/web/"+filename+".html"))
 }
@@ -128,7 +124,7 @@ func (ctx *Context) ServeFile(name string) {
 
 func (ctx *Context) Login(email, password string) bool {
 
-	email = canonicalizeAddress(email)
+	email = strings.ToLower(strings.TrimSpace(email))
 
 	success, err := authenticators.Authenticate(email, password)
 	if err != nil {
@@ -171,12 +167,6 @@ func (ctx *Context) Logout() {
 // if f returns err, it must not execute a template or redirect
 func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.ResponseWriter, *http.Request, httprouter.Params) {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
-
-		for i := range ps {
-			if ps[i].Key == "email" { // TODO remove this?
-				ps[i].Value = canonicalizeAddress(ps[i].Value)
-			}
-		}
 
 		ctx := &Context{
 			w:    w,
@@ -307,6 +297,7 @@ func webui() {
 // helper functions
 
 func loadList(f func(*Context, *List) error) func(*Context) error {
+
 	return func(ctx *Context) error {
 
 		listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
@@ -396,14 +387,34 @@ func settingsHandler(ctx *Context, list *List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
+		actionMod, err := ParseAction(ctx.r.PostFormValue("action_mod"))
+		if err != nil {
+			return err
+		}
+
+		actionMember, err := ParseAction(ctx.r.PostFormValue("action_member"))
+		if err != nil {
+			return err
+		}
+
+		actionKnown, err := ParseAction(ctx.r.PostFormValue("action_known"))
+		if err != nil {
+			return err
+		}
+
+		actionUnknown, err := ParseAction(ctx.r.PostFormValue("action_unknown"))
+		if err != nil {
+			return err
+		}
+
 		if err := list.Update(
 			ctx.r.PostFormValue("name"),
 			ctx.r.PostFormValue("public_signup") != "",
 			ctx.r.PostFormValue("hide_from") != "",
-			ParseAction(ctx.r.PostFormValue("action_mod")),
-			ParseAction(ctx.r.PostFormValue("action_member")),
-			ParseAction(ctx.r.PostFormValue("action_known")),
-			ParseAction(ctx.r.PostFormValue("action_unknown")),
+			actionMod,
+			actionMember,
+			actionKnown,
+			actionUnknown,
 		); err != nil {
 			ctx.Alertf("Error saving settings: %v", err)
 		} else {
@@ -508,9 +519,7 @@ func membersHandler(ctx *Context, list *List) error {
 
 func memberHandler(ctx *Context, list *List) error {
 
-	memberAddress := ctx.ps.ByName("email")
-
-	m, err := list.GetMember(memberAddress)
+	m, err := list.GetMember(ctx.ps.ByName("email"))
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return errors.New("This person is not a member of the list")
@@ -806,7 +815,7 @@ func publicSignupHandler(ctx *Context, list *List) error {
 		if email, err := mailutil.ParseAddress(data.EMail); err != nil {
 			ctx.Alertf("Error parsing email address: %v", err)
 		} else {
-			if err := list.sendPublicOptIn(email.RFC5322AddrSpec()); err != nil {
+			if err := list.sendPublicOptIn(email); err != nil {
 				ctx.Alertf("Error sending opt-in email: %v", err)
 			} else {
 				ctx.Successf("An opt-in link was sent to your address.")
@@ -835,7 +844,7 @@ func publicOptInHandler(ctx *Context, list *List) error {
 		return err
 	}
 
-	expectedHMAC, err := list.HMAC(addr.RFC5322AddrSpec())
+	expectedHMAC, err := list.HMAC(addr)
 	if err != nil {
 		return err
 	}
@@ -849,10 +858,9 @@ func publicOptInHandler(ctx *Context, list *List) error {
 	case nil: // member
 		ctx.Alertf("You are already a member of this list.")
 	case sql.ErrNoRows: // not a member
-		// When the HMAC was created, ExtractAddress() ensured that there is only one email address. So we can call AddMembers here safely.
 		if err = list.AddMember(addr, true, false, false, false); err != nil {
 			return err
-		} // TODO
+		}
 	default: // error
 		return err
 	}

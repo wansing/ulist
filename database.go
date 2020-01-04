@@ -54,7 +54,7 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 
 		CREATE TABLE IF NOT EXISTS list (
 			id               INTEGER PRIMARY KEY,
-			display          TEXT NOT NULL, -- display-name of list address, list name
+			display          TEXT NOT NULL, -- display-name of list address
 			local            TEXT NOT NULL, -- local-part of list address
 			domain           TEXT NOT NULL, -- domain of list address
 			hmac_key         TEXT NOT NULL,
@@ -90,10 +90,10 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	db := &Database{DB: sqlDB}
 
 	// known
-	db.addKnownStmt = db.MustPrepare("INSERT INTO known (address, list) VALUES (?, ?)")
+	db.addKnownStmt = db.MustPrepare("INSERT INTO known (list, address) VALUES (?, ?)")
 	db.getKnownsStmt = db.MustPrepare("SELECT address FROM known WHERE list = ? ORDER BY address")
 	db.isKnownStmt = db.MustPrepare("SELECT COUNT(1) FROM known WHERE list = ? AND address = ?") // "select count(1)" never returns sql.ErrNoRows
-	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE address = ? AND list = ?")
+	db.removeKnownStmt = db.MustPrepare("DELETE FROM known WHERE list = ? AND address = ?")
 
 	// list
 	db.createListStmt = db.MustPrepare("INSERT INTO list (display, local, domain, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)")
@@ -108,9 +108,9 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	db.updateListStmt = db.MustPrepare("UPDATE list SET display = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? WHERE list.id = ?")
 
 	// member
-	db.addMemberStmt = db.MustPrepare("INSERT INTO member (address, list, receive, moderate, notify, admin) VALUES (?, ?, ?, ?, ?, ?)")
+	db.addMemberStmt = db.MustPrepare("INSERT INTO member (list, address, receive, moderate, notify, admin) VALUES (?, ?, ?, ?, ?, ?)")
 	db.getMemberStmt = db.MustPrepare("SELECT receive, moderate, notify, admin FROM member WHERE list = ? AND address = ?")
-	db.removeMemberStmt = db.MustPrepare("DELETE FROM member WHERE address = ? AND list = ?")
+	db.removeMemberStmt = db.MustPrepare("DELETE FROM member WHERE list = ? AND address = ?")
 	db.updateMemberStmt = db.MustPrepare("UPDATE member SET receive = ?, moderate = ?, notify = ?, admin = ? WHERE list = ? AND address = ?")
 
 	// user

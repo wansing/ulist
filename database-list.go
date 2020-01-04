@@ -76,7 +76,7 @@ func (l *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admin b
 		return err
 	}
 
-	if err := l.withAddress(Db.addMemberStmt, addr, l.Id, receive, moderate, notify, admin); err != nil {
+	if err := l.withListAndAddress(Db.addMemberStmt, l.Id, addr, receive, moderate, notify, admin); err != nil {
 		return err
 	}
 
@@ -86,7 +86,7 @@ func (l *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admin b
 
 func (l *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, moderate, notify, admin bool, alerter util.Alerter) {
 
-	affectedRows := l.withAddresses(alerter, Db.addMemberStmt, addrs, l.Id, receive, moderate, notify, admin)
+	affectedRows := l.withListAndAddresses(alerter, Db.addMemberStmt, l.Id, addrs, receive, moderate, notify, admin)
 	if affectedRows > 0 {
 		alerter.Successf("%d members have been added to the mailing list %s", affectedRows, l.RFC5322AddrSpec())
 	}
@@ -114,7 +114,7 @@ func (l *List) RemoveMember(addr *mailutil.Addr) error {
 		return err
 	}
 
-	if err := l.withAddress(Db.removeMemberStmt, addr, l.Id); err != nil {
+	if err := l.withListAndAddress(Db.removeMemberStmt, l.Id, addr); err != nil {
 		return err
 	}
 
@@ -124,7 +124,7 @@ func (l *List) RemoveMember(addr *mailutil.Addr) error {
 
 func (l *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := l.withAddresses(alerter, Db.removeMemberStmt, addrs, l.Id)
+	affectedRows := l.withListAndAddresses(alerter, Db.removeMemberStmt, l.Id, addrs)
 	if affectedRows > 0 {
 		alerter.Successf("%d members have been removed from the mailing list %s", affectedRows, l.RFC5322AddrSpec())
 	}
@@ -135,12 +135,12 @@ func (l *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, alerter u
 }
 
 func (l *List) AddKnown(addr *mailutil.Addr) error {
-	return l.withAddress(Db.addKnownStmt, addr, l.Id)
+	return l.withListAndAddress(Db.addKnownStmt, l.Id, addr)
 }
 
 func (l *List) AddKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := l.withAddresses(alerter, Db.addKnownStmt, addrs, l.Id)
+	affectedRows := l.withListAndAddresses(alerter, Db.addKnownStmt, l.Id, addrs)
 	if affectedRows > 0 {
 		alerter.Successf("%d known addresses have been added to the mailing list %s", affectedRows, l.RFC5322AddrSpec())
 	}
@@ -154,12 +154,12 @@ func (l *List) IsKnown(rawAddress string) (bool, error) {
 	}
 
 	var known bool
-	return known, Db.isKnownStmt.QueryRow(l.Id, address).Scan(&known)
+	return known, Db.isKnownStmt.QueryRow(l.Id, address.RFC5322AddrSpec()).Scan(&known)
 }
 
 func (l *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := l.withAddresses(alerter, Db.removeKnownStmt, addrs, l.Id)
+	affectedRows := l.withListAndAddresses(alerter, Db.removeKnownStmt, l.Id, addrs)
 	if affectedRows > 0 {
 		alerter.Successf("%d known addresses have been removed from the mailing list %s", affectedRows, l.RFC5322AddrSpec())
 	}
@@ -216,20 +216,20 @@ func (l *List) membersWhere(stmt *sql.Stmt) ([]Membership, error) {
 	return members, nil
 }
 
-// Arguments of stmt must be (address, args...).
-func (l *List) withAddress(stmt *sql.Stmt, addr *mailutil.Addr, args ...interface{}) error {
+// Arguments of stmt must be (listId, address, args...).
+func (l *List) withListAndAddress(stmt *sql.Stmt, listId int, addr *mailutil.Addr, args ...interface{}) error {
 
 	if l.Equals(addr) {
 		return fmt.Errorf("%s is the list address", addr.RFC5322AddrSpec())
 	}
 
-	_, err := stmt.Exec(append([]interface{}{addr.RFC5322AddrSpec()}, args...)...)
+	_, err := stmt.Exec(append([]interface{}{listId, addr.RFC5322AddrSpec()}, args...)...)
 	return err
 }
 
-// Arguments of stmt must be (address, args...).
+// Arguments of stmt must be (listId, address, args...).
 // A transaction is used because batch inserts in SQLite are very slow without.
-func (l *List) withAddresses(alerter util.Alerter, stmt *sql.Stmt, addrs []*mailutil.Addr, args ...interface{}) (affectedRows int64) {
+func (l *List) withListAndAddresses(alerter util.Alerter, stmt *sql.Stmt, listId int, addrs []*mailutil.Addr, args ...interface{}) (affectedRows int64) {
 
 	tx, err := Db.Begin()
 	if err != nil {
@@ -244,7 +244,7 @@ func (l *List) withAddresses(alerter util.Alerter, stmt *sql.Stmt, addrs []*mail
 			continue
 		}
 
-		result, err := stmt.Exec(append([]interface{}{na.RFC5322AddrSpec()}, args...)...)
+		result, err := stmt.Exec(append([]interface{}{listId, na.RFC5322AddrSpec()}, args...)...)
 		if err != nil {
 			alerter.Alertf("error executing database statement: %v", err)
 			continue

@@ -168,7 +168,7 @@ func (list *List) Send(m *mailutil.Message) error {
 		m.Header["Reply-To"] = []string{} // defaults to From
 	} else {
 
-		oldFroms, err := mailutil.ParseHeaderAddresses(m.Header, "From", 10)
+		oldFroms, err := m.ParseHeaderAddresses("From", 10)
 		if err != nil {
 			return err
 		}
@@ -334,7 +334,7 @@ func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from *mailutil.A
 		return
 	}
 
-	if froms, err := mailutil.ParseHeaderAddresses(m.Header, "Reply-To", 2); len(froms) == 1 && err == nil {
+	if froms, err := m.ParseHeaderAddresses("Reply-To", 2); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

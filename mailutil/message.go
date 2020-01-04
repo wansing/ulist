@@ -40,23 +40,6 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	}, nil
 }
 
-func (m *Message) Save(w io.Writer) error {
-
-	if err := WriteHeader(w, m.Header); err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(w, m.BodyReader()); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *Message) BodyReader() io.Reader {
-	return bytes.NewReader(m.Body)
-}
-
 func (m *Message) Copy() *Message {
 
 	c := &Message{
@@ -71,4 +54,65 @@ func (m *Message) Copy() *Message {
 	copy(c.Body, m.Body)
 
 	return c
+}
+
+func (m *Message) BodyReader() io.Reader {
+	return bytes.NewReader(m.Body)
+}
+
+func (m *Message) ParseHeaderAddresses(fieldName string, limit int) ([]*Addr, error) {
+
+	field := m.Header.Get(fieldName)
+	if field == "" {
+		return nil, nil
+	}
+
+	parsedAddresses, err := RobustAddressParser.ParseList(field)
+	if err != nil {
+		return nil, err
+	}
+
+	var addrs = []*Addr{}
+
+	for _, p := range parsedAddresses {
+		address, err := NewAddr(p)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, address)
+	}
+
+	return addrs, nil
+}
+
+func (m *Message) Save(w io.Writer) error {
+
+	if err := WriteHeader(w, m.Header); err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(w, m.BodyReader()); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Message) ToOrCcContains(needle *Addr) (bool, error) {
+
+	for _, fieldName := range []string{"To", "Cc"} {
+
+		addresses, err := m.ParseHeaderAddresses(fieldName, 10000)
+		if err != nil {
+			return false, err
+		}
+
+		for _, addr := range addresses {
+			if addr.Equals(needle) {
+				return true, nil
+			}
+		}
+	}
+
+	return false, nil
 }

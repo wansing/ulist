@@ -186,52 +186,6 @@ func Send(testmode bool, header mail.Header, body io.Reader, envelopeFrom string
 	return nil
 }
 
-// TODO type Header struct { mail.Header } // und dann diese funcs darauf definieren?
-
-func ParseHeaderAddresses(header mail.Header, fieldName string, limit int) ([]*Addr, error) {
-
-	field := header.Get(fieldName)
-	if field == "" {
-		return nil, nil
-	}
-
-	parsedAddresses, err := RobustAddressParser.ParseList(field)
-	if err != nil {
-		return nil, err
-	}
-
-	var addrs = []*Addr{}
-
-	for _, p := range parsedAddresses {
-		address, err := NewAddr(p)
-		if err != nil {
-			return nil, err
-		}
-		addrs = append(addrs, address)
-	}
-
-	return addrs, nil
-}
-
-func ToOrCcContains(header mail.Header, needle *Addr) (bool, error) {
-
-	for _, fieldName := range []string{"To", "Cc"} {
-
-		addresses, err := ParseHeaderAddresses(header, fieldName, 10000)
-		if err != nil {
-			return false, err
-		}
-
-		for _, addr := range addresses {
-			if addr.Equals(needle) {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
 // For usage in mod.html. Currently the message is rewritten before moderation, so the this is useless here
 /*func HasSingleFrom(header mail.Header) (has bool, from string) {
 	if froms, err := ParseAddresses(header, "Reply-To", 2); len(froms) == 1 && err == nil {

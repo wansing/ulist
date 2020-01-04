@@ -263,7 +263,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// listAddress must be in To or Cc in order to avoid spam
 
-		if toOrCcContains, err := mailutil.ToOrCcContains(message.Header, &list.Addr); err != nil {
+		if toOrCcContains, err := message.ToOrCcContains(&list.Addr); err != nil {
 			return SMTPErrorf(510, "Error parsing To/Cc addresses: %v", err) // 510 Bad email address
 		} else if !toOrCcContains {
 			return SMTPErrorf(541, "The list address is not in To or Cc") // 541 The recipient address rejected your message
@@ -290,7 +290,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// get froms
 
-		froms, err := mailutil.ParseHeaderAddresses(message.Header, "From", 10)
+		froms, err := message.ParseHeaderAddresses("From", 10)
 		if err != nil {
 			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
 		}
@@ -307,7 +307,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
-			if senders, err := mailutil.ParseHeaderAddresses(message.Header, "Sender", 2); len(senders) > 0 && err == nil {
+			if senders, err := message.ParseHeaderAddresses("Sender", 2); len(senders) > 0 && err == nil {
 				if froms[0].Equals(senders[0]) {
 					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
 				}

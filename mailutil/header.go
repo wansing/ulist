@@ -195,7 +195,7 @@ func ToOrCcContains(header mail.Header, needle *Addr) (bool, error) {
 			continue // missing header field is okay
 		}
 
-		addresses, errs := ParseAddresses(fromField, 10000, false) // strict parsing
+		addresses, errs := ParseAddresses(fromField, 10000)
 		if len(errs) > 0 {
 			return false, errs[0]
 		}

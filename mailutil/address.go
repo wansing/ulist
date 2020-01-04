@@ -96,8 +96,18 @@ func ParseAddress(rfc5322Address string) (*Addr, error) {
 	return NewAddr(parsed)
 }
 
+// for email headers
+func ParseAddresses(rawAddresses string, limit int) ([]*Addr, []error) {
+	return parseAddresses(rawAddresses, limit, false)
+}
+
+// for user input
+func ParseAddressesLax(rawAddresses string, limit int) ([]*Addr, []error) {
+	return parseAddresses(rawAddresses, limit, true)
+}
+
 // expects one RFC 5322 address-list per line
-func ParseAddresses(rawAddresses string, limit int, lax bool) ([]*Addr, []error) {
+func parseAddresses(rawAddresses string, limit int, lax bool) ([]*Addr, []error) {
 
 	result := []*Addr{}
 	errs := []error{}

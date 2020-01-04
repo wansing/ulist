@@ -281,7 +281,7 @@ func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from *mailutil.A
 		return
 	}
 
-	if froms, err := mailutil.ParseAddresses(m.Header.Get("Reply-To"), 2, false); len(froms) == 1 && err == nil {
+	if froms, err := mailutil.ParseAddresses(m.Header.Get("Reply-To"), 2); len(froms) == 1 && err == nil {
 		has = true
 		from = froms[0]
 	}

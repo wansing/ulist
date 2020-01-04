@@ -295,7 +295,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			return SMTPErrorf(510, `"From" header missing`)
 		}
 
-		froms, errs := mailutil.ParseAddresses(fromField, 10, false) // up to 10 From addresses, be strict on errors
+		froms, errs := mailutil.ParseAddresses(fromField, 10) // up to 10 From addresses
 		if len(errs) > 0 {
 			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, fromField, err) // 510 Bad email address
 		}
@@ -312,7 +312,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
-			if senders, errs := mailutil.ParseAddresses(message.Header.Get("Sender"), 2, false); len(errs) == 0 && len(senders) > 0 {
+			if senders, errs := mailutil.ParseAddresses(message.Header.Get("Sender"), 2); len(errs) == 0 && len(senders) > 0 {
 				if froms[0].Equals(senders[0]) {
 					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
 				}

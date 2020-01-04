@@ -30,10 +30,10 @@ var saslPlainAuth = &client.SASLPlain{}
 var authenticators = client.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
 
 var Db *Database
-var HttpAddr string
 var SpoolDir string
 var Superadmin string // can create new mailing lists and modify all mailing lists
 var Testmode bool
+var WebListen string
 var WebUrl string
 
 func main() {
@@ -50,7 +50,7 @@ func main() {
 	flag.StringVar(&SpoolDir, "spool", "spool", "spool folder for unmoderated messages")
 
 	// web interface
-	flag.StringVar(&HttpAddr, "http", "8080", "port number or socket path of HTTP web listener")
+	flag.StringVar(&WebListen, "http", "127.0.0.1:8080", "ip:port or socket path of web listener")
 	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface (for opt-in link)")
 
 	// authentication

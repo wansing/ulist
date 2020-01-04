@@ -257,29 +257,26 @@ func webui() {
 		var listener net.Listener
 
 		var network string
-		var address string
 
-		if port, err := strconv.Atoi(HttpAddr); err == nil {
+		if strings.Contains(WebListen, ":") {
 			network = "tcp"
-			address = fmt.Sprintf("127.0.0.1:%d", port)
 		} else {
 			network = "unix"
-			address = HttpAddr
-			_ = util.RemoveSocket(address) // remove old socket
+			_ = util.RemoveSocket(WebListen) // remove old socket
 		}
 
-		listener, err = net.Listen(network, address)
+		listener, err = net.Listen(network, WebListen)
 		if err == nil {
-			log.Printf("Web listener: %s://%s ", network, address)
+			log.Printf("Web listener: %s://%s ", network, WebListen)
 		} else {
 			log.Fatalln(err)
 		}
 
 		if network == "unix" {
-			if err := os.Chmod(address, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
+			if err := os.Chmod(WebListen, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
 				log.Fatalln(err)
 			} else {
-				log.Println("Set permissions of", address, "to", os.ModePerm)
+				log.Println("Set permissions of", WebListen, "to", os.ModePerm)
 			}
 		}
 

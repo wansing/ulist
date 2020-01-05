@@ -24,6 +24,8 @@ const WarnFormat = "\033[1;31m%s\033[0m"
 
 var GitCommit string // hash
 
+var mta MTA = Sendmail{}
+
 var smtpsAuth = &client.SMTPS{}
 var starttlsAuth = &client.STARTTLS{}
 var saslPlainAuth = &client.SASLPlain{}
@@ -104,6 +106,7 @@ func main() {
 	}
 
 	if Testmode {
+		mta = DummyMTA{}
 		Superadmin = "test@example.com"
 		log.Printf(WarnFormat, "ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
 	}

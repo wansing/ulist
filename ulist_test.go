@@ -1,23 +1,30 @@
+//go:generate go run assets_gen.go
+
 package main
 
 import (
 	"database/sql"
-	//"io"
+	"io"
 	"log"
 	"os"
+	"strings"
 	"testing"
 
-	//"github.com/emersion/go-smtp"
+	"github.com/emersion/go-smtp"
 	"github.com/wansing/ulist/mailutil"
 )
 
 const testDbPath = "/tmp/ulist-test.sqlite3"
 
+var messageChannel = make(chan string, 100)
+
 func init() {
+	mta = ChanMTA(messageChannel)
+	SpoolDir = "/tmp/"
 	Testmode = true
+	WebUrl = "https://lists.example.com"
 }
 
-/*
 func lmtpTransaction(t *testing.T, envelopeFrom string, envelopeTo []string, data io.Reader) []string {
 
 	backend := &LMTPBackend{}
@@ -45,17 +52,15 @@ func lmtpTransaction(t *testing.T, envelopeFrom string, envelopeTo []string, dat
 	}
 
 	return nil
-}*/
+}
 
 type testAlerter struct{}
 
 func (testAlerter) Alertf(format string, a ...interface{}) {
-	log.Printf(format, a...)
+	log.Fatalf(format, a...)
 }
 
-func (testAlerter) Successf(format string, a ...interface{}) {
-	log.Printf(format, a...)
-}
+func (testAlerter) Successf(format string, a ...interface{}) {}
 
 func TestCRUD(t *testing.T) {
 
@@ -70,128 +75,135 @@ func TestCRUD(t *testing.T) {
 
 	// create list
 
-	_, err = CreateList("a@example.com", "A", "admin1@example.com, admin2@example.com", testAlerter{})
-	if err != nil {
+	if _, err = CreateList("list_a@example.com", "A", "chris@example.com, norah@example.net", testAlerter{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err = CreateList("list_b@example.com", "B", "otto@example.org", testAlerter{}); err != nil {
 		t.Fatal(err)
 	}
 
 	// load list
 
-	listAddr, _ := mailutil.ParseAddress("a@example.com")
+	listAddr, _ := mailutil.ParseAddress("list_a@example.com")
 
-	list, err := GetList(listAddr)
+	listA, err := GetList(listAddr)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// add member
 
-	member1, err := mailutil.ParseAddress("member1@example.net")
+	claire, err := mailutil.ParseAddress("claire@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = list.AddMember(member1, true, false, false, false)
+	err = listA.AddMember(claire, true, false, false, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// add members
 
-	member2, err := mailutil.ParseAddress("member2@example.org")
+	noemi, err := mailutil.ParseAddress("noemi@example.net")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	member3, err := mailutil.ParseAddress("member3@example.com")
+	oscar, err := mailutil.ParseAddress("oscar@example.org")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	list.AddMembers(false, []*mailutil.Addr{member2, member3}, false, true, false, false, testAlerter{})
+	listA.AddMembers(false, []*mailutil.Addr{noemi, oscar}, false, true, false, false, testAlerter{})
 
 	// add known
 
-	known1, err := mailutil.ParseAddress("known1@example.org")
+	casey, err := mailutil.ParseAddress("casey@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = list.AddKnown(known1)
+	err = listA.AddKnown(casey)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// add members
+	// add knowns
 
-	known2, err := mailutil.ParseAddress("known2@example.com")
+	noah, err := mailutil.ParseAddress("noah@example.net")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	known3, err := mailutil.ParseAddress("known3@example.net")
+	owen, err := mailutil.ParseAddress("owen@example.org")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	list.AddKnowns([]*mailutil.Addr{known3, known2}, testAlerter{})
+	listA.AddKnowns([]*mailutil.Addr{noah, owen}, testAlerter{})
 
 	// get members
 
-	members, err := list.Members()
+	members, err := listA.Members()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedListInfo := ListInfo{
+	expectedListAInfo := ListInfo{
 		mailutil.Addr{
 			Display: "A",
-			Local:   "a",
+			Local:   "list_a",
 			Domain:  "example.com",
 		},
 	}
 
 	expectedMembers := []Membership{
 		Membership{
-			ListInfo:      expectedListInfo,
-			MemberAddress: "admin1@example.com",
+			ListInfo:      expectedListAInfo,
+			MemberAddress: "chris@example.com",
 			Receive:       true,
 			Moderate:      true,
 			Notify:        true,
 			Admin:         true,
 		},
 		Membership{
-			ListInfo:      expectedListInfo,
-			MemberAddress: "admin2@example.com",
-			Receive:       true,
-			Moderate:      true,
-			Notify:        true,
-			Admin:         true,
-		},
-		Membership{
-			ListInfo:      expectedListInfo,
-			MemberAddress: "member1@example.net",
+			ListInfo:      expectedListAInfo,
+			MemberAddress: "claire@example.com",
 			Receive:       true,
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListInfo,
-			MemberAddress: "member2@example.org",
+			ListInfo:      expectedListAInfo,
+			MemberAddress: "noemi@example.net",
 			Receive:       false,
 			Moderate:      true,
 			Notify:        false,
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListInfo,
-			MemberAddress: "member3@example.com",
+			ListInfo:      expectedListAInfo,
+			MemberAddress: "norah@example.net",
+			Receive:       true,
+			Moderate:      true,
+			Notify:        true,
+			Admin:         true,
+		},
+		Membership{
+			ListInfo:      expectedListAInfo,
+			MemberAddress: "oscar@example.org",
 			Receive:       false,
 			Moderate:      true,
 			Notify:        false,
 			Admin:         false,
 		},
+	}
+
+	if len(expectedMembers) != len(members) {
+		t.Fatalf("expected %d members, got %d", len(expectedMembers), len(members))
 	}
 
 	for i := range expectedMembers {
@@ -203,12 +215,12 @@ func TestCRUD(t *testing.T) {
 	// get knowns
 
 	expectedKnowns := []string{
-		"known1@example.org",
-		"known2@example.com",
-		"known3@example.net",
+		"casey@example.com",
+		"noah@example.net",
+		"owen@example.org",
 	}
 
-	knowns, err := list.Knowns()
+	knowns, err := listA.Knowns()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,16 +231,63 @@ func TestCRUD(t *testing.T) {
 		}
 	}
 
+	// send mail
+
+	lmtpTransaction(t, "some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"}, strings.NewReader(
+`From: chris@example.com
+To: list_a@example.com, list_b@example.com
+Subject: foo
+
+Hello`))
+
+	expectedMails := []string{
+`Content-Type: text/plain; charset=utf-8
+From: "A" <list_a@example.com>
+Subject: [A] Welcome
+To: claire@example.com
+
+Welcome to the mailing list list_a@example.com.
+
+If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_a@example.com.
+`,
+`From: "chris via A" <list_a@example.com>
+List-Id: "A" <list_a@example.com>
+List-Post: <mailto:list_a@example.com>
+List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
+Reply-To: <chris@example.com>
+Subject: [A] foo
+To: list_a@example.com, list_b@example.com
+
+Hello`,
+
+`Content-Type: text/plain; charset=utf-8
+From: "B" <list_b@example.com>
+Subject: [B] A message needs moderation
+To: otto@example.org
+
+A message at "B" <list_b@example.com> is waiting for moderation.
+
+You can moderate it here: https://lists.example.com/mod/list_b%40example.com
+`,
+	}
+
+	for i, expectedMail := range expectedMails {
+		expectedMail = strings.ReplaceAll(expectedMail, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
+		if expectedMail != <- messageChannel {
+			t.Fatalf("failed at message %d", i)
+		}
+	}
+
 	// delete list
 
-	err = list.Delete()
+	err = listA.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// check that list is deleted
 
-	list, err = GetList(listAddr)
+	listA, err = GetList(listAddr)
 	if err != sql.ErrNoRows {
 		t.Fatalf("List has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
 	}

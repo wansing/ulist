@@ -213,7 +213,7 @@ func (list *List) Send(m *mailutil.Message) error {
 	}
 
 	// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
-	return mailutil.Send(Testmode, m.Header, m.BodyReader(), list.BounceAddress(), receivers)
+	return mta.Send(list.BounceAddress(), receivers, m.Header, m.BodyReader())
 }
 
 // sends an email to a single user
@@ -225,7 +225,7 @@ func (list *List) sendUserMail(recipient string, subject string, body io.Reader)
 	header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] " + subject}
 	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
-	return mailutil.Send(Testmode, header, body, list.BounceAddress(), []string{recipient})
+	return mta.Send(list.BounceAddress(), []string{recipient}, header, body)
 }
 
 // Wraps List.sendUserMail with these changes:
@@ -303,10 +303,10 @@ func (list *List) sendNotification(recipient string) error {
 	body := &bytes.Buffer{}
 
 	data := struct {
-		List    ListInfo
+		List    *ListInfo // pointer because it has pointer receivers, else template execution will fail
 		ModHref string
 	}{
-		List:    list.ListInfo,
+		List:    &list.ListInfo,
 		ModHref: WebUrl + "/mod/" + list.EscapeAddress(),
 	}
 

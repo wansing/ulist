@@ -76,7 +76,19 @@ query = SELECT CASE
 END;
 ```
 
-## Example using apache and qmail (on uberspace.de)
+## Example using supervisord (on Uberspace 7)
+
+* Uberspace 7 has no namespaces any more, so the second argument of `qmail-lmtp` is ´1´
+
+### `~/etc/services.d/ulist.ini`
+
+[program:ulist]
+directory=/home/example/ulist
+command=/home/example/ulist/ulist/ulist -http 0.0.0.0:8080 -starttls 587 -superadmin you@example.com -weburl "https://lists.example.com"
+autostart=yes
+autorestart=yes
+
+## Example using apache and qmail (on Uberspace 6)
 
 You need an LMTP wrapper script, for example `qmail-lmtp` from `mailman`:
 

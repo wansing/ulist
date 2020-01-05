@@ -4,9 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/mail"
-	"os/exec"
 	"sort"
 	"strings"
 )
@@ -143,47 +141,6 @@ func WriteHeader(w io.Writer, header mail.Header) error {
 
 	_, err := fmt.Fprint(w, lineSeparator) // header is terminated by a blank line
 	return err
-}
-
-func Send(testmode bool, header mail.Header, body io.Reader, envelopeFrom string, envelopeTo []string) error {
-
-	log.Println("[info] Sending email", `"`+TryMimeDecode(header.Get("Subject"))+`"`, "from", envelopeFrom, "to", len(envelopeTo), "recipient(s)")
-
-	if testmode {
-		log.Println("[info] Skipping because we're in test mode")
-		return nil
-	}
-
-	args := []string{"-i", "-f", envelopeFrom, "--"}
-	args = append(args, envelopeTo...)
-
-	sendmail := exec.Command("/usr/sbin/sendmail", args...)
-
-	stdin, err := sendmail.StdinPipe()
-	if err != nil {
-		return fmt.Errorf("starting sendmail: %v", err)
-	}
-
-	if err := sendmail.Start(); err != nil {
-		return err
-	}
-
-	if err := WriteHeader(stdin, header); err != nil {
-		return err
-	}
-
-	if _, err := io.Copy(stdin, body); err != nil {
-		return err
-	}
-
-	stdin.Close()
-
-	err = sendmail.Wait()
-	if err != nil {
-		return fmt.Errorf("sendmail returned: %v", err)
-	}
-
-	return nil
 }
 
 // For usage in mod.html. Currently the message is rewritten before moderation, so the this is useless here

@@ -1,5 +1,3 @@
-//go:generate go run assets_gen.go
-
 package main
 
 import (
@@ -25,33 +23,28 @@ func init() {
 	WebUrl = "https://lists.example.com"
 }
 
-func lmtpTransaction(t *testing.T, envelopeFrom string, envelopeTo []string, data io.Reader) []string {
+func lmtpTransaction(envelopeFrom string, envelopeTo []string, data io.Reader) error {
 
 	backend := &LMTPBackend{}
 
 	session, err := backend.AnonymousLogin(nil)
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	err = session.Mail(envelopeFrom, smtp.MailOptions{})
 	if err != nil {
-		t.Fatal(err)
+		return err
 	}
 
 	for _, to := range envelopeTo {
 		err := session.Rcpt(to)
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
 	}
 
-	err = session.Data(data)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	return nil
+	return session.Data(data)
 }
 
 type testAlerter struct{}
@@ -231,17 +224,21 @@ func TestCRUD(t *testing.T) {
 		}
 	}
 
-	// send mail
+	// send mail to two lists
 
-	lmtpTransaction(t, "some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"}, strings.NewReader(
-`From: chris@example.com
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"}, strings.NewReader(
+		`From: chris@example.com
 To: list_a@example.com, list_b@example.com
 Subject: foo
 
 Hello`))
 
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	expectedMails := []string{
-`Content-Type: text/plain; charset=utf-8
+		`Content-Type: text/plain; charset=utf-8
 From: "A" <list_a@example.com>
 Subject: [A] Welcome
 To: claire@example.com
@@ -250,7 +247,7 @@ Welcome to the mailing list list_a@example.com.
 
 If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_a@example.com.
 `,
-`From: "chris via A" <list_a@example.com>
+		`From: "chris via A" <list_a@example.com>
 List-Id: "A" <list_a@example.com>
 List-Post: <mailto:list_a@example.com>
 List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
@@ -260,7 +257,7 @@ To: list_a@example.com, list_b@example.com
 
 Hello`,
 
-`Content-Type: text/plain; charset=utf-8
+		`Content-Type: text/plain; charset=utf-8
 From: "B" <list_b@example.com>
 Subject: [B] A message needs moderation
 To: otto@example.org
@@ -273,9 +270,25 @@ You can moderate it here: https://lists.example.com/mod/list_b%40example.com
 
 	for i, expectedMail := range expectedMails {
 		expectedMail = strings.ReplaceAll(expectedMail, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
-		if expectedMail != <- messageChannel {
+		if expectedMail != <-messageChannel {
 			t.Fatalf("failed at message %d", i)
 		}
+	}
+
+	// send looped mail with List-Id header
+
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"}, strings.NewReader(
+		`From: chris@example.com
+To: list_a@example.com
+List-Id: "A" <list_a@example.com>
+Subject: foo
+
+Hello`))
+
+	var expectedErr string = "email loop detected: list_a@example.com"
+
+	if err.Error() != expectedErr {
+		t.Fatalf("got %v, expected %s", err, expectedErr)
 	}
 
 	// delete list
@@ -289,6 +302,6 @@ You can moderate it here: https://lists.example.com/mod/list_b%40example.com
 
 	listA, err = GetList(listAddr)
 	if err != sql.ErrNoRows {
-		t.Fatalf("List has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
+		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
 	}
 }

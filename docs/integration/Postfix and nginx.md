@@ -33,7 +33,7 @@ server {
 [...]
 ```
 
-### `/etc/postfix/main.cf`
+## `/etc/postfix/main.cf`
 
 If lists and regular email accounts share a domain, you can declare a `virtual_transport` to the LDA and a `transport_maps` to override it. If you have separate domains, there might be an easier way.
 
@@ -48,7 +48,7 @@ transport_maps = sqlite:/etc/postfix/transport-maps.cf
 [...]
 ```
 
-### `/etc/postfix/transport-maps.cf`
+## `/etc/postfix/transport-maps.cf`
 
 ```
 dbpath = /srv/ulist/data/ulist.sqlite

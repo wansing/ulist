@@ -17,7 +17,7 @@ import (
 // 5xx Permanent errors
 // 550 Requested action not taken: mailbox unavailable
 // 552 Requested mail action aborted: exceeded storage allocation
-// 554 Transaction failed, maybe spam/blacklisted or
+// 554 Transaction failed, maybe spam/blacklisted
 
 var SMTPErrUserNotExist = SMTPErrorf(550, "user not found")
 

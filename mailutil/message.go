@@ -116,3 +116,22 @@ func (m *Message) ToOrCcContains(needle *Addr) (bool, error) {
 
 	return false, nil
 }
+
+func (m *Message) ViaList(listAddr *Addr) (bool, error) {
+
+	for _, field := range m.Header["List-Id"] {
+
+		listId, err := ParseAddress(field)
+		if err != nil {
+			return false, err
+		}
+
+		if listAddr.Equals(listId) {
+			return true, nil
+		}
+	}
+
+	// we could also check the Received header (RFC 5321 4.4) here
+
+	return false, nil
+}

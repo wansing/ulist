@@ -12,8 +12,8 @@ See `build.sh`.
 * mail delivery to system's MTA: ulist executes `/usr/sbin/sendmail`
   * advantage: no recipient limit
   * disadvantage: when running in a jail, you need access to `/etc/postfix`, `/var/log/postfix` and `/var/spool/postfix/maildrop`
-  * disadvantages of SMTP delivery: `localhost:25` usually accepts mail for localhost only and might drop emails for other recipients. `localhost:587` usually requires authentication and SSL/TLS.
-* Web UI: ulist listens to `tcp://127.0.0.1:port` or a unix socket.
+  * disadvantages of SMTP delivery: `localhost:25` usually accepts mail for localhost only and might drop emails for other recipients. `localhost:587` usually requires authentication and SSL/TLS
+* Web UI: ulist listens to a port or a unix socket
 * Web UI authentication: against a local database or SMTP server, see [auth](https://github.com/wansing/auth)
 * Supported databases: SQLite, PostgreSQL (untested), MySQL/MariaDB (untested)
 
@@ -38,7 +38,6 @@ See `docs/integration` for examples.
 * append an unsubscribe link to the content
 * remove unsubscribing via email (it's prone to spoofing and can leak memberships)
 * web UI: list creation permissions per domain
-* prevent email loops (check `Received` or `List-...` headers)
 * reject or always moderate emails which have been flagged as spam (`X-Spam` header or so)
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?

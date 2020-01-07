@@ -258,19 +258,34 @@ func (s *LMTPSession) data(r io.Reader) error {
 		return SMTPErrorf(442, "Error reading message: %v", err) // 442 The connection was dropped during the transmission
 	}
 
+	// Do some checks (and maybe rejections) before sending any email
+
+	for _, list := range s.Lists {
+
+		// avoid loops
+
+		if via, err := originalMessage.ViaList(&list.Addr); err != nil {
+			return SMTPErrorf(510, "error checking for mail loops: %v", err) // 510 Bad email address
+		} else if via {
+			return SMTPErrorf(554, "email loop detected: %s", list)
+		}
+
+		// listAddress must be in To or Cc in order to avoid spam
+
+		if toOrCcContains, err := originalMessage.ToOrCcContains(&list.Addr); err != nil {
+			return SMTPErrorf(510, "error parsing To/Cc addresses: %v", err) // 510 Bad email address
+		} else if !toOrCcContains {
+			return SMTPErrorf(541, "list address is not in To or Cc") // 541 The recipient address rejected your message
+		}
+	}
+
+	// process mails
+
 	for _, list := range s.Lists {
 
 		// make a copy of the message, so we can modify it
 
 		message := originalMessage.Copy()
-
-		// listAddress must be in To or Cc in order to avoid spam
-
-		if toOrCcContains, err := message.ToOrCcContains(&list.Addr); err != nil {
-			return SMTPErrorf(510, "Error parsing To/Cc addresses: %v", err) // 510 Bad email address
-		} else if !toOrCcContains {
-			return SMTPErrorf(541, "The list address is not in To or Cc") // 541 The recipient address rejected your message
-		}
 
 		// catch bounces
 
@@ -373,7 +388,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			err = list.Save(message)
 			if err != nil {
-				return SMTPErrorf(471, "Error saving email to file: %v", err) // 554 Transaction has failed
+				return SMTPErrorf(471, "Error saving email to file: %v", err)
 			}
 
 			notifiedMembers, err := list.Notifieds()

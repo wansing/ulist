@@ -574,16 +574,9 @@ func knownsHandler(ctx *Context, list *List) error {
 	return ctx.Execute(knownsTemplate, list)
 }
 
-type StoredListMessage struct {
+type StoredMessage struct {
 	*mailutil.Message
-	List     *List
 	Filename string
-}
-
-// wrapper for use in templates
-func (s *StoredListMessage) GetSingleFromStr() string {
-	_, from := s.List.GetSingleFrom(s.Message)
-	return from.RFC5322AddrSpec()
 }
 
 func modHandler(ctx *Context, list *List) error {
@@ -623,7 +616,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-delete-"+emlFilename) != "" {
-					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Reject { // same condition as in template
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == Reject { // same condition as in template
 						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
 						} else {
@@ -643,7 +636,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-pass-"+emlFilename) != "" {
-					if has, from := list.GetSingleFrom(m); has && list.ActionKnown == Pass { // same condition as in template
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == Pass { // same condition as in template
 						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
 						} else {
@@ -714,7 +707,7 @@ func modHandler(ctx *Context, list *List) error {
 		List      *List
 		Page      int
 		PageLinks []PageLink
-		Messages  []StoredListMessage
+		Messages  []StoredMessage
 	}{
 		List: list,
 		Page: page,
@@ -765,7 +758,7 @@ func modHandler(ctx *Context, list *List) error {
 			continue
 		}
 
-		data.Messages = append(data.Messages, StoredListMessage{message, list, emlFilename})
+		data.Messages = append(data.Messages, StoredMessage{message, emlFilename})
 	}
 
 	return ctx.Execute(modTemplate, data)

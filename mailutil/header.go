@@ -12,6 +12,31 @@ import (
 // RFC5322 says CRLF. Postfix works with both \n and \r\n.
 const lineSeparator = "\r\n"
 
+func ParseAddressesFromHeader(header mail.Header, fieldName string, limit int) ([]*Addr, error) {
+
+	field := header.Get(fieldName)
+	if field == "" {
+		return nil, nil
+	}
+
+	parsedAddresses, err := RobustAddressParser.ParseList(field)
+	if err != nil {
+		return nil, err
+	}
+
+	var addrs = []*Addr{}
+
+	for _, p := range parsedAddresses {
+		address, err := NewAddr(p)
+		if err != nil {
+			return nil, err
+		}
+		addrs = append(addrs, address)
+	}
+
+	return addrs, nil
+}
+
 // Tries to restore the original folding.
 //
 // RFC5322: "Each line of characters MUST be no more than 998 characters [...] excluding the CRLF."
@@ -103,7 +128,7 @@ func headerWritelnFold(w io.Writer, name, body string) error {
 
 func WriteHeader(w io.Writer, header mail.Header) error {
 
-	// sort keys (else we'd use random map iteration)
+	// sort keys (else the map was iterated randomly)
 
 	keys := []string{}
 	for k := range header {
@@ -142,12 +167,3 @@ func WriteHeader(w io.Writer, header mail.Header) error {
 	_, err := fmt.Fprint(w, lineSeparator) // header is terminated by a blank line
 	return err
 }
-
-// For usage in mod.html. Currently the message is rewritten before moderation, so the this is useless here
-/*func HasSingleFrom(header mail.Header) (has bool, from string) {
-	if froms, err := ParseAddresses(header, "Reply-To", 2); len(froms) == 1 && err == nil {
-		has = true
-		from = froms[0]
-	}
-	return
-}*/

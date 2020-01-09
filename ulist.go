@@ -253,7 +253,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 		return SMTPErrUserNotExist
 	}
 
-	originalMessage, err := mailutil.ReadMessage(r)
+	message, err := mailutil.ReadMessage(r)
 	if err != nil {
 		return SMTPErrorf(442, "Error reading message: %v", err) // 442 The connection was dropped during the transmission
 	}
@@ -264,7 +264,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// avoid loops
 
-		if via, err := originalMessage.ViaList(&list.Addr); err != nil {
+		if via, err := message.ViaList(&list.Addr); err != nil {
 			return SMTPErrorf(510, "error checking for mail loops: %v", err) // 510 Bad email address
 		} else if via {
 			return SMTPErrorf(554, "email loop detected: %s", list)
@@ -272,7 +272,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// listAddress must be in To or Cc in order to avoid spam
 
-		if toOrCcContains, err := originalMessage.ToOrCcContains(&list.Addr); err != nil {
+		if toOrCcContains, err := message.ToOrCcContains(&list.Addr); err != nil {
 			return SMTPErrorf(510, "error parsing To/Cc addresses: %v", err) // 510 Bad email address
 		} else if !toOrCcContains {
 			return SMTPErrorf(541, "list address is not in To or Cc") // 541 The recipient address rejected your message
@@ -282,10 +282,6 @@ func (s *LMTPSession) data(r io.Reader) error {
 	// process mails
 
 	for _, list := range s.Lists {
-
-		// make a copy of the message, so we can modify it
-
-		message := originalMessage.Copy()
 
 		// catch bounces
 
@@ -308,7 +304,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// get froms
 
-		froms, err := message.ParseHeaderAddresses("From", 10)
+		froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
 		if err != nil {
 			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
 		}
@@ -325,7 +321,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
-			if senders, err := message.ParseHeaderAddresses("Sender", 2); len(senders) > 0 && err == nil {
+			if senders, err := mailutil.ParseAddressesFromHeader(message.Header, "Sender", 2); len(senders) > 0 && err == nil {
 				if froms[0].Equals(senders[0]) {
 					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
 				}

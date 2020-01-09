@@ -40,7 +40,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	}, nil
 }
 
-func (m *Message) Copy() *Message {
+/*func (m *Message) Copy() *Message {
 
 	c := &Message{
 		Header: make(mail.Header),
@@ -54,35 +54,10 @@ func (m *Message) Copy() *Message {
 	copy(c.Body, m.Body)
 
 	return c
-}
+}*/
 
 func (m *Message) BodyReader() io.Reader {
 	return bytes.NewReader(m.Body)
-}
-
-func (m *Message) ParseHeaderAddresses(fieldName string, limit int) ([]*Addr, error) {
-
-	field := m.Header.Get(fieldName)
-	if field == "" {
-		return nil, nil
-	}
-
-	parsedAddresses, err := RobustAddressParser.ParseList(field)
-	if err != nil {
-		return nil, err
-	}
-
-	var addrs = []*Addr{}
-
-	for _, p := range parsedAddresses {
-		address, err := NewAddr(p)
-		if err != nil {
-			return nil, err
-		}
-		addrs = append(addrs, address)
-	}
-
-	return addrs, nil
 }
 
 func (m *Message) Save(w io.Writer) error {
@@ -98,11 +73,30 @@ func (m *Message) Save(w io.Writer) error {
 	return nil
 }
 
+// header helpers
+
+func (m *Message) SingleFrom() (*Addr, bool) {
+	if froms, err := ParseAddressesFromHeader(m.Header, "From", 2); len(froms) == 1 && err == nil {
+		return froms[0], true
+	} else {
+		return nil, false
+	}
+}
+
+// wrapper for templates
+func (m *Message) SingleFromStr() string {
+	if from, ok := m.SingleFrom(); ok {
+		return from.RFC5322AddrSpec()
+	} else {
+		return ""
+	}
+}
+
 func (m *Message) ToOrCcContains(needle *Addr) (bool, error) {
 
 	for _, fieldName := range []string{"To", "Cc"} {
 
-		addresses, err := m.ParseHeaderAddresses(fieldName, 10000)
+		addresses, err := ParseAddressesFromHeader(m.Header, fieldName, 10000)
 		if err != nil {
 			return false, err
 		}

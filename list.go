@@ -149,26 +149,34 @@ func (list *List) Save(m *mailutil.Message) error {
 
 func (list *List) Send(m *mailutil.Message) error {
 
+	// make a copy of the header
+
+	header := make(mail.Header)
+
+	for k, vals := range m.Header {
+		header[k] = append(header[k], vals...)
+	}
+
 	// rewrite message
 	// Header keys use this notation: https://golang.org/pkg/net/textproto/#CanonicalMIMEHeaderKey
 
-	m.Header["List-Id"] = []string{list.RFC5322NameAddr()}
-	m.Header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
-	m.Header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
-	m.Header["Subject"] = []string{list.PrefixSubject(m.Header.Get("Subject"))}
+	header["List-Id"] = []string{list.RFC5322NameAddr()}
+	header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
+	header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
+	header["Subject"] = []string{list.PrefixSubject(header.Get("Subject"))}
 
 	// DKIM signatures usually sign "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field and we should drop it. See RFC 6376 B.2.3.
 
-	m.Header["Dkim-Signature"] = []string{}
+	header["Dkim-Signature"] = []string{}
 
 	// rewrite "From" because the original value would not pass the DKIM check
 
 	if list.HideFrom {
-		m.Header["From"] = []string{list.RFC5322NameAddr()}
-		m.Header["Reply-To"] = []string{} // defaults to From
+		header["From"] = []string{list.RFC5322NameAddr()}
+		header["Reply-To"] = []string{} // defaults to From
 	} else {
 
-		oldFroms, err := m.ParseHeaderAddresses("From", 10)
+		oldFroms, err := mailutil.ParseAddressesFromHeader(header, "From", 10)
 		if err != nil {
 			return err
 		}
@@ -183,7 +191,7 @@ func (list *List) Send(m *mailutil.Message) error {
 			a.Domain = list.Domain
 			froms = append(froms, a.RFC5322NameAddr())
 		}
-		m.Header["From"] = []string{strings.Join(froms, ",")}
+		header["From"] = []string{strings.Join(froms, ",")}
 
 		// Reply-To
 		// Without rewriting "From", "Reply-To" would default to the from addresses, so let's mimic that.
@@ -193,12 +201,12 @@ func (list *List) Send(m *mailutil.Message) error {
 		for _, oldFrom := range oldFroms {
 			replyTo = append(replyTo, oldFrom.RFC5322NameAddr())
 		}
-		m.Header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
+		header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
 	}
 
 	// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."
 
-	m.Header["Sender"] = []string{}
+	header["Sender"] = []string{}
 
 	// send
 
@@ -213,7 +221,7 @@ func (list *List) Send(m *mailutil.Message) error {
 	}
 
 	// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
-	return mta.Send(list.BounceAddress(), receivers, m.Header, m.BodyReader())
+	return mta.Send(list.BounceAddress(), receivers, header, m.BodyReader())
 }
 
 // sends an email to a single user
@@ -324,20 +332,4 @@ func (list *List) DeleteModeratedMail(filename string) error {
 	}
 
 	return os.Remove(list.StorageFolder() + "/" + filename)
-}
-
-// As the message is currently rewritten before moderation, we have to find the actual from address here. That should be changed. Then we could move this back to mailutil/message.go.
-func (list *List) GetSingleFrom(m *mailutil.Message) (has bool, from *mailutil.Addr) {
-
-	if list.HideFrom {
-		// we can't recover the real from address
-		return
-	}
-
-	if froms, err := m.ParseHeaderAddresses("Reply-To", 2); len(froms) == 1 && err == nil {
-		has = true
-		from = froms[0]
-	}
-
-	return
 }

@@ -23,6 +23,14 @@ func init() {
 	WebUrl = "https://lists.example.com"
 }
 
+func expectMessage(t *testing.T, expect string) {
+	expect = strings.ReplaceAll(expect, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
+	got := <-messageChannel
+	if expect != got {
+		t.Fatalf("expected message %s, got %s", expect, got)
+	}
+}
+
 func lmtpTransaction(envelopeFrom string, envelopeTo []string, data io.Reader) error {
 
 	backend := &LMTPBackend{}
@@ -78,9 +86,16 @@ func TestCRUD(t *testing.T) {
 
 	// load list
 
-	listAddr, _ := mailutil.ParseAddress("list_a@example.com")
+	listAddrA, _ := mailutil.ParseAddress("list_a@example.com")
 
-	listA, err := GetList(listAddr)
+	listA, err := GetList(listAddrA)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	listAddrB, _ := mailutil.ParseAddress("list_b@example.com")
+
+	listB, err := GetList(listAddrB)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,12 +128,12 @@ func TestCRUD(t *testing.T) {
 
 	// add known
 
-	casey, err := mailutil.ParseAddress("casey@example.com")
+	chris, err := mailutil.ParseAddress("chris@example.com")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = listA.AddKnown(casey)
+	err = listB.AddKnown(chris)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,12 +154,12 @@ func TestCRUD(t *testing.T) {
 
 	// get members
 
-	members, err := listA.Members()
+	membersA, err := listA.Members()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectedListAInfo := ListInfo{
+	expectedListInfoA := ListInfo{
 		mailutil.Addr{
 			Display: "A",
 			Local:   "list_a",
@@ -152,9 +167,9 @@ func TestCRUD(t *testing.T) {
 		},
 	}
 
-	expectedMembers := []Membership{
+	expectedMembersA := []Membership{
 		Membership{
-			ListInfo:      expectedListAInfo,
+			ListInfo:      expectedListInfoA,
 			MemberAddress: "chris@example.com",
 			Receive:       true,
 			Moderate:      true,
@@ -162,7 +177,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         true,
 		},
 		Membership{
-			ListInfo:      expectedListAInfo,
+			ListInfo:      expectedListInfoA,
 			MemberAddress: "claire@example.com",
 			Receive:       true,
 			Moderate:      false,
@@ -170,7 +185,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListAInfo,
+			ListInfo:      expectedListInfoA,
 			MemberAddress: "noemi@example.net",
 			Receive:       false,
 			Moderate:      true,
@@ -178,7 +193,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListAInfo,
+			ListInfo:      expectedListInfoA,
 			MemberAddress: "norah@example.net",
 			Receive:       true,
 			Moderate:      true,
@@ -186,7 +201,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         true,
 		},
 		Membership{
-			ListInfo:      expectedListAInfo,
+			ListInfo:      expectedListInfoA,
 			MemberAddress: "oscar@example.org",
 			Receive:       false,
 			Moderate:      true,
@@ -195,31 +210,45 @@ func TestCRUD(t *testing.T) {
 		},
 	}
 
-	if len(expectedMembers) != len(members) {
-		t.Fatalf("expected %d members, got %d", len(expectedMembers), len(members))
+	if len(expectedMembersA) != len(membersA) {
+		t.Fatalf("expected %d members, got %d", len(expectedMembersA), len(membersA))
 	}
 
-	for i := range expectedMembers {
-		if members[i] != expectedMembers[i] {
+	for i := range expectedMembersA {
+		if membersA[i] != expectedMembersA[i] {
 			t.Fatal()
 		}
 	}
 
 	// get knowns
 
-	expectedKnowns := []string{
-		"casey@example.com",
+	expectedKnownsA := []string{
 		"noah@example.net",
 		"owen@example.org",
 	}
 
-	knowns, err := listA.Knowns()
+	expectedKnownsB := []string{
+		"chris@example.com",
+	}
+
+	knownsA, err := listA.Knowns()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	for i := range expectedKnowns {
-		if knowns[i] != expectedKnowns[i] {
+	knownsB, err := listB.Knowns()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for i := range expectedKnownsA {
+		if knownsA[i] != expectedKnownsA[i] {
+			t.Fatal()
+		}
+	}
+
+	for i := range expectedKnownsB {
+		if knownsB[i] != expectedKnownsB[i] {
 			t.Fatal()
 		}
 	}
@@ -256,8 +285,35 @@ Subject: [A] foo
 To: list_a@example.com, list_b@example.com
 
 Hello`,
+		`From: "chris via B" <list_b@example.com>
+List-Id: "B" <list_b@example.com>
+List-Post: <mailto:list_b@example.com>
+List-Unsubscribe: <mailto:list_b@example.com?subject=unsubscribe>
+Reply-To: <chris@example.com>
+Subject: [B] foo
+To: list_a@example.com, list_b@example.com
 
-		`Content-Type: text/plain; charset=utf-8
+Hello`,
+	}
+
+	for _, expect := range expectedMails {
+		expectMessage(t, expect)
+	}
+
+	// send mail which is moderated
+
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"}, strings.NewReader(
+		`From: norah@example.net
+To: list_b@example.com
+Subject: foo
+
+Hello`))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedMail := `Content-Type: text/plain; charset=utf-8
 From: "B" <list_b@example.com>
 Subject: [B] A message needs moderation
 To: otto@example.org
@@ -265,15 +321,9 @@ To: otto@example.org
 A message at "B" <list_b@example.com> is waiting for moderation.
 
 You can moderate it here: https://lists.example.com/mod/list_b%40example.com
-`,
-	}
+`
 
-	for i, expectedMail := range expectedMails {
-		expectedMail = strings.ReplaceAll(expectedMail, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
-		if expectedMail != <-messageChannel {
-			t.Fatalf("failed at message %d", i)
-		}
-	}
+	expectMessage(t, expectedMail)
 
 	// send looped mail with List-Id header
 
@@ -298,9 +348,19 @@ Hello`))
 		t.Fatal(err)
 	}
 
+	err = listB.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// check that list is deleted
 
-	listA, err = GetList(listAddr)
+	_, err = GetList(listAddrA)
+	if err != sql.ErrNoRows {
+		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
+	}
+
+	_, err = GetList(listAddrB)
 	if err != sql.ErrNoRows {
 		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
 	}

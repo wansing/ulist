@@ -53,6 +53,6 @@ transport_maps = sqlite:/etc/postfix/transport-maps.cf
 ```
 dbpath = /srv/ulist/data/ulist.sqlite
 query = SELECT CASE
-	WHEN EXISTS(SELECT 1 FROM list WHERE address = '%s') THEN "lmtp:unix:/var/spool/postfix/private/ulist-lmtp"
+	WHEN EXISTS(SELECT 1 FROM list WHERE local = '%u' AND domain = '%d') THEN "lmtp:unix:/var/spool/postfix/private/ulist-lmtp"
 END;
 ```

@@ -13,7 +13,14 @@
 				</tr>
 			</thead>
 			<tbody>
+				{{ $domain := "" }}
 				{{ range . }}
+					{{ if ne $domain .Domain }}
+						<tr>
+							<th colspan="6">{{ .Domain }}</th>
+						</tr>
+					{{ end }}
+					{{ $domain = .Domain }}
 					<tr>
 						<td>{{ .RFC5322AddrSpec }}</td>
 						<td>{{ .Display }}</td>

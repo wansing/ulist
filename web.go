@@ -656,7 +656,7 @@ func modHandler(ctx *Context, list *List) error {
 		}
 
 		if notifyDeleted > 0 {
-			successNotification += fmt.Sprintf("Deleted %d message.", notifyDeleted)
+			successNotification += fmt.Sprintf("Deleted %d messages.", notifyDeleted)
 		}
 
 		if successNotification != "" {

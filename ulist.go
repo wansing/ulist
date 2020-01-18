@@ -24,6 +24,7 @@ const WarnFormat = "\033[1;31m%s\033[0m"
 
 var GitCommit string // hash
 
+var gdprLogger *util.FileLogger
 var mta MTA = Sendmail{}
 
 var smtpsAuth = &client.SMTPS{}
@@ -46,6 +47,7 @@ func main() {
 	// database
 	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
 	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "database data source name")
+	gdprLogfile := flag.String("gdprlog", "gdpr.log", "GDPR log file path")
 
 	// mail flow
 	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "path of LMTP socket for accepting incoming mail")
@@ -71,7 +73,7 @@ func main() {
 	if Superadmin != "" {
 		superadminAddr, err := mailutil.ParseAddress(Superadmin)
 		if err != nil {
-			log.Fatalf("Error processing superadmin address: %v", err)
+			log.Fatalf("error processing superadmin address: %v", err)
 		}
 		Superadmin = superadminAddr.RFC5322AddrSpec()
 	}
@@ -83,14 +85,20 @@ func main() {
 	}
 
 	if unix.Access(SpoolDir, unix.W_OK) == nil {
-		log.Printf("Spool directory: %s", SpoolDir)
+		log.Printf("spool directory: %s", SpoolDir)
 	} else {
-		log.Fatalf("Spool directory %s is not writeable", SpoolDir)
+		log.Fatalf("spool directory %s is not writeable", SpoolDir)
+	}
+
+	// create GDPR logger
+
+	var err error
+	if gdprLogger, err = util.NewFileLogger(*gdprLogfile); err != nil {
+		log.Fatalf("error creating GDPR logfile: %v", err)
 	}
 
 	// open database
 
-	var err error
 	Db, err = OpenDatabase(*dbDriver, *dbDSN)
 	if err != nil {
 		log.Fatalln(err)
@@ -289,7 +297,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			admins, err := list.Admins()
 			if err != nil {
-				return SMTPErrorf(451, "Error getting list admins from database: %v", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "error getting list admins from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			for _, admin := range admins {
@@ -331,25 +339,30 @@ func (s *LMTPSession) data(r io.Reader) error {
 			switch err {
 			case nil: // member
 				if command == "unsubscribe" {
-					if err = list.RemoveMember(personalFrom); err == nil {
-						return nil
-					} else {
-						return SMTPErrorf(451, `Error unsubscribing: %v`, err)
+					if err = list.RemoveMember(personalFrom); err != nil {
+						return SMTPErrorf(451, "error unsubscribing: %v", err)
 					}
+					if err = gdprLogger.Printf("unsubscribing %s from the list %s, reason: email", personalFrom, list); err != nil {
+						return SMTPErrorf(451, "error unsubscribing: %v", err)
+					}
+					return nil
 				}
 			case sql.ErrNoRows: // not a member
+
 				if command == "subscribe" && list.PublicSignup {
-					if err = list.AddMember(personalFrom, true, false, false, false); err == nil {
-						return nil
-					} else {
-						return SMTPErrorf(451, `Error subscribing: %v`, err)
+					if err = list.AddMember(personalFrom, true, false, false, false); err != nil {
+						return SMTPErrorf(451, "error subscribing: %v", err)
 					}
+					if err = gdprLogger.Printf("subscribing %s to the list %s, reason: email", personalFrom, list); err != nil {
+						return SMTPErrorf(451, "error subscribing: %v", err)
+					}
+					return nil
 				}
 			default: // error
-				return SMTPErrorf(451, `Error getting membership from database: %v`, err)
+				return SMTPErrorf(451, "Error getting membership from database: %v", err)
 			}
 
-			// Go on or always return? Both might leak whether you're a member of the list.
+			return SMTPErrorf(554, "unknown command")
 		}
 
 		// determine action
@@ -370,21 +383,21 @@ func (s *LMTPSession) data(r io.Reader) error {
 		if action == Pass {
 
 			if err = list.Send(message); err != nil {
-				return SMTPErrorf(451, "Error forwarding email: %v", err)
+				return SMTPErrorf(451, "error forwarding email: %v", err)
 			}
 
-			log.Printf("Sent email over list: %s", list)
+			log.Printf("sent email over list: %s", list)
 
 		} else if action == Mod {
 
 			err = list.Save(message)
 			if err != nil {
-				return SMTPErrorf(471, "Error saving email to file: %v", err)
+				return SMTPErrorf(471, "error saving email to file: %v", err)
 			}
 
 			notifiedMembers, err := list.Notifieds()
 			if err != nil {
-				return SMTPErrorf(451, "Error getting list notifieds from database: %v", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "error getting list notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			for _, notifiedMember := range notifiedMembers {
@@ -393,7 +406,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 				}
 			}
 
-			log.Printf("Stored email for list: %s", list)
+			log.Printf("stored email for list: %s", list)
 		}
 	}
 

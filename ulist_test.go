@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"io"
+	"io/ioutil"
 	"log"
 	"os"
 	"strings"
@@ -10,10 +11,13 @@ import (
 
 	"github.com/emersion/go-smtp"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/util"
 )
 
 const testDbPath = "/tmp/ulist-test.sqlite3"
+const testGDPRLogPath = "/tmp/gdpr.log"
 
+var expectGDPRLog string
 var messageChannel = make(chan string, 100)
 
 func init() {
@@ -21,6 +25,12 @@ func init() {
 	SpoolDir = "/tmp/"
 	Testmode = true
 	WebUrl = "https://lists.example.com"
+
+	_ = os.Remove(testGDPRLogPath)
+	var err error
+	if gdprLogger, err = util.NewFileLogger(testGDPRLogPath); err != nil {
+		log.Fatalf("error creating GDPR logfile: %v", err)
+	}
 }
 
 func expectMessage(t *testing.T, expect string) {
@@ -100,6 +110,12 @@ func TestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// listB set public signup
+
+	if err = listB.Update("B", true, false, Pass, Pass, Pass, Mod); err != nil {
+		t.Fatal(err)
+	}
+
 	// add member
 
 	claire, err := mailutil.ParseAddress("claire@example.com")
@@ -159,7 +175,7 @@ func TestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	expectedListInfoA := ListInfo{
+	expectListInfoA := ListInfo{
 		mailutil.Addr{
 			Display: "A",
 			Local:   "list_a",
@@ -167,9 +183,9 @@ func TestCRUD(t *testing.T) {
 		},
 	}
 
-	expectedMembersA := []Membership{
+	expectMembersA := []Membership{
 		Membership{
-			ListInfo:      expectedListInfoA,
+			ListInfo:      expectListInfoA,
 			MemberAddress: "chris@example.com",
 			Receive:       true,
 			Moderate:      true,
@@ -177,7 +193,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         true,
 		},
 		Membership{
-			ListInfo:      expectedListInfoA,
+			ListInfo:      expectListInfoA,
 			MemberAddress: "claire@example.com",
 			Receive:       true,
 			Moderate:      false,
@@ -185,7 +201,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListInfoA,
+			ListInfo:      expectListInfoA,
 			MemberAddress: "noemi@example.net",
 			Receive:       false,
 			Moderate:      true,
@@ -193,7 +209,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         false,
 		},
 		Membership{
-			ListInfo:      expectedListInfoA,
+			ListInfo:      expectListInfoA,
 			MemberAddress: "norah@example.net",
 			Receive:       true,
 			Moderate:      true,
@@ -201,7 +217,7 @@ func TestCRUD(t *testing.T) {
 			Admin:         true,
 		},
 		Membership{
-			ListInfo:      expectedListInfoA,
+			ListInfo:      expectListInfoA,
 			MemberAddress: "oscar@example.org",
 			Receive:       false,
 			Moderate:      true,
@@ -210,24 +226,24 @@ func TestCRUD(t *testing.T) {
 		},
 	}
 
-	if len(expectedMembersA) != len(membersA) {
-		t.Fatalf("expected %d members, got %d", len(expectedMembersA), len(membersA))
+	if len(expectMembersA) != len(membersA) {
+		t.Fatalf("expected %d members, got %d", len(expectMembersA), len(membersA))
 	}
 
-	for i := range expectedMembersA {
-		if membersA[i] != expectedMembersA[i] {
+	for i := range expectMembersA {
+		if membersA[i] != expectMembersA[i] {
 			t.Fatal()
 		}
 	}
 
 	// get knowns
 
-	expectedKnownsA := []string{
+	expectKnownsA := []string{
 		"noah@example.net",
 		"owen@example.org",
 	}
 
-	expectedKnownsB := []string{
+	expectKnownsB := []string{
 		"chris@example.com",
 	}
 
@@ -241,14 +257,14 @@ func TestCRUD(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for i := range expectedKnownsA {
-		if knownsA[i] != expectedKnownsA[i] {
+	for i := range expectKnownsA {
+		if knownsA[i] != expectKnownsA[i] {
 			t.Fatal()
 		}
 	}
 
-	for i := range expectedKnownsB {
-		if knownsB[i] != expectedKnownsB[i] {
+	for i := range expectKnownsB {
+		if knownsB[i] != expectKnownsB[i] {
 			t.Fatal()
 		}
 	}
@@ -266,7 +282,7 @@ Hello`))
 		t.Fatal(err)
 	}
 
-	expectedMails := []string{
+	expectMails := []string{
 		`Content-Type: text/plain; charset=utf-8
 From: "A" <list_a@example.com>
 Subject: [A] Welcome
@@ -296,7 +312,7 @@ To: list_a@example.com, list_b@example.com
 Hello`,
 	}
 
-	for _, expect := range expectedMails {
+	for _, expect := range expectMails {
 		expectMessage(t, expect)
 	}
 
@@ -313,7 +329,7 @@ Hello`))
 		t.Fatal(err)
 	}
 
-	expectedMail := `Content-Type: text/plain; charset=utf-8
+	expectMessage(t, `Content-Type: text/plain; charset=utf-8
 From: "B" <list_b@example.com>
 Subject: [B] A message needs moderation
 To: otto@example.org
@@ -321,9 +337,32 @@ To: otto@example.org
 A message at "B" <list_b@example.com> is waiting for moderation.
 
 You can moderate it here: https://lists.example.com/mod/list_b%40example.com
-`
+`)
 
-	expectMessage(t, expectedMail)
+	// join a list which allows for public signup
+
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"}, strings.NewReader(
+		`From: cleo@example.com
+To: list_b@example.com
+Subject: subscribe
+
+Hello`))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectGDPRLog += "subscribing cleo@example.com to the list list_b@example.com, reason: email\n"
+
+	expectMessage(t, `Content-Type: text/plain; charset=utf-8
+From: "B" <list_b@example.com>
+Subject: [B] Welcome
+To: cleo@example.com
+
+Welcome to the mailing list list_b@example.com.
+
+If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_b@example.com.
+`)
 
 	// send mail which is moderated because of the "X-Spam-Status" header
 
@@ -339,7 +378,7 @@ Hello`))
 		t.Fatal(err)
 	}
 
-	expectedMail = `Content-Type: text/plain; charset=utf-8
+	expectMessage(t, `Content-Type: text/plain; charset=utf-8
 From: "A" <list_a@example.com>
 Subject: [A] A message needs moderation
 To: chris@example.com
@@ -347,9 +386,7 @@ To: chris@example.com
 A message at "A" <list_a@example.com> is waiting for moderation.
 
 You can moderate it here: https://lists.example.com/mod/list_a%40example.com
-`
-
-	expectMessage(t, expectedMail)
+`)
 
 	// send looped mail with List-Id header
 
@@ -361,10 +398,10 @@ Subject: foo
 
 Hello`))
 
-	var expectedErr string = "email loop detected: list_a@example.com"
+	var expectErr string = "email loop detected: list_a@example.com"
 
-	if err.Error() != expectedErr {
-		t.Fatalf("got %v, expected %s", err, expectedErr)
+	if err.Error() != expectErr {
+		t.Fatalf("got %v, expected %s", err, expectErr)
 	}
 
 	// delete list
@@ -389,5 +426,17 @@ Hello`))
 	_, err = GetList(listAddrB)
 	if err != sql.ErrNoRows {
 		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
+	}
+
+	// check GDPR log
+
+	gotBytes, err := ioutil.ReadFile(testGDPRLogPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(gotBytes[20:])
+
+	if got != expectGDPRLog {
+		t.Fatalf("got %s, expected %s", got, expectGDPRLog)
 	}
 }

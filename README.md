@@ -32,7 +32,6 @@ See `docs/integration` for examples.
 
 * more unit tests
 * opt-in after adding members manually
-* GDPR: log opt-in clicks separately
 * GDPR: require opt-in after n days or member won't get mails any more
 * more sophisticated bounce processing
 * append an unsubscribe link to the content

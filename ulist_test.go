@@ -300,7 +300,7 @@ Hello`,
 		expectMessage(t, expect)
 	}
 
-	// send mail which is moderated
+	// send mail which is moderated because of the "From" header
 
 	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"}, strings.NewReader(
 		`From: norah@example.net
@@ -321,6 +321,32 @@ To: otto@example.org
 A message at "B" <list_b@example.com> is waiting for moderation.
 
 You can moderate it here: https://lists.example.com/mod/list_b%40example.com
+`
+
+	expectMessage(t, expectedMail)
+
+	// send mail which is moderated because of the "X-Spam-Status" header
+
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"}, strings.NewReader(
+		`From: norah@example.net
+To: list_a@example.com
+Subject: foo
+X-Spam-Status: Yes, score=12
+
+Hello`))
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expectedMail = `Content-Type: text/plain; charset=utf-8
+From: "A" <list_a@example.com>
+Subject: [A] A message needs moderation
+To: chris@example.com
+
+A message at "A" <list_a@example.com> is waiting for moderation.
+
+You can moderate it here: https://lists.example.com/mod/list_a%40example.com
 `
 
 	expectMessage(t, expectedMail)

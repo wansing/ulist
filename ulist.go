@@ -302,13 +302,6 @@ func (s *LMTPSession) data(r io.Reader) error {
 			continue
 		}
 
-		// get froms
-
-		froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
-		if err != nil {
-			return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
-		}
-
 		// catch special subjects
 
 		command := strings.ToLower(strings.TrimSpace(message.Header.Get("Subject")))
@@ -316,6 +309,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 		if command == "subscribe" || command == "unsubscribe" {
 
 			// Subscribe and unsubscribe can only be done personally. So there must be one From address and no different Sender address.
+
+			froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
+			if err != nil {
+				return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
+			}
 
 			if len(froms) != 1 {
 				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
@@ -329,7 +327,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			personalFrom := froms[0]
 
-			_, err := list.GetMember(personalFrom.RFC5322AddrSpec())
+			_, err = list.GetMember(personalFrom.RFC5322AddrSpec())
 			switch err {
 			case nil: // member
 				if command == "unsubscribe" {
@@ -354,17 +352,14 @@ func (s *LMTPSession) data(r io.Reader) error {
 			// Go on or always return? Both might leak whether you're a member of the list.
 		}
 
-		// determine action by "From" addresses
-		//
-		// The SMTP envelope sender is ignored, because it's actually something different and also not relevant for DKIM.
-		// Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html
+		// determine action
 
-		action, reason, err := list.GetAction(froms)
-		if err != nil {
-			return SMTPErrorf(451, "Error getting user status from database: %v", err)
+		action, reason, smtpErr := list.GetAction(message)
+		if smtpErr != nil {
+			return smtpErr
 		}
 
-		log.Printf("Incoming mail: Envelope-From: %s, From: %v, List: %s, Action: %s, Reason: %s", s.envelopeFrom, froms, list, action, reason)
+		log.Printf(`Incoming mail: Envelope-From: %s, From: "%s", List: %s, Action: %s, Reason: %s`, s.envelopeFrom, message.Header.Get("From"), list, action, reason)
 
 		if action == Reject {
 			return SMTPErrUserNotExist

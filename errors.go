@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
+	"github.com/emersion/go-smtp"
 )
 
 // Some RCPT error codes in SMTP
@@ -21,7 +21,7 @@ import (
 
 var SMTPErrUserNotExist = SMTPErrorf(550, "user not found")
 
-func SMTPErrorf(code int, format string, a ...interface{}) error {
+func SMTPErrorf(code int, format string, a ...interface{}) *smtp.SMTPError {
 	return &smtp.SMTPError{
 		Code:         code,
 		EnhancedCode: smtp.EnhancedCodeNotSet,

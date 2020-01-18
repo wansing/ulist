@@ -38,7 +38,6 @@ See `docs/integration` for examples.
 * append an unsubscribe link to the content
 * remove unsubscribing via email (it's prone to spoofing and can leak memberships)
 * web UI: list creation permissions per domain
-* reject or always moderate emails which have been flagged as spam (`X-Spam` header or so)
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)

@@ -15,6 +15,7 @@ import (
 	"text/template"
 	"time"
 
+	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 	"github.com/shurcooL/httpfs/text/vfstemplate"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
@@ -61,14 +62,28 @@ func (l *List) HMAC(addr *mailutil.Addr) ([]byte, error) {
 	return mac.Sum(nil), nil
 }
 
-// returns max action depending on From addresses
-func (l *List) GetAction(froms []*mailutil.Addr) (Action, string, error) {
+// determines the action of an email by the "From" addresses and the "X-Spam-Status" header
+//
+// The SMTP envelope sender is ignored, because it's actually something different and a case for the spam filtering system.
+// (Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html)
+//
+// returns:
+//
+// * max action
+// * human-readable reason
+// * an smtp.SMTPError
+func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPError) {
 
 	action := l.ActionUnknown
 	reason := `all "From" addresses are unknown`
 
+	froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
+	if err != nil {
+		return Reject, "", SMTPErrorf(510, `could not parse "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
+	}
+
 	if len(froms) == 0 {
-		return Reject, "", errors.New("GetAction: no From addresses given")
+		return Reject, "", SMTPErrorf(510, `no "From" addresses given`) // 510 Bad email address
 	}
 
 	if len(froms) > 8 {
@@ -79,7 +94,7 @@ func (l *List) GetAction(froms []*mailutil.Addr) (Action, string, error) {
 
 		statuses, err := l.GetStatus(from.RFC5322AddrSpec())
 		if err != nil {
-			return Reject, "", err
+			return Reject, "", SMTPErrorf(451, "error getting status from database: %v", err)
 		}
 
 		for _, status := range statuses {
@@ -99,6 +114,15 @@ func (l *List) GetAction(froms []*mailutil.Addr) (Action, string, error) {
 				action = fromAction
 				reason = fmt.Sprintf("%s is %s", from, status)
 			}
+		}
+	}
+
+	// Pass becomes Mod if X-Spam-Status header starts with "yes"
+
+	if action == Pass {
+		if xssHeader := strings.ToLower(strings.TrimSpace(message.Header.Get("X-Spam-Status"))); strings.HasPrefix(xssHeader, "yes") {
+			action = Mod
+			reason = `X-Spam-Status starts with "yes"`
 		}
 	}
 

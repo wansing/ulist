@@ -214,7 +214,7 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 func (s *LMTPSession) Rcpt(to string) error {
 	err := s.rcpt(to)
 	if err != nil {
-		log.Println("[rcpt]", err)
+		log.Printf(`[rcpt] to "%s": %v`, to, err)
 	}
 	return err
 }

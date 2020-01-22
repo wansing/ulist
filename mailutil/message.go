@@ -2,6 +2,7 @@ package mailutil
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/mail"
@@ -117,7 +118,7 @@ func (m *Message) ViaList(listAddr *Addr) (bool, error) {
 
 		listId, err := ParseAddress(field)
 		if err != nil {
-			return false, err
+			return false, fmt.Errorf(`with list-id "%s": %v`, field, err)
 		}
 
 		if listAddr.Equals(listId) {

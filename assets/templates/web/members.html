@@ -31,7 +31,7 @@
 			<tbody>
 				{{ range . }}
 				<tr id="{{ .EscapeMemberAddress }}">
-					<td>{{ .MemberAddress }}</td>
+					<td><address>{{ .MemberAddress }}</address></td><!-- some language processors mess up email addresses, hope that the address tag prevents that -->
 					<td>{{ if .Receive  }}yes{{ else }}no{{ end }}</td>
 					<td>{{ if .Moderate }}yes{{ else }}no{{ end }}</td>
 					<td>{{ if .Notify   }}yes{{ else }}no{{ end }}</td>

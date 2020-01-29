@@ -285,7 +285,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			return SMTPErrorf(554, "email loop detected: %s", list)
 		}
 
-		// listAddress must be in To or Cc in order to avoid spam
+		// listAddress must be in To or Cc in order to avoid Bcc spam
 
 		if toOrCcContains, err := message.ToOrCcContains(&list.Addr); err != nil {
 			return SMTPErrorf(510, "error parsing To/Cc addresses: %v", err) // 510 Bad email address

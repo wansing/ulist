@@ -32,6 +32,12 @@ func init() {
 	}
 }
 
+func expectErr(t *testing.T, err error, expect string) {
+	if err.Error() != expect {
+		t.Fatalf("got %v, expected %s", err, expect)
+	}
+}
+
 func expectMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message string) {
 
 	message = strings.ReplaceAll(message, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
@@ -101,11 +107,9 @@ func TestCRUD(t *testing.T) {
 
 	// create list with "+bounces" address
 
-	var expectErr = `list address can't end with "+bounces"`
+	_, err = CreateList("list_b+bounces@example.com", "B", "otto@example.org", testAlerter{})
 
-	if _, err = CreateList("list_b+bounces@example.com", "B", "otto@example.org", testAlerter{}); err.Error() != expectErr {
-		t.Fatalf("expexted %v, got %v", expectErr, err)
-	}
+	expectErr(t, err, `list address can't end with "+bounces"`)
 
 	// create list
 
@@ -427,11 +431,7 @@ Subject: foo
 
 Hello`)
 
-	expectErr = "email loop detected: list_a@example.com"
-
-	if err.Error() != expectErr {
-		t.Fatalf("got %v, expected %s", err, expectErr)
-	}
+	expectErr(t, err, "email loop detected: list_a@example.com")
 
 	// send email to bounce address
 
@@ -442,11 +442,7 @@ Subject: foo
 
 bar`)
 
-	expectErr = `bounce address "list_a+bounces@example.com" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "some_envelope@example.com"`
-
-	if err.Error() != expectErr {
-		t.Fatalf("got %v, expected %s", err, expectErr)
-	}
+	expectErr(t, err, `bounce address "list_a+bounces@example.com" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "some_envelope@example.com"`)
 
 	// send bounce notification to list address
 
@@ -457,11 +453,7 @@ Subject: foo
 
 bar`)
 
-	expectErr = `got bounce notification (with empty Envelope-From) to non-bounce address: "list_a@example.com"`
-
-	if err.Error() != expectErr {
-		t.Fatalf("got %v, expected %s", err, expectErr)
-	}
+	expectErr(t, err, `got bounce notification (with empty Envelope-From) to non-bounce address: "list_a@example.com"`)
 
 	// send bounce notification to bounce address
 
@@ -478,6 +470,40 @@ Subject: [A] Bounce notification: Some Subject
 To: list_a+bounces@example.com
 
 This is a bounce notification blah blah.`)
+
+	// send message with list not in To or Cc
+
+	err = lmtpTransaction("some_envelope@example.net", []string{"list_a@example.com"},
+		`From: norah@example.net
+To: something_else@example.com
+Cc: more@example.com
+Subject: Some Subject
+
+Hi`)
+
+	expectErr(t, err, "list address is not in To or Cc")
+
+	// send same message with list in Cc
+
+	err = lmtpTransaction("some_envelope@example.net", []string{"list_a@example.com"},
+		`From: norah@example.net
+To: something_else@example.com
+Cc: more@example.com, list_a@example.com
+Subject: Some Subject
+
+Hi`)
+
+	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com", "claire@example.com", "norah@example.net"},
+`Cc: more@example.com, list_a@example.com
+From: "norah via A" <list_a@example.com>
+List-Id: "A" <list_a@example.com>
+List-Post: <mailto:list_a@example.com>
+List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
+Reply-To: <norah@example.net>
+Subject: [A] Some Subject
+To: something_else@example.com
+
+Hi`)
 
 	// delete list
 

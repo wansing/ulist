@@ -12,11 +12,9 @@ import (
 )
 
 func writeMail(writer io.Writer, header mail.Header, body io.Reader) error {
-
 	if err := mailutil.WriteHeader(writer, header); err != nil {
 		return err
 	}
-
 	_, err := io.Copy(writer, body)
 	return err
 }
@@ -28,7 +26,7 @@ type MTA interface {
 type DummyMTA struct{}
 
 func (DummyMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, _ io.Reader) error {
-	log.Printf(`[DummyMTA] Not sending email "%s" from %s to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
+	log.Printf(`[DummyMTA] not sending email "%s" from %s to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
 	return nil
 }
 
@@ -36,7 +34,7 @@ type Sendmail struct{}
 
 func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
 
-	log.Printf(`[Sendmail] Sending email "%s" from %s to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
+	log.Printf(`[Sendmail] sending email "%s" with envelope-from "%s" to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
 
 	args := []string{"-i", "-f", envelopeFrom, "--"}
 	args = append(args, envelopeTo...)
@@ -66,16 +64,24 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 	return nil
 }
 
-type ChanMTA chan string
+// used for testing
+type ChanMTAMessage struct {
+	EnvelopeFrom string
+	EnvelopeTo   []string
+	Message      string
+}
 
-func (c ChanMTA) Send(_ string, _ []string, header mail.Header, body io.Reader) error {
+// used for testing
+type ChanMTA chan *ChanMTAMessage
+
+func (c ChanMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
 
 	var buf = &bytes.Buffer{}
 	if err := writeMail(buf, header, body); err != nil {
 		return err
 	}
 
-	chan string(c) <- buf.String()
+	chan *ChanMTAMessage(c) <- &ChanMTAMessage{envelopeFrom, envelopeTo, buf.String()}
 
 	return nil
 }

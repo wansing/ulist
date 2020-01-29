@@ -234,14 +234,9 @@ func (list *List) Send(m *mailutil.Message) error {
 
 	// send
 
-	receiverMembers, err := list.Receivers()
+	receivers, err := list.Receivers()
 	if err != nil {
 		return err
-	}
-
-	receivers := []string{}
-	for _, receiverMember := range receiverMembers {
-		receivers = append(receivers, receiverMember.MemberAddress)
 	}
 
 	// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
@@ -260,10 +255,7 @@ func (list *List) sendUserMail(recipient string, subject string, body io.Reader)
 	return mta.Send(list.BounceAddress(), []string{recipient}, header, body)
 }
 
-// Wraps List.sendUserMail with these changes:
-// - multiple recipients
-// - body is a template
-// - errors are notified only
+// like sendUserMail with multiple recipients, and body is a template
 func (l *List) sendUsersMailTemplate(recipients []*mailutil.Addr, subject string, body *template.Template, alerter util.Alerter) {
 
 	bodybuf := &bytes.Buffer{}
@@ -330,7 +322,7 @@ func (list *List) sendPublicOptIn(recipient *mailutil.Addr) error {
 	return nil
 }
 
-func (list *List) sendNotification(recipient string) error {
+func (list *List) sendModerationNotification(recipient string) error {
 
 	body := &bytes.Buffer{}
 

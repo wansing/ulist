@@ -41,22 +41,6 @@ func ReadMessage(r io.Reader) (*Message, error) {
 	}, nil
 }
 
-/*func (m *Message) Copy() *Message {
-
-	c := &Message{
-		Header: make(mail.Header),
-		Body:   make([]byte, len(m.Body)),
-	}
-
-	for k, vals := range m.Header {
-		c.Header[k] = append(c.Header[k], vals...)
-	}
-
-	copy(c.Body, m.Body)
-
-	return c
-}*/
-
 func (m *Message) BodyReader() io.Reader {
 	return bytes.NewReader(m.Body)
 }

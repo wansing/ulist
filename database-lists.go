@@ -2,6 +2,8 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
+	"strings"
 
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
@@ -40,8 +42,12 @@ func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter
 		return nil, err
 	}
 
+	if strings.HasSuffix(listAddr.Local, BounceAddressSuffix) {
+		return nil, fmt.Errorf(`list address can't end with "%s"`, BounceAddressSuffix)
+	}
+
 	if listName != "" {
-		listAddr.Display = listName // override parsed
+		listAddr.Display = listName // override parsed display name
 	}
 
 	adminMods, errs := mailutil.ParseAddresses(rawAdminMods, BatchLimit)

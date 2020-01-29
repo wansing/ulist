@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sys/unix"
 	"io"
 	"log"
+	"net/mail"
 	"os"
 	"os/signal"
 	"strings"
@@ -223,12 +224,18 @@ func (s *LMTPSession) rcpt(toStr string) error {
 
 	to, err := mailutil.ParseAddress(toStr)
 	if err != nil {
-		return SMTPErrorf(510, `Error parsing Envelope-To address "%s": %v`, to, err) // 510 Bad email address
+		return SMTPErrorf(510, `error parsing Envelope-To address "%s": %v`, to, err) // 510 Bad email address
 	}
 
-	if strings.HasSuffix(to.Local, BounceAddressSuffix) && !s.isBounce {
-		return SMTPErrorf(541, `Bounce address "%s" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "%s"`, to, s.envelopeFrom)
-		// 541 The recipient address rejected your message
+	toBounce := strings.HasSuffix(to.Local, BounceAddressSuffix)
+
+	switch {
+	case toBounce && !s.isBounce:
+		return SMTPErrorf(541, `bounce address "%s" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "%s"`, to, s.envelopeFrom) // 541 The recipient address rejected your message
+	case !toBounce && s.isBounce:
+		return SMTPErrorf(541, `got bounce notification (with empty Envelope-From) to non-bounce address: "%s"`, to) // 541 The recipient address rejected your message
+	case toBounce && s.isBounce:
+		to.Local = strings.TrimSuffix(to.Local, BounceAddressSuffix)
 	}
 
 	list, err := GetList(to)
@@ -291,7 +298,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	for _, list := range s.Lists {
 
-		// catch bounces
+		// if it's a bounce, forward it to all admins
 
 		if s.isBounce {
 
@@ -300,14 +307,18 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(451, "error getting list admins from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
-			for _, admin := range admins {
-				err = list.sendUserMail(admin.MemberAddress, "Bounce notification: "+message.Header.Get("Subject"), message.BodyReader())
-				if err != nil {
-					log.Printf(WarnFormat, err)
-				}
+			header := make(mail.Header)
+			header["From"] = []string{list.RFC5322NameAddr()}
+			header["To"] = []string{list.BounceAddress()}
+			header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] Bounce notification: " + message.Header.Get("Subject")}
+			header["Content-Type"] = []string{"text/plain; charset=utf-8"}
+
+			err = mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
+			if err != nil {
+				log.Printf(WarnFormat, err)
 			}
 
-			continue
+			continue // to next list
 		}
 
 		// catch special subjects
@@ -348,7 +359,6 @@ func (s *LMTPSession) data(r io.Reader) error {
 					return nil
 				}
 			case sql.ErrNoRows: // not a member
-
 				if command == "subscribe" && list.PublicSignup {
 					if err = list.AddMember(personalFrom, true, false, false, false); err != nil {
 						return SMTPErrorf(451, "error subscribing: %v", err)
@@ -372,7 +382,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			return smtpErr
 		}
 
-		log.Printf(`Incoming mail: Envelope-From: %s, From: "%s", List: %s, Action: %s, Reason: %s`, s.envelopeFrom, message.Header.Get("From"), list, action, reason)
+		log.Printf(`incoming mail: Envelope-From: %s, From: "%s", List: %s, Action: %s, Reason: %s`, s.envelopeFrom, message.Header.Get("From"), list, action, reason)
 
 		if action == Reject {
 			return SMTPErrUserNotExist
@@ -395,13 +405,13 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(471, "error saving email to file: %v", err)
 			}
 
-			notifiedMembers, err := list.Notifieds()
+			notifieds, err := list.Notifieds()
 			if err != nil {
 				return SMTPErrorf(451, "error getting list notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
-			for _, notifiedMember := range notifiedMembers {
-				if err = list.sendNotification(notifiedMember.MemberAddress); err != nil {
+			for _, notified := range notifieds {
+				if err = list.sendModerationNotification(notified); err != nil {
 					log.Printf(WarnFormat, err)
 				}
 			}

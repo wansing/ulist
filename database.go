@@ -98,10 +98,10 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	// list
 	db.createListStmt = db.MustPrepare("INSERT INTO list (display, local, domain, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) VALUES (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)")
 	db.getListStmt = db.MustPrepare("SELECT id, display, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known FROM list WHERE local = ? AND domain = ?")
-	db.getAdminsStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND admin = 1 ORDER BY address")
+	db.getAdminsStmt = db.MustPrepare("SELECT address FROM member WHERE list = ? AND admin = 1 ORDER BY address")
 	db.getMembersStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? ORDER BY address")
-	db.getNotifiedsStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND notify = 1 ORDER BY address")
-	db.getReceiversStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? AND receive = 1 ORDER BY address")
+	db.getNotifiedsStmt = db.MustPrepare("SELECT address FROM member WHERE list = ? AND notify = 1 ORDER BY address")
+	db.getReceiversStmt = db.MustPrepare("SELECT address FROM member WHERE list = ? AND receive = 1 ORDER BY address")
 	db.removeListStmt = db.MustPrepare("DELETE FROM list WHERE id = ?")
 	db.removeListKnownsStmt = db.MustPrepare("DELETE FROM known WHERE list = ?")
 	db.removeListMembersStmt = db.MustPrepare("DELETE FROM member WHERE list = ?")

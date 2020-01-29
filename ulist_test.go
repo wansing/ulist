@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -18,7 +17,7 @@ const testDbPath = "/tmp/ulist-test.sqlite3"
 const testGDPRLogPath = "/tmp/gdpr.log"
 
 var expectGDPRLog string
-var messageChannel = make(chan string, 100)
+var messageChannel = make(chan *ChanMTAMessage, 100)
 
 func init() {
 	mta = ChanMTA(messageChannel)
@@ -33,15 +32,31 @@ func init() {
 	}
 }
 
-func expectMessage(t *testing.T, expect string) {
-	expect = strings.ReplaceAll(expect, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
+func expectMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message string) {
+
+	message = strings.ReplaceAll(message, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
 	got := <-messageChannel
-	if expect != got {
-		t.Fatalf("expected message %s, got %s", expect, got)
+
+	if envelopeFrom != got.EnvelopeFrom {
+		t.Fatalf("expected envelope-from %s, got %s", envelopeFrom, got.EnvelopeFrom)
+	}
+
+	if len(envelopeTo) != len(got.EnvelopeTo) {
+		t.Fatalf("expected %d envelope-to addresses, got %d", len(envelopeTo), len(got.EnvelopeTo))
+	}
+
+	for i := range envelopeTo {
+		if envelopeTo[i] != got.EnvelopeTo[i] {
+			t.Fatalf("expected envelope-to %s, got %s", envelopeTo[i], got.EnvelopeTo[i])
+		}
+	}
+
+	if message != got.Message {
+		t.Fatalf("expected message %s, got %s", message, got.Message)
 	}
 }
 
-func lmtpTransaction(envelopeFrom string, envelopeTo []string, data io.Reader) error {
+func lmtpTransaction(envelopeFrom string, envelopeTo []string, data string) error {
 
 	backend := &LMTPBackend{}
 
@@ -62,7 +77,7 @@ func lmtpTransaction(envelopeFrom string, envelopeTo []string, data io.Reader) e
 		}
 	}
 
-	return session.Data(data)
+	return session.Data(strings.NewReader(data))
 }
 
 type testAlerter struct{}
@@ -82,6 +97,14 @@ func TestCRUD(t *testing.T) {
 	Db, _ = OpenDatabase("sqlite3", testDbPath)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// create list with "+bounces" address
+
+	var expectErr = `list address can't end with "+bounces"`
+
+	if _, err = CreateList("list_b+bounces@example.com", "B", "otto@example.org", testAlerter{}); err.Error() != expectErr {
+		t.Fatalf("expexted %v, got %v", expectErr, err)
 	}
 
 	// create list
@@ -271,19 +294,18 @@ func TestCRUD(t *testing.T) {
 
 	// send mail to two lists
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"}, strings.NewReader(
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"},
 		`From: chris@example.com
 To: list_a@example.com, list_b@example.com
 Subject: foo
 
-Hello`))
+Hello`)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectMails := []string{
-		`Content-Type: text/plain; charset=utf-8
+	expectMessage(t, "list_a+bounces@example.com", []string{"claire@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "A" <list_a@example.com>
 Subject: [A] Welcome
 To: claire@example.com
@@ -291,8 +313,9 @@ To: claire@example.com
 Welcome to the mailing list list_a@example.com.
 
 If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_a@example.com.
-`,
-		`From: "chris via A" <list_a@example.com>
+`)
+
+	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com", "claire@example.com", "norah@example.net"}, `From: "chris via A" <list_a@example.com>
 List-Id: "A" <list_a@example.com>
 List-Post: <mailto:list_a@example.com>
 List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
@@ -300,8 +323,9 @@ Reply-To: <chris@example.com>
 Subject: [A] foo
 To: list_a@example.com, list_b@example.com
 
-Hello`,
-		`From: "chris via B" <list_b@example.com>
+Hello`)
+
+	expectMessage(t, "list_b+bounces@example.com", []string{"otto@example.org"}, `From: "chris via B" <list_b@example.com>
 List-Id: "B" <list_b@example.com>
 List-Post: <mailto:list_b@example.com>
 List-Unsubscribe: <mailto:list_b@example.com?subject=unsubscribe>
@@ -309,27 +333,22 @@ Reply-To: <chris@example.com>
 Subject: [B] foo
 To: list_a@example.com, list_b@example.com
 
-Hello`,
-	}
-
-	for _, expect := range expectMails {
-		expectMessage(t, expect)
-	}
+Hello`)
 
 	// send mail which is moderated because of the "From" header
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"}, strings.NewReader(
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"},
 		`From: norah@example.net
 To: list_b@example.com
 Subject: foo
 
-Hello`))
+Hello`)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectMessage(t, `Content-Type: text/plain; charset=utf-8
+	expectMessage(t, "list_b+bounces@example.com", []string{"otto@example.org"}, `Content-Type: text/plain; charset=utf-8
 From: "B" <list_b@example.com>
 Subject: [B] A message needs moderation
 To: otto@example.org
@@ -341,12 +360,12 @@ You can moderate it here: https://lists.example.com/mod/list_b%40example.com
 
 	// join a list which allows for public signup
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"}, strings.NewReader(
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"},
 		`From: cleo@example.com
 To: list_b@example.com
 Subject: subscribe
 
-Hello`))
+Hello`)
 
 	if err != nil {
 		t.Fatal(err)
@@ -354,7 +373,7 @@ Hello`))
 
 	expectGDPRLog += "subscribing cleo@example.com to the list list_b@example.com, reason: email\n"
 
-	expectMessage(t, `Content-Type: text/plain; charset=utf-8
+	expectMessage(t, "list_b+bounces@example.com", []string{"cleo@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "B" <list_b@example.com>
 Subject: [B] Welcome
 To: cleo@example.com
@@ -366,19 +385,19 @@ If you want to unsubscribe, please send an email with the subject "unsubscribe" 
 
 	// send mail which is moderated because of the "X-Spam-Status" header
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"}, strings.NewReader(
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"},
 		`From: norah@example.net
 To: list_a@example.com
 Subject: foo
 X-Spam-Status: Yes, score=12
 
-Hello`))
+Hello`)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	expectMessage(t, `Content-Type: text/plain; charset=utf-8
+	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "A" <list_a@example.com>
 Subject: [A] A message needs moderation
 To: chris@example.com
@@ -388,21 +407,77 @@ A message at "A" <list_a@example.com> is waiting for moderation.
 You can moderate it here: https://lists.example.com/mod/list_a%40example.com
 `)
 
+	expectMessage(t, "list_a+bounces@example.com", []string{"norah@example.net"}, `Content-Type: text/plain; charset=utf-8
+From: "A" <list_a@example.com>
+Subject: [A] A message needs moderation
+To: norah@example.net
+
+A message at "A" <list_a@example.com> is waiting for moderation.
+
+You can moderate it here: https://lists.example.com/mod/list_a%40example.com
+`)
+
 	// send looped mail with List-Id header
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"}, strings.NewReader(
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"},
 		`From: chris@example.com
 To: list_a@example.com
 List-Id: "A" <list_a@example.com>
 Subject: foo
 
-Hello`))
+Hello`)
 
-	var expectErr string = "email loop detected: list_a@example.com"
+	expectErr = "email loop detected: list_a@example.com"
 
 	if err.Error() != expectErr {
 		t.Fatalf("got %v, expected %s", err, expectErr)
 	}
+
+	// send email to bounce address
+
+	err = lmtpTransaction("some_envelope@example.com", []string{"list_a+bounces@example.com"},
+		`From: chris@example.com
+To: list_a@example.com
+Subject: foo
+
+bar`)
+
+	expectErr = `bounce address "list_a+bounces@example.com" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "some_envelope@example.com"`
+
+	if err.Error() != expectErr {
+		t.Fatalf("got %v, expected %s", err, expectErr)
+	}
+
+	// send bounce notification to list address
+
+	err = lmtpTransaction("", []string{"list_a@example.com"},
+		`From: chris@example.com
+To: list_a@example.com
+Subject: foo
+
+bar`)
+
+	expectErr = `got bounce notification (with empty Envelope-From) to non-bounce address: "list_a@example.com"`
+
+	if err.Error() != expectErr {
+		t.Fatalf("got %v, expected %s", err, expectErr)
+	}
+
+	// send bounce notification to bounce address
+
+	err = lmtpTransaction("", []string{"list_a+bounces@example.com"},
+		`From: chris@example.com
+To: list_a@example.com
+Subject: Some Subject
+
+This is a bounce notification blah blah.`)
+
+	expectMessage(t, "", []string{"chris@example.com", "norah@example.net"}, `Content-Type: text/plain; charset=utf-8
+From: "A" <list_a@example.com>
+Subject: [A] Bounce notification: Some Subject
+To: list_a+bounces@example.com
+
+This is a bounce notification blah blah.`)
 
 	// delete list
 

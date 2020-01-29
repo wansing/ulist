@@ -23,7 +23,7 @@ func (l *List) Update(display string, publicSignup, hideFrom bool, actionMod, ac
 	return err
 }
 
-func (l *List) Admins() ([]Membership, error) {
+func (l *List) Admins() ([]string, error) {
 	return l.membersWhere(Db.getAdminsStmt)
 }
 
@@ -37,14 +37,29 @@ func (l *List) GetMember(memberAddress string) (*Membership, error) {
 }
 
 func (l *List) Members() ([]Membership, error) {
-	return l.membersWhere(Db.getMembersStmt)
+
+	rows, err := Db.getMembersStmt.Query(l.Id)
+	if err != nil && err != sql.ErrNoRows {
+		return nil, err
+	}
+	defer rows.Close()
+
+	members := []Membership{}
+	for rows.Next() {
+		m := Membership{}
+		m.ListInfo = l.ListInfo
+		rows.Scan(&m.MemberAddress, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+		members = append(members, m)
+	}
+
+	return members, nil
 }
 
-func (l *List) Notifieds() ([]Membership, error) {
+func (l *List) Notifieds() ([]string, error) {
 	return l.membersWhere(Db.getNotifiedsStmt)
 }
 
-func (l *List) Receivers() ([]Membership, error) {
+func (l *List) Receivers() ([]string, error) {
 	return l.membersWhere(Db.getReceiversStmt)
 }
 
@@ -193,7 +208,7 @@ func (l *List) Delete() error {
 	return tx.Commit()
 }
 
-func (l *List) membersWhere(stmt *sql.Stmt) ([]Membership, error) {
+func (l *List) membersWhere(stmt *sql.Stmt) ([]string, error) {
 
 	rows, err := stmt.Query(l.Id)
 	if err != nil && err != sql.ErrNoRows {
@@ -201,17 +216,12 @@ func (l *List) membersWhere(stmt *sql.Stmt) ([]Membership, error) {
 	}
 	defer rows.Close()
 
-	members := []Membership{}
+	members := []string{}
 	for rows.Next() {
-		m := Membership{}
-		m.ListInfo = l.ListInfo
-		rows.Scan(&m.MemberAddress, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+		var m string
+		rows.Scan(&m)
 		members = append(members, m)
 	}
-
-	sort.Slice(members, func(i, j int) bool {
-		return members[i].MemberAddress < members[j].MemberAddress
-	})
 
 	return members, nil
 }

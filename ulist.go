@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ const WarnFormat = "\033[1;31m%s\033[0m"
 var GitCommit string // hash
 
 var gdprLogger *util.FileLogger
+var lastLogId uint32 = 0
 var mta MTA = Sendmail{}
 
 var smtpsAuth = &client.SMTPS{}
@@ -147,7 +149,7 @@ func main() {
 
 			// don't panic, we want a graceful shutdown
 			if !strings.Contains(err.Error(), "use of closed network connection") {
-				log.Printf("Error Listening: %v", err)
+				log.Printf("error listening: %v", err)
 			}
 
 			// ensure graceful shutdown
@@ -160,7 +162,7 @@ func main() {
 	signal.Notify(sigintChannel, os.Interrupt, syscall.SIGTERM) // SIGINT (Interrupt) or SIGTERM
 	<-sigintChannel
 
-	log.Println("Received shutdown signal")
+	log.Println("received shutdown signal")
 	s.Close()
 }
 
@@ -179,35 +181,31 @@ func (LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error)
 // implements smtp.Session
 type LMTPSession struct {
 	Lists        []*List
-	envelopeFrom string // for logging only
 	isBounce     bool   // indicated by empty Envelope-From
+	logId        uint32
+}
+
+func (s *LMTPSession) logf(format string, a ...interface{}) {
+	log.Printf("[% 6d] " + format, append([]interface{}{s.logId}, a...)...)
 }
 
 // "RSET". Aborts the current mail transaction.
 func (s *LMTPSession) Reset() {
 	s.Lists = nil
-	s.envelopeFrom = ""
 	s.isBounce = false
+	s.logId = atomic.AddUint32(&lastLogId, 1)
 }
 
 // "MAIL FROM". Starts a new mail transaction.
 func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
+	s.logf("envelope-from: %s", envelopeFrom)
 
-	envelopeFrom = strings.TrimSpace(envelopeFrom) // bounce detection does not require parsing
-
-	if envelopeFrom == "" {
+	if envelopeFrom = strings.TrimSpace(envelopeFrom); envelopeFrom == "" {
 		s.isBounce = true
-	} else {
-		if envelopeFromAddr, err := mailutil.ParseAddress(envelopeFrom); err == nil {
-			envelopeFrom = envelopeFromAddr.RFC5322AddrSpec()
-		} else {
-			return SMTPErrorf(510, `Error parsing Envelope-From address "%s": %v`, envelopeFrom, err) // 510 Bad email address
-		}
 	}
 
-	s.envelopeFrom = envelopeFrom
 	return nil
 }
 
@@ -215,25 +213,27 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 func (s *LMTPSession) Rcpt(to string) error {
 	err := s.rcpt(to)
 	if err != nil {
-		log.Printf(`[rcpt] to "%s": %v`, to, err)
+		s.logf("\033[1;31mrcpt error: %v\033[0m", err) // red color
 	}
 	return err
 }
 
 func (s *LMTPSession) rcpt(toStr string) error {
 
+	s.logf("envelope-to: %s", toStr)
+
 	to, err := mailutil.ParseAddress(toStr)
 	if err != nil {
-		return SMTPErrorf(510, `error parsing Envelope-To address "%s": %v`, to, err) // 510 Bad email address
+		return SMTPErrorf(510, "parsing envelope-to address: %v", err) // 510 Bad email address
 	}
 
 	toBounce := strings.HasSuffix(to.Local, BounceAddressSuffix)
 
 	switch {
 	case toBounce && !s.isBounce:
-		return SMTPErrorf(541, `bounce address "%s" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "%s"`, to, s.envelopeFrom) // 541 The recipient address rejected your message
+		return SMTPErrorf(541, "bounce address accepts only bounce notifications (with empty envelope-from)") // 541 The recipient address rejected your message
 	case !toBounce && s.isBounce:
-		return SMTPErrorf(541, `got bounce notification (with empty Envelope-From) to non-bounce address: "%s"`, to) // 541 The recipient address rejected your message
+		return SMTPErrorf(541, "got bounce notification (with empty envelope-from) to non-bounce address") // 541 The recipient address rejected your message
 	case toBounce && s.isBounce:
 		to.Local = strings.TrimSuffix(to.Local, BounceAddressSuffix)
 	}
@@ -243,7 +243,7 @@ func (s *LMTPSession) rcpt(toStr string) error {
 	case err == sql.ErrNoRows:
 		return SMTPErrUserNotExist
 	case err != nil:
-		return SMTPErrorf(451, "Error getting list from database: %v", err) // 451 Aborted – Local error in processing
+		return SMTPErrorf(451, "getting list from database: %v", err) // 451 Aborted – Local error in processing
 	}
 
 	s.Lists = append(s.Lists, list)
@@ -255,7 +255,7 @@ func (s *LMTPSession) rcpt(toStr string) error {
 func (s *LMTPSession) Data(r io.Reader) error {
 	err := s.data(r)
 	if err != nil {
-		log.Println("[data]", err)
+		s.logf("\033[1;31mdata error: %v\033[0m", err) // red color
 	}
 	return err
 }
@@ -270,31 +270,76 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	message, err := mailutil.ReadMessage(r)
 	if err != nil {
-		return SMTPErrorf(442, "Error reading message: %v", err) // 442 The connection was dropped during the transmission
+		return SMTPErrorf(442, "reading message: %v", err) // 442 The connection was dropped during the transmission
 	}
 
-	// Do some checks (and maybe rejections) before sending any email
+	// logging
 
+	if from := message.Header.Get("From"); from != "" {
+		s.logf("from: %s", from)
+	}
+
+	if to := message.Header.Get("To"); to != "" {
+		s.logf("to: %s", to)
+	}
+
+	if cc := message.Header.Get("Cc"); cc != "" {
+		s.logf("cc: %s", cc)
+	}
+
+	if subject := mailutil.TryMimeDecode(message.Header.Get("Subject")); subject != "" {
+		s.logf("subject: %s", subject)
+	}
+
+	// do as many checks (and maybe rejections) as possible before sending any email
+
+	// check that lists are in to or cc, avoiding bcc spam
+
+	tos, err := mailutil.ParseAddressesFromHeader(message.Header, "To", 10000)
+	if err != nil {
+		return SMTPErrorf(510, "parsing to addresses: %v", err)
+	}
+
+	ccs, err := mailutil.ParseAddressesFromHeader(message.Header, "Cc", 10000)
+	if err != nil {
+		return SMTPErrorf(510, "parsing cc addresses: %v", err)
+	}
+
+	nextList:
 	for _, list := range s.Lists {
 
-		// avoid loops
-
-		if via, err := message.ViaList(&list.Addr); err != nil {
-			return SMTPErrorf(510, "error checking for mail loops: %v", err) // 510 Bad email address
-		} else if via {
-			return SMTPErrorf(554, "email loop detected: %s", list)
+		for _, to := range tos {
+			if list.Equals(to) {
+				continue nextList
+			}
 		}
 
-		// listAddress must be in To or Cc in order to avoid Bcc spam
+		for _, cc := range ccs {
+			if list.Equals(cc) {
+				continue nextList
+			}
+		}
 
-		if toOrCcContains, err := message.ToOrCcContains(&list.Addr); err != nil {
-			return SMTPErrorf(510, "error parsing To/Cc addresses: %v", err) // 510 Bad email address
-		} else if !toOrCcContains {
-			return SMTPErrorf(541, "list address is not in To or Cc") // 541 The recipient address rejected your message
+		return SMTPErrorf(541, "list address %s is not in To or Cc", list) // 541 The recipient address rejected your message
+	}
+
+	// check for mailing list loops
+
+	for _, field := range message.Header["List-Id"] {
+
+		listId, err := mailutil.ParseAddress(field)
+		if err != nil {
+			return SMTPErrorf(510, `parsing list-id field "%s": %v`, field, err) // 510 Bad email address
+		}
+
+		for _, list := range s.Lists {
+			if list.Equals(listId) {
+				return SMTPErrorf(554, "email loop detected: %s", list)
+			}
 		}
 	}
 
-	// process mails
+	// process mail
 
 	for _, list := range s.Lists {
 
@@ -304,7 +349,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			admins, err := list.Admins()
 			if err != nil {
-				return SMTPErrorf(451, "error getting list admins from database: %v", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "getting list admins from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			header := make(mail.Header)
@@ -315,8 +360,10 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			err = mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
 			if err != nil {
-				log.Printf(WarnFormat, err)
+				s.logf("forwarding bounce notification: %v", err)
 			}
+
+			s.logf("forwarded bounce to admins of %s through %s", list, mta)
 
 			continue // to next list
 		}
@@ -331,11 +378,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
 			if err != nil {
-				return SMTPErrorf(510, `Error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
+				return SMTPErrorf(510, `error parsing "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
 			}
 
 			if len(froms) != 1 {
-				return SMTPErrorf(513, `Expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
+				return SMTPErrorf(513, `expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
 			}
 
 			if senders, err := mailutil.ParseAddressesFromHeader(message.Header, "Sender", 2); len(senders) > 0 && err == nil {
@@ -351,25 +398,25 @@ func (s *LMTPSession) data(r io.Reader) error {
 			case nil: // member
 				if command == "unsubscribe" {
 					if err = list.RemoveMember(personalFrom); err != nil {
-						return SMTPErrorf(451, "error unsubscribing: %v", err)
+						return SMTPErrorf(451, "unsubscribing: %v", err)
 					}
 					if err = gdprLogger.Printf("unsubscribing %s from the list %s, reason: email", personalFrom, list); err != nil {
-						return SMTPErrorf(451, "error unsubscribing: %v", err)
+						return SMTPErrorf(451, "unsubscribing: %v", err)
 					}
 					return nil
 				}
 			case sql.ErrNoRows: // not a member
 				if command == "subscribe" && list.PublicSignup {
 					if err = list.AddMember(personalFrom, true, false, false, false); err != nil {
-						return SMTPErrorf(451, "error subscribing: %v", err)
+						return SMTPErrorf(451, "subscribing: %v", err)
 					}
 					if err = gdprLogger.Printf("subscribing %s to the list %s, reason: email", personalFrom, list); err != nil {
-						return SMTPErrorf(451, "error subscribing: %v", err)
+						return SMTPErrorf(451, "subscribing: %v", err)
 					}
 					return nil
 				}
 			default: // error
-				return SMTPErrorf(451, "Error getting membership from database: %v", err)
+				return SMTPErrorf(451, "getting membership from database: %v", err)
 			}
 
 			return SMTPErrorf(554, "unknown command")
@@ -382,7 +429,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			return smtpErr
 		}
 
-		log.Printf(`incoming mail: Envelope-From: %s, From: "%s", List: %s, Action: %s, Reason: %s`, s.envelopeFrom, message.Header.Get("From"), list, action, reason)
+		s.logf("list: %s, action: %s, reason: %s", list, action, reason)
 
 		if action == Reject {
 			return SMTPErrUserNotExist
@@ -393,30 +440,30 @@ func (s *LMTPSession) data(r io.Reader) error {
 		if action == Pass {
 
 			if err = list.Send(message); err != nil {
-				return SMTPErrorf(451, "error forwarding email: %v", err)
+				return SMTPErrorf(451, "sending email: %v", err)
 			}
 
-			log.Printf("sent email over list: %s", list)
+			s.logf("sent email through %s", mta)
 
 		} else if action == Mod {
 
 			err = list.Save(message)
 			if err != nil {
-				return SMTPErrorf(471, "error saving email to file: %v", err)
+				return SMTPErrorf(471, "saving email to file: %v", err)
 			}
 
 			notifieds, err := list.Notifieds()
 			if err != nil {
-				return SMTPErrorf(451, "error getting list notifieds from database: %v", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "getting notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			for _, notified := range notifieds {
 				if err = list.sendModerationNotification(notified); err != nil {
-					log.Printf(WarnFormat, err)
+					s.logf("sending moderation notificiation: %v", err)
 				}
 			}
 
-			log.Printf("stored email for list: %s", list)
+			s.logf("stored email")
 		}
 	}
 

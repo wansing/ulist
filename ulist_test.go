@@ -442,7 +442,7 @@ Subject: foo
 
 bar`)
 
-	expectErr(t, err, `bounce address "list_a+bounces@example.com" accepts only bounce notifications (with empty Envelope-From), got Envelope-From: "some_envelope@example.com"`)
+	expectErr(t, err, "bounce address accepts only bounce notifications (with empty envelope-from)")
 
 	// send bounce notification to list address
 
@@ -453,7 +453,7 @@ Subject: foo
 
 bar`)
 
-	expectErr(t, err, `got bounce notification (with empty Envelope-From) to non-bounce address: "list_a@example.com"`)
+	expectErr(t, err, "got bounce notification (with empty envelope-from) to non-bounce address")
 
 	// send bounce notification to bounce address
 
@@ -481,7 +481,7 @@ Subject: Some Subject
 
 Hi`)
 
-	expectErr(t, err, "list address is not in To or Cc")
+	expectErr(t, err, "list address list_a@example.com is not in To or Cc")
 
 	// send same message with list in Cc
 

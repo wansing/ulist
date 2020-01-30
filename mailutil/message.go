@@ -2,7 +2,6 @@ package mailutil
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"net/mail"
@@ -75,42 +74,4 @@ func (m *Message) SingleFromStr() string {
 	} else {
 		return ""
 	}
-}
-
-func (m *Message) ToOrCcContains(needle *Addr) (bool, error) {
-
-	for _, fieldName := range []string{"To", "Cc"} {
-
-		addresses, err := ParseAddressesFromHeader(m.Header, fieldName, 10000)
-		if err != nil {
-			return false, err
-		}
-
-		for _, addr := range addresses {
-			if addr.Equals(needle) {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
-func (m *Message) ViaList(listAddr *Addr) (bool, error) {
-
-	for _, field := range m.Header["List-Id"] {
-
-		listId, err := ParseAddress(field)
-		if err != nil {
-			return false, fmt.Errorf(`with list-id "%s": %v`, field, err)
-		}
-
-		if listAddr.Equals(listId) {
-			return true, nil
-		}
-	}
-
-	// we could also check the Received header (RFC 5321 4.4) here
-
-	return false, nil
 }

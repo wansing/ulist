@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"log"
 	"net/mail"
 	"os/exec"
 
@@ -21,20 +20,22 @@ func writeMail(writer io.Writer, header mail.Header, body io.Reader) error {
 
 type MTA interface {
 	Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error
+	String() string
 }
 
 type DummyMTA struct{}
 
 func (DummyMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, _ io.Reader) error {
-	log.Printf(`[DummyMTA] not sending email "%s" from %s to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
 	return nil
+}
+
+func (DummyMTA) String() string {
+	return "DummyMTA"
 }
 
 type Sendmail struct{}
 
 func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
-
-	log.Printf(`[Sendmail] sending email "%s" with envelope-from "%s" to %d recipients`, mailutil.TryMimeDecode(header.Get("Subject")), envelopeFrom, len(envelopeTo))
 
 	args := []string{"-i", "-f", envelopeFrom, "--"}
 	args = append(args, envelopeTo...)
@@ -43,7 +44,7 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 
 	stdin, err := sendmail.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("starting sendmail: %v", err)
+		return err
 	}
 
 	if err := sendmail.Start(); err != nil {
@@ -62,6 +63,10 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 	}
 
 	return nil
+}
+
+func (Sendmail) String() string {
+	return "sendmail"
 }
 
 // used for testing
@@ -84,4 +89,8 @@ func (c ChanMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Head
 	chan *ChanMTAMessage(c) <- &ChanMTAMessage{envelopeFrom, envelopeTo, buf.String()}
 
 	return nil
+}
+
+func (ChanMTA) String() string {
+	return "ChanMTA"
 }

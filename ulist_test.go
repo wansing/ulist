@@ -437,7 +437,7 @@ Hello`)
 
 	err = lmtpTransaction("some_envelope@example.com", []string{"list_a+bounces@example.com"},
 		`From: chris@example.com
-To: list_a@example.com
+To: list_a+bounces@example.com
 Subject: foo
 
 bar`)
@@ -459,7 +459,7 @@ bar`)
 
 	err = lmtpTransaction("", []string{"list_a+bounces@example.com"},
 		`From: chris@example.com
-To: list_a@example.com
+To: list_a+bounces@example.com
 Subject: Some Subject
 
 This is a bounce notification blah blah.`)

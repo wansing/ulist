@@ -293,34 +293,37 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	// do as many checks (and maybe rejections) as possible before sending any email
 
-	// check that lists are in to or cc, avoiding bcc spam
+	if !s.isBounce {
 
-	tos, err := mailutil.ParseAddressesFromHeader(message.Header, "To", 10000)
-	if err != nil {
-		return SMTPErrorf(510, "parsing to addresses: %v", err)
-	}
+		// check that lists are in to or cc, avoiding bcc spam
 
-	ccs, err := mailutil.ParseAddressesFromHeader(message.Header, "Cc", 10000)
-	if err != nil {
-		return SMTPErrorf(510, "parsing cc addresses: %v", err)
-	}
-
-	nextList:
-	for _, list := range s.Lists {
-
-		for _, to := range tos {
-			if list.Equals(to) {
-				continue nextList
-			}
+		tos, err := mailutil.ParseAddressesFromHeader(message.Header, "To", 10000)
+		if err != nil {
+			return SMTPErrorf(510, "parsing to addresses: %v", err)
 		}
 
-		for _, cc := range ccs {
-			if list.Equals(cc) {
-				continue nextList
-			}
+		ccs, err := mailutil.ParseAddressesFromHeader(message.Header, "Cc", 10000)
+		if err != nil {
+			return SMTPErrorf(510, "parsing cc addresses: %v", err)
 		}
 
-		return SMTPErrorf(541, "list address %s is not in To or Cc", list) // 541 The recipient address rejected your message
+		nextList:
+		for _, list := range s.Lists {
+
+			for _, to := range tos {
+				if list.Equals(to) {
+					continue nextList
+				}
+			}
+
+			for _, cc := range ccs {
+				if list.Equals(cc) {
+					continue nextList
+				}
+			}
+
+			return SMTPErrorf(541, "list address %s is not in To or Cc", list) // 541 The recipient address rejected your message
+		}
 	}
 
 	// check for mailing list loops

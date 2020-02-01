@@ -1,6 +1,8 @@
 package mailutil
 
 import (
+	"bytes"
+	"net/mail"
 	"strings"
 	"testing"
 )
@@ -64,5 +66,76 @@ func TestFold(t *testing.T) {
 				t.Errorf("got line with length %d", len(line))
 			}
 		}
+	}
+}
+
+func TestParseAddressesFromHeader(t *testing.T) {
+
+	tests := []struct {
+		header        mail.Header
+		expectedAddrs []Addr
+		expectedErrs  []string
+	}{
+		{
+			mail.Header{
+				"From": []string{`"Bert" <bert@example.net>`},
+				"Subject": []string{"Hello"},
+				"To": []string{`"Ally" <alice@example.com>, claire@example.org`},
+			},
+			[]Addr{Addr{"Ally", "alice", "example.com"}, Addr{"", "claire", "example.org"}},
+			[]string{},
+		},
+		{
+			mail.Header{
+				"From": []string{`"Bert" <bert@example.net>`},
+				"Subject": []string{"Hello"},
+				"To": []string{`"Ally" <alice@example.com>, claire@example.org, <dan@missing-tld`},
+			},
+			[]Addr{Addr{"Ally", "alice", "example.com"}, Addr{"", "claire", "example.org"}},
+			[]string{`error parsing line "<dan@missing-tld": mail: unclosed angle-addr`},
+		},
+	}
+
+	for _, test := range tests {
+		result, _ := ParseAddressesFromHeader(test.header, "To", 100)
+		for i, r := range result {
+			if *r != test.expectedAddrs[i] {
+				t.Errorf("got %v, want %s", r, test.expectedAddrs[i])
+			}
+		}
+		/*for i, e := range errs {
+			if e.Error() != test.expectedErrs[i] {
+				t.Errorf("got %v, want %s", e, test.expectedErrs[i])
+			}
+		}*/
+	}
+}
+
+func TestWriteHeader(t *testing.T) {
+
+	h := mail.Header{
+		"From": []string{`"Bert" <bert@example.net>`},
+		"Mime-Version": []string{"1.0"},
+		"Received": []string{"from example.net by example.com with ESMTP", "from foo by bar with ESMTPA id baz", "from foo by bar with ESMTPSA id baz", "from foo with LMTPA", "by bar with LMTPSA id baz"},
+		"Subject": []string{"Hello"},
+		"To": []string{`"Ally" <alice@example.com>, claire@example.org`},
+		"User-Agent": []string{"foo"},
+		"X-Originating-IP": []string{"198.51.100.1"},
+	}
+
+	got := &bytes.Buffer{}
+	WriteHeader(got, h)
+
+	expect := `Received: from example.net by example.com with ESMTP
+From: "Bert" <bert@example.net>
+MIME-Version: 1.0
+Subject: Hello
+To: "Ally" <alice@example.com>, claire@example.org
+
+`
+	expect = strings.ReplaceAll(expect, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) has CRLF line breaks
+
+	if got.String() != expect {
+		t.Errorf("got %s, want %s", got.String(), expect)
 	}
 }

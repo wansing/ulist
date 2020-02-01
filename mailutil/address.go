@@ -22,9 +22,9 @@ type Addr struct {
 	Domain  string // RFC 5322 domain
 }
 
-// compares Local and Domain
+// compares Local and Domain case-insensitively
 func (a *Addr) Equals(other *Addr) bool {
-	return a.Local == other.Local && a.Domain == other.Domain
+	return strings.ToLower(a.Local) == strings.ToLower(other.Local) && strings.ToLower(a.Domain) == strings.ToLower(other.Domain)
 }
 
 // RFC 5322
@@ -32,9 +32,6 @@ func (a *Addr) Equals(other *Addr) bool {
 //
 // Because the local-part might be quoted, we let golang do the work
 func (a *Addr) RFC5322AddrSpec() string {
-	if a == nil {
-		return ""
-	}
 	s := (&mail.Address{Address: a.Local + "@" + a.Domain}).String()
 	return s[1 : len(s)-1] // strip first and last char, which is '<' and '>'
 }
@@ -102,8 +99,9 @@ func ParseAddress(rfc5322Address string) (*Addr, error) {
 // expects one RFC 5322 address-list per line, lax parsing, for user input
 func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error) {
 
-	for _, line := range strings.Split(rawAddresses, "\r\n") {
+	for _, line := range strings.Split(rawAddresses, "\n") {
 
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}

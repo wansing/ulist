@@ -406,7 +406,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 					if err = gdprLogger.Printf("unsubscribing %s from the list %s, reason: email", personalFrom, list); err != nil {
 						return SMTPErrorf(451, "unsubscribing: %v", err)
 					}
-					return nil
+					continue // next list
 				}
 			case sql.ErrNoRows: // not a member
 				if command == "subscribe" && list.PublicSignup {
@@ -416,7 +416,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 					if err = gdprLogger.Printf("subscribing %s to the list %s, reason: email", personalFrom, list); err != nil {
 						return SMTPErrorf(451, "subscribing: %v", err)
 					}
-					return nil
+					continue // next list
 				}
 			default: // error
 				return SMTPErrorf(451, "getting membership from database: %v", err)

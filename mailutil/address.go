@@ -143,5 +143,5 @@ func (a *Addr) DisplayOrLocal() string {
 	} else {
 		result = a.Local
 	}
-	return strings.SplitN(result, "@", 1)[0]
+	return strings.SplitN(result, "@", 2)[0]
 }

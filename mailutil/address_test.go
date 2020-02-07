@@ -190,6 +190,7 @@ func TestDisplayOrLocal(t *testing.T) {
 	}{
 		{&Addr{Local: "anna", Domain: "example.com"}, "anna"},
 		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, "Anna"},
+		{&Addr{Display: "anna@example.com", Local: "anna", Domain: "example.com"}, "anna"},
 	}
 
 	for _, test := range tests {

@@ -182,7 +182,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 
 		if err := f(ctx); err != nil {
 			if err != ErrUnauthorized && err != ErrNoList {
-				log.Println("[web]", err)
+				log.Printf("[web-ui] %v", err)
 			}
 			_ = ctx.Execute(errorTemplate, err)
 		}
@@ -267,7 +267,7 @@ func webui() {
 
 		listener, err = net.Listen(network, WebListen)
 		if err == nil {
-			log.Printf("Web listener: %s://%s ", network, WebListen)
+			log.Printf("web listener: %s://%s ", network, WebListen)
 		} else {
 			log.Fatalln(err)
 		}
@@ -276,7 +276,7 @@ func webui() {
 			if err := os.Chmod(WebListen, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
 				log.Fatalln(err)
 			} else {
-				log.Println("Set permissions of", WebListen, "to", os.ModePerm)
+				log.Printf("permissions of %s set to %#o", WebListen, os.ModePerm)
 			}
 		}
 
@@ -477,7 +477,7 @@ func deleteHandler(ctx *Context, list *List) error {
 			if err := list.Delete(); err != nil {
 				ctx.Alertf("Error deleting list: %v", err)
 			} else {
-				log.Printf("%s deleted the mailing list: %s", ctx.User, list)
+				log.Printf("[web-ui] %s deleted the mailing list %s", ctx.User, list)
 				ctx.Successf("The mailing list %s has been deleted.", list)
 				ctx.Redirect("/")
 				return nil
@@ -533,7 +533,7 @@ func memberHandler(ctx *Context, list *List) error {
 
 		err = list.UpdateMember(m.MemberAddress, receive, moderate, notify, admin)
 		if err != nil {
-			log.Println("[web updatemember]", err)
+			log.Printf("[web-ui] error updating member: %v", err)
 		}
 
 		ctx.Successf("The membership settings of %s in %s have been saved.", m.MemberAddress, list)
@@ -601,7 +601,7 @@ func modHandler(ctx *Context, list *List) error {
 
 			m, err := list.Open(emlFilename)
 			if err != nil {
-				log.Println("[web/openeml]", err)
+				log.Printf("[web-ui] error opening eml file %s: %v", emlFilename, err)
 				continue
 			}
 
@@ -628,9 +628,10 @@ func modHandler(ctx *Context, list *List) error {
 			case "pass":
 
 				if err = list.Send(m); err != nil {
-					ctx.Alertf("Error sending email over list: %v", err)
+					log.Printf("[web-ui] error sending email through list %s: %v", list, err)
+					ctx.Alertf("Error sending email through list: %v", err)
 				} else {
-					log.Println("Processed email successfully")
+					log.Printf("[web-ui] email sent through list %s", list)
 					notifyPassed++
 					_ = list.DeleteModeratedMail(emlFilename)
 				}
@@ -754,7 +755,7 @@ func modHandler(ctx *Context, list *List) error {
 
 		message, err := list.Open(emlFilename)
 		if err != nil {
-			log.Println("[web openemls]", err)
+			log.Printf("[web-ui] error opening eml file %s: %v", emlFilename, err)
 			continue
 		}
 

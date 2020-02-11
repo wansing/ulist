@@ -505,6 +505,30 @@ To: something_else@example.com
 
 Hi`)
 
+	// test encoding of special characters
+
+	if _, err = CreateList("list_ue@example.com", "List Ü", "user_ue@example.com", testAlerter{}); err != nil {
+		t.Fatal(err)
+	}
+
+	err = lmtpTransaction("user_ue@example.com", []string{"list_ue@example.com"},
+		`From: =?utf-8?q?User_=C3=9C?= <user_ue@example.com>
+To: "List Ü" <list_ue@example.com>
+Subject: =?utf-8?q?Hell=C3=B6?=
+
+Hi`) // note that the "To" header is not encoded properly
+
+	expectMessage(t, "list_ue+bounces@example.com", []string{"user_ue@example.com"},
+`From: =?utf-8?q?User_=C3=9C_via_List_=C3=9C?= <list_ue@example.com>
+List-Id: =?utf-8?q?List_=C3=9C?= <list_ue@example.com>
+List-Post: <mailto:list_ue@example.com>
+List-Unsubscribe: <mailto:list_ue@example.com?subject=unsubscribe>
+Reply-To: =?utf-8?q?User_=C3=9C?= <user_ue@example.com>
+Subject: =?utf-8?q?[List_=C3=9C]_Hell=C3=B6?=
+To: "List Ü" <list_ue@example.com>
+
+Hi`) // the "To" header stays unencoded, as we're minimally invasive here
+
 	// delete list
 
 	err = listA.Delete()

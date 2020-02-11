@@ -18,7 +18,7 @@ var ErrInvalidAddress = errors.New("invalid email address")
 
 type Addr struct {
 	Display string // RFC 5322 display-name
-	Local   string // RFC 5322 local-part
+	Local   string // RFC 5322 local-part, only a subset of ASCII is allowed
 	Domain  string // RFC 5322 domain
 }
 

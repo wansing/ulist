@@ -1,6 +1,7 @@
 package main
 
 import (
+	"mime"
 	"strings"
 
 	"github.com/wansing/ulist/mailutil"
@@ -19,9 +20,10 @@ func (li *ListInfo) BounceAddress() string {
 }
 
 func (li *ListInfo) PrefixSubject(subject string) string {
+	subject = mailutil.TryMimeDecode(subject)
 	var prefix = "[" + li.DisplayOrLocal() + "]"
 	if firstSquareBracket := strings.Index(subject, "["); firstSquareBracket == -1 || firstSquareBracket != strings.Index(subject, prefix) { // square bracket not found or before prefix
 		subject = prefix + " " + subject
 	}
-	return subject
+	return mime.QEncoding.Encode("utf-8", subject)
 }

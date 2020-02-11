@@ -46,6 +46,7 @@ func TestPrefixSubject(t *testing.T) {
 		{"Re: [ <- Bracket", "[List] Re: [ <- Bracket"},
 		{"[Bar] [List]", "[List] [Bar] [List]"},
 		{"Re: [Bar] [List]", "[List] Re: [Bar] [List]"},
+		{"=?UTF-8?Q?=5BList=5D_Hello?=", "[List] Hello"},
 	}
 
 	for _, test := range tests {

@@ -174,7 +174,6 @@ func (LMTPBackend) Login(_ *smtp.ConnectionState, _, _ string) (smtp.Session, er
 
 func (LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error) {
 	s := &LMTPSession{}
-	s.Reset()
 	return s, nil
 }
 
@@ -193,13 +192,13 @@ func (s *LMTPSession) logf(format string, a ...interface{}) {
 func (s *LMTPSession) Reset() {
 	s.Lists = nil
 	s.isBounce = false
-	s.logId = atomic.AddUint32(&lastLogId, 1)
 }
 
 // "MAIL FROM". Starts a new mail transaction.
 func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
+	s.logId = atomic.AddUint32(&lastLogId, 1)
 	s.logf("envelope-from: %s", envelopeFrom)
 
 	if envelopeFrom = strings.TrimSpace(envelopeFrom); envelopeFrom == "" {

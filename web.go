@@ -458,7 +458,7 @@ func createHandler(ctx *Context) error {
 	if ctx.r.Method == http.MethodPost {
 
 		if list, err := CreateList(data.Address, data.Name, data.AdminMods, ctx); err == nil {
-			ctx.Successf("The mailing list %s has been created.", data.Address)
+			ctx.Successf("The mailing list %s has been created.", list)
 			ctx.Redirect("/members/" + list.EscapeAddress())
 			return nil
 		} else {

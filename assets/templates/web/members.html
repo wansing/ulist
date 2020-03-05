@@ -32,10 +32,10 @@
 				{{ range . }}
 				<tr id="{{ .EscapeMemberAddress }}">
 					<td><address>{{ .MemberAddress }}</address></td><!-- some language processors mess up email addresses, hope that the address tag prevents that -->
-					<td>{{ if .Receive  }}yes{{ else }}no{{ end }}</td>
-					<td>{{ if .Moderate }}yes{{ else }}no{{ end }}</td>
-					<td>{{ if .Notify   }}yes{{ else }}no{{ end }}</td>
-					<td>{{ if .Admin    }}yes{{ else }}no{{ end }}</td>
+					<td>{{ if .Receive  }}&#10004;{{ end }}</td>
+					<td>{{ if .Moderate }}&#10004;{{ end }}</td>
+					<td>{{ if .Notify   }}&#10004;{{ end }}</td>
+					<td>{{ if .Admin    }}&#10004;{{ end }}</td>
 					<td><a href="/members/{{ $.EscapeAddress }}/{{ .EscapeMemberAddress }}">Edit</a></td>
 				</tr>
 				{{ end }}

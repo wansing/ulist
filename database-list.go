@@ -10,6 +10,11 @@ import (
 	"github.com/wansing/ulist/util"
 )
 
+func IsList(address *mailutil.Addr) (bool, error) {
+	var exists bool
+	return exists, Db.isListStmt.QueryRow(address.Local, address.Domain).Scan(&exists)
+}
+
 // *List is never nil, error can be sql.ErrNoRows
 func GetList(listAddress *mailutil.Addr) (*List, error) {
 	l := &List{}

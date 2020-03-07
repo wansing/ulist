@@ -25,6 +25,7 @@ type Database struct {
 	getMembershipsStmt    *sql.Stmt
 	getNotifiedsStmt      *sql.Stmt
 	getReceiversStmt      *sql.Stmt
+	isListStmt            *sql.Stmt
 	isKnownStmt           *sql.Stmt
 	removeKnownStmt       *sql.Stmt
 	removeListStmt        *sql.Stmt
@@ -102,6 +103,7 @@ func OpenDatabase(backend, connStr string) (*Database, error) {
 	db.getMembersStmt = db.MustPrepare("SELECT address, receive, moderate, notify, admin FROM member WHERE list = ? ORDER BY address")
 	db.getNotifiedsStmt = db.MustPrepare("SELECT address FROM member WHERE list = ? AND notify = 1 ORDER BY address")
 	db.getReceiversStmt = db.MustPrepare("SELECT address FROM member WHERE list = ? AND receive = 1 ORDER BY address")
+	db.isListStmt = db.MustPrepare("SELECT COUNT(1) FROM list WHERE local = ? AND domain = ?") // "select count(1)" never returns sql.ErrNoRows
 	db.removeListStmt = db.MustPrepare("DELETE FROM list WHERE id = ?")
 	db.removeListKnownsStmt = db.MustPrepare("DELETE FROM known WHERE list = ?")
 	db.removeListMembersStmt = db.MustPrepare("DELETE FROM member WHERE list = ?")

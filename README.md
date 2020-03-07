@@ -43,6 +43,8 @@ See `docs/integration` for examples.
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)
+* docs: mention the postfix transport_maps [interface](http://www.postfix.org/DATABASE_README.html#types) interface instead of letting postfix access the ulist database
+* maybe issue with Apple Mail: two line breaks after header
 
 ## Omitted features
 

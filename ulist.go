@@ -45,7 +45,7 @@ var WebUrl string
 func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
-	log.Printf("Starting ulist %s", GitCommit)
+	log.Printf("starting ulist %s", GitCommit)
 
 	// database
 	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
@@ -54,6 +54,7 @@ func main() {
 
 	// mail flow
 	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "path of LMTP socket for accepting incoming mail")
+	socketmapSock := flag.String("socketmap", "", "path of socketmap socket")
 	flag.StringVar(&SpoolDir, "spool", "spool", "spool folder for unmoderated messages")
 
 	// web interface
@@ -108,7 +109,7 @@ func main() {
 	}
 	defer Db.Close()
 
-	log.Printf(`Database: %s "%s"`, *dbDriver, *dbDSN)
+	log.Printf("database: %s %s", *dbDriver, *dbDSN)
 
 	// authenticator availability
 
@@ -124,7 +125,11 @@ func main() {
 
 	// run web interface
 
-	webui()
+	if *socketmapSock != "" {
+		go sockmapsrv(*lmtpSockAddr, *socketmapSock)
+	}
+
+	go webui()
 
 	// listen via LMTP (blocking)
 

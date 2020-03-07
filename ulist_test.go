@@ -94,7 +94,7 @@ func (testAlerter) Alertf(format string, a ...interface{}) {
 
 func (testAlerter) Successf(format string, a ...interface{}) {}
 
-func TestCRUD(t *testing.T) {
+func TestUlist(t *testing.T) {
 
 	var err error
 

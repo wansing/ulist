@@ -199,7 +199,7 @@ func (sd Subdir) Open(name string) (http.File, error) {
 	return sd.FileSystem.Open(sd.path + name)
 }
 
-// Sets up the httprouter and runs the web ui listener in a goroutine.
+// Sets up the httprouter and starts the web ui listener.
 // Db should be initialized at this point.
 func webui() {
 
@@ -251,44 +251,41 @@ func webui() {
 	mux.POST("/mod/:list/:page", middleware(true, loadList(requireModPermission(modHandler))))
 	mux.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(viewHandler))))
 
-	go func() {
+	var err error
+	var listener net.Listener
 
-		var err error
-		var listener net.Listener
+	var network string
 
-		var network string
+	if strings.Contains(WebListen, ":") {
+		network = "tcp"
+	} else {
+		network = "unix"
+		_ = util.RemoveSocket(WebListen) // remove old socket
+	}
 
-		if strings.Contains(WebListen, ":") {
-			network = "tcp"
-		} else {
-			network = "unix"
-			_ = util.RemoveSocket(WebListen) // remove old socket
-		}
+	listener, err = net.Listen(network, WebListen)
+	if err == nil {
+		log.Printf("web listener: %s://%s ", network, WebListen)
+	} else {
+		log.Fatalln(err)
+	}
 
-		listener, err = net.Listen(network, WebListen)
-		if err == nil {
-			log.Printf("web listener: %s://%s ", network, WebListen)
-		} else {
+	if network == "unix" {
+		if err := os.Chmod(WebListen, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
 			log.Fatalln(err)
+		} else {
+			log.Printf("permissions of %s set to %#o", WebListen, os.ModePerm)
 		}
+	}
 
-		if network == "unix" {
-			if err := os.Chmod(WebListen, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
-				log.Fatalln(err)
-			} else {
-				log.Printf("permissions of %s set to %#o", WebListen, os.ModePerm)
-			}
-		}
+	server := &http.Server{
+		Handler:      sessionManager.LoadAndSave(mux),
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+	}
 
-		server := &http.Server{
-			Handler:      sessionManager.LoadAndSave(mux),
-			ReadTimeout:  30 * time.Second,
-			WriteTimeout: 30 * time.Second,
-		}
-
-		server.Serve(listener)
-		server.Close()
-	}()
+	server.Serve(listener)
+	server.Close()
 }
 
 // helper functions

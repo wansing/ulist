@@ -103,7 +103,7 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 
 				if exists, err := IsList(listAddr); err == nil {
 					if exists {
-						conn.Write(util.EncodeNetstring("OK lmtp:unix:"+lmtpSock))
+						conn.Write(util.EncodeNetstring("OK lmtp:unix:" + lmtpSock))
 					} else {
 						conn.Write(util.EncodeNetstring("NOTFOUND "))
 					}

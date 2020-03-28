@@ -1,0 +1,7 @@
+You receive this mail because you (or someone else) asked to remove your email address {{ .MailAddress }} from the mailing list {{ .ListAddress }}.
+
+To confirm, please visit this address:
+
+{{ .Url }}
+
+If you didn't request this, please ignore this email.

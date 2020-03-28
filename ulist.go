@@ -22,11 +22,14 @@ import (
 	"github.com/wansing/ulist/util"
 )
 
+// for database operations
+const BatchLimit = 1000
+
 const WarnFormat = "\033[1;31m%s\033[0m"
 
 var GitCommit string // hash
 
-var gdprLogger *util.FileLogger
+var gdprLogger util.Logger
 var lastLogId uint32 = 0
 var mta MTA = Sendmail{}
 
@@ -36,9 +39,9 @@ var saslPlainAuth = &client.SASLPlain{}
 var authenticators = client.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
 
 var Db *Database
+var DummyMode bool
 var SpoolDir string
 var Superadmin string // can create new mailing lists and modify all mailing lists
-var Testmode bool
 var WebListen string
 var WebUrl string
 
@@ -59,7 +62,7 @@ func main() {
 
 	// web interface
 	flag.StringVar(&WebListen, "http", "127.0.0.1:8080", "ip:port or socket path of web listener")
-	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface (for opt-in link)")
+	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface")
 
 	// authentication
 	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
@@ -68,7 +71,7 @@ func main() {
 	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost")
 
 	// debug
-	flag.BoolVar(&Testmode, "testmode", false, "accept any credentials at login and don't send emails")
+	flag.BoolVar(&DummyMode, "dummymode", false, "accept any credentials and don't send any emails")
 
 	flag.Parse()
 
@@ -113,14 +116,14 @@ func main() {
 
 	// authenticator availability
 
-	if !authenticators.Available() && !Testmode {
+	if !authenticators.Available() && !DummyMode {
 		log.Printf(WarnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
 	}
 
-	if Testmode {
+	if DummyMode {
 		mta = DummyMTA{}
 		Superadmin = "test@example.com"
-		log.Printf(WarnFormat, "ulist runs in test mode. Everyone can login as superadmin and no emails are sent.")
+		log.Printf(WarnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
 	// run web interface
@@ -184,13 +187,13 @@ func (LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error)
 
 // implements smtp.Session
 type LMTPSession struct {
-	Lists        []*List
-	isBounce     bool   // indicated by empty Envelope-From
-	logId        uint32
+	Lists    []*List
+	isBounce bool // indicated by empty Envelope-From
+	logId    uint32
 }
 
 func (s *LMTPSession) logf(format string, a ...interface{}) {
-	log.Printf("[% 6d] " + format, append([]interface{}{s.logId}, a...)...)
+	log.Printf("[% 6d] "+format, append([]interface{}{s.logId}, a...)...)
 }
 
 // "RSET". Aborts the current mail transaction.
@@ -297,9 +300,9 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	// do as many checks (and maybe rejections) as possible before sending any email
 
-	if !s.isBounce {
+	// check that lists are in to or cc, avoiding bcc spam
 
-		// check that lists are in to or cc, avoiding bcc spam
+	if !s.isBounce {
 
 		tos, err := mailutil.ParseAddressesFromHeader(message.Header, "To", 10000)
 		if err != nil {
@@ -311,7 +314,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 			return SMTPErrorf(510, "parsing cc addresses: %v", err)
 		}
 
-		nextList:
+	nextList:
 		for _, list := range s.Lists {
 
 			for _, to := range tos {
@@ -367,7 +370,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			err = mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
 			if err != nil {
-				s.logf("forwarding bounce notification: %v", err)
+				s.logf("error forwarding bounce notification: %v", err)
 			}
 
 			s.logf("forwarded bounce to admins of %s through %s", list, mta)
@@ -379,9 +382,9 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		command := strings.ToLower(strings.TrimSpace(message.Header.Get("Subject")))
 
-		if command == "subscribe" || command == "unsubscribe" {
+		if command == "join" || command == "leave" {
 
-			// Subscribe and unsubscribe can only be done personally. So there must be one From address and no different Sender address.
+			// Join and leave can only be asked personally. So there must be one From address and no different Sender address.
 
 			froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
 			if err != nil {
@@ -389,41 +392,35 @@ func (s *LMTPSession) data(r io.Reader) error {
 			}
 
 			if len(froms) != 1 {
-				return SMTPErrorf(513, `expected exactly one "From" address in subscribe/unsubscribe email, got %d`, len(froms))
+				return SMTPErrorf(513, `expected exactly one "From" address in join/leave email, got %d`, len(froms))
 			}
 
 			if senders, err := mailutil.ParseAddressesFromHeader(message.Header, "Sender", 2); len(senders) > 0 && err == nil {
 				if froms[0].Equals(senders[0]) {
-					return SMTPErrorf(513, "From and Sender addresses differ in subscribe/unsubscribe email: %s and %s", froms[0], senders[0])
+					return SMTPErrorf(513, "From and Sender addresses differ in join/leave email: %s and %s", froms[0], senders[0])
 				}
 			}
 
 			personalFrom := froms[0]
 
-			_, err = list.GetMember(personalFrom.RFC5322AddrSpec())
-			switch err {
-			case nil: // member
-				if command == "unsubscribe" {
-					if err = list.RemoveMember(personalFrom); err != nil {
-						return SMTPErrorf(451, "unsubscribing: %v", err)
-					}
-					if err = gdprLogger.Printf("unsubscribing %s from the list %s, reason: email", personalFrom, list); err != nil {
-						return SMTPErrorf(451, "unsubscribing: %v", err)
-					}
-					continue // next list
-				}
-			case sql.ErrNoRows: // not a member
-				if command == "subscribe" && list.PublicSignup {
-					if err = list.AddMember(personalFrom, true, false, false, false); err != nil {
-						return SMTPErrorf(451, "subscribing: %v", err)
-					}
-					if err = gdprLogger.Printf("subscribing %s to the list %s, reason: email", personalFrom, list); err != nil {
-						return SMTPErrorf(451, "subscribing: %v", err)
-					}
-					continue // next list
-				}
-			default: // error
+			m, err := list.GetMember(personalFrom)
+			if err != nil {
 				return SMTPErrorf(451, "getting membership from database: %v", err)
+			}
+
+			// public signup check is crucial, as sendJoinCheckback sends a confirmation link which allows the receiver to join
+			if list.PublicSignup && m == nil && command == "join" {
+				if err = list.sendJoinCheckback(personalFrom); err != nil {
+					return SMTPErrorf(451, "subscribing: %v", err)
+				}
+				continue // next list
+			}
+
+			if m != nil && command == "leave" {
+				if err = list.sendLeaveCheckback(personalFrom); err != nil {
+					return SMTPErrorf(451, "unsubscribing: %v", err)
+				}
+				continue // next list
 			}
 
 			return SMTPErrorf(554, "unknown command")
@@ -446,7 +443,7 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		if action == Pass {
 
-			if err = list.Send(message); err != nil {
+			if err = list.Forward(message); err != nil {
 				return SMTPErrorf(451, "sending email: %v", err)
 			}
 
@@ -464,10 +461,8 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(451, "getting notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
-			for _, notified := range notifieds {
-				if err = list.sendModerationNotification(notified); err != nil {
-					s.logf("sending moderation notificiation: %v", err)
-				}
+			if err = list.notifyMods(notifieds); err != nil {
+				s.logf("sending moderation notificiation: %v", err)
 			}
 
 			s.logf("stored email")

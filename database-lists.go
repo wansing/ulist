@@ -35,7 +35,8 @@ func PublicLists() ([]ListInfo, error) {
 	return listsWhere("public_signup = 1")
 }
 
-func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter) (*List, error) {
+// CreateList creates a new mailing list with default actions: messages from unknown senders are moderated, all others pass.
+func CreateList(listAddress, listName, rawAdminMods string, reason string, alerter util.Alerter) (*List, error) {
 
 	listAddr, err := mailutil.ParseAddress(listAddress)
 	if err != nil {
@@ -69,7 +70,7 @@ func CreateList(listAddress, listName, rawAdminMods string, alerter util.Alerter
 		return nil, err
 	}
 
-	list.AddMembers(false, adminMods, true, true, true, true, alerter) // sendWelcome = false
+	list.AddMembers(true, adminMods, true, true, true, true, reason, alerter) // sendWelcome = true
 
 	return list, nil
 }

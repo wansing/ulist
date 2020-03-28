@@ -1,6 +1,6 @@
 {{ define "content" }}
-	<h1>Lists available for public signup</h1>
-	{{ with . }}
+	<h1>Lists</h1>
+	{{ with .PublicLists }}
 		<table class="table">
 			<thead>
 				<tr>
@@ -14,7 +14,11 @@
 					<tr>
 						<td>{{ .RFC5322AddrSpec }}</td>
 						<td>{{ .Display }}</td>
-						<td><a href="/public/{{ .EscapeAddress }}">Sign up</a></td>
+						<td>
+							{{ if not (index $.MyLists .RFC5322AddrSpec) }}
+								<a href="/join/{{ .EscapeAddress }}">Join</a>
+							{{ end }}
+						</td>
 					</tr>
 				{{ end }}
 			</tbody>

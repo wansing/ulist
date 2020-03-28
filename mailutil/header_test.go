@@ -78,18 +78,18 @@ func TestParseAddressesFromHeader(t *testing.T) {
 	}{
 		{
 			mail.Header{
-				"From": []string{`"Bert" <bert@example.net>`},
+				"From":    []string{`"Bert" <bert@example.net>`},
 				"Subject": []string{"Hello"},
-				"To": []string{`"Ally" <alice@example.com>, claire@example.org`},
+				"To":      []string{`"Ally" <alice@example.com>, claire@example.org`},
 			},
 			[]Addr{Addr{"Ally", "alice", "example.com"}, Addr{"", "claire", "example.org"}},
 			[]string{},
 		},
 		{
 			mail.Header{
-				"From": []string{`"Bert" <bert@example.net>`},
+				"From":    []string{`"Bert" <bert@example.net>`},
 				"Subject": []string{"Hello"},
-				"To": []string{`"Ally" <alice@example.com>, claire@example.org, <dan@missing-tld`},
+				"To":      []string{`"Ally" <alice@example.com>, claire@example.org, <dan@missing-tld`},
 			},
 			[]Addr{Addr{"Ally", "alice", "example.com"}, Addr{"", "claire", "example.org"}},
 			[]string{`error parsing line "<dan@missing-tld": mail: unclosed angle-addr`},
@@ -114,12 +114,12 @@ func TestParseAddressesFromHeader(t *testing.T) {
 func TestWriteHeader(t *testing.T) {
 
 	h := mail.Header{
-		"From": []string{`"Bert" <bert@example.net>`},
-		"Mime-Version": []string{"1.0"},
-		"Received": []string{"from example.net by example.com with ESMTP", "from foo by bar with ESMTPA id baz", "from foo by bar with ESMTPSA id baz", "from foo with LMTPA", "by bar with LMTPSA id baz"},
-		"Subject": []string{"Hello"},
-		"To": []string{`"Ally" <alice@example.com>, claire@example.org`},
-		"User-Agent": []string{"foo"},
+		"From":             []string{`"Bert" <bert@example.net>`},
+		"Mime-Version":     []string{"1.0"},
+		"Received":         []string{"from example.net by example.com with ESMTP", "from foo by bar with ESMTPA id baz", "from foo by bar with ESMTPSA id baz", "from foo with LMTPA", "by bar with LMTPSA id baz"},
+		"Subject":          []string{"Hello"},
+		"To":               []string{`"Ally" <alice@example.com>, claire@example.org`},
+		"User-Agent":       []string{"foo"},
 		"X-Originating-IP": []string{"198.51.100.1"},
 	}
 

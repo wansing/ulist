@@ -2,6 +2,7 @@ package mailutil
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net/mail"
@@ -26,7 +27,7 @@ func ReadMessage(r io.Reader) (*Message, error) {
 
 	msg, err := mail.ReadMessage(r)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mail.ReadMessage returned %v", err)
 	}
 
 	body, err := ioutil.ReadAll(msg.Body)

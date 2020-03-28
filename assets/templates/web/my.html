@@ -6,10 +6,11 @@
 				<tr>
 					<th>Address</th>
 					<th>Name</th>
-					<th></th>
-					<th></th>
-					<th></th>
-					<th></th>
+					<th><!-- settings --></th>
+					<th><!-- members --></th>
+					<th><!-- known senders --></th>
+					<th><!-- moderation requests --></th>
+					<th><!-- leave --></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -45,6 +46,9 @@
 							{{ if .Moderate }}
 								<a href="/mod/{{ .ListInfo.EscapeAddress }}">Moderation requests</a>
 							{{ end }}
+						</td>
+						<td>
+							<a href="/leave/{{ .ListInfo.EscapeAddress }}">Leave</a>
 						</td>
 					</tr>
 				{{ end }}

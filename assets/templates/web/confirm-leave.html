@@ -1,0 +1,11 @@
+{{ define "content" }}
+	<h1>Confirm leave</h1>
+	<form action="" method="post">
+		<p>
+			<button name="confirm_leave" value="yes" type="submit" class="btn btn-primary">Remove {{ .MemberAddress }} from the mailing list {{ .ListAddress }}</button>
+		</p>
+	</form>
+	<p>
+		<a href="/">No, don't leave</a>
+	</p>
+{{ end }}

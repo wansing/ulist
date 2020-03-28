@@ -3,6 +3,8 @@ package main
 import (
 	"database/sql"
 	"net/url"
+
+	"github.com/wansing/ulist/mailutil"
 )
 
 type Membership struct {
@@ -18,9 +20,9 @@ func (m *Membership) EscapeMemberAddress() string {
 	return url.QueryEscape(m.MemberAddress)
 }
 
-func Memberships(memberAddress string) ([]Membership, error) {
+func Memberships(member *mailutil.Addr) ([]Membership, error) {
 
-	rows, err := Db.getMembershipsStmt.Query(memberAddress)
+	rows, err := Db.getMembershipsStmt.Query(member.RFC5322AddrSpec())
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}

@@ -35,14 +35,14 @@ func TestDecode(t *testing.T) {
 func TestEquals(t *testing.T) {
 
 	tests := []struct {
-		a *Addr
-		b *Addr
+		a    *Addr
+		b    *Addr
 		want bool
 	}{
 		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, true},
-		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{                 Local: "ANNA", Domain: "EXAMPLE.COM"}, true},
+		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{Local: "ANNA", Domain: "EXAMPLE.COM"}, true},
 		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{Display: "Anna", Local: "anna", Domain: "example.net"}, false}, // com != net
-		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{Display: "Anna", Local: "bob",  Domain: "example.com"}, false}, // anna != bob
+		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, &Addr{Display: "Anna", Local: "bob", Domain: "example.com"}, false},  // anna != bob
 	}
 
 	for _, test := range tests {
@@ -127,7 +127,7 @@ func TestParseAddresses(t *testing.T) {
 func TestRFC5322AddrSpec(t *testing.T) {
 
 	tests := []struct {
-		a *Addr
+		a    *Addr
 		want string
 	}{
 		{&Addr{Local: "anna", Domain: "example.com"}, "anna@example.com"},
@@ -147,7 +147,7 @@ func TestRFC5322AddrSpec(t *testing.T) {
 func TestRFC5322NameAddr(t *testing.T) {
 
 	tests := []struct {
-		a *Addr
+		a    *Addr
 		want string
 	}{
 		{&Addr{Local: "anna", Domain: "example.com"}, "<anna@example.com>"},
@@ -166,9 +166,9 @@ func TestRFC5322NameAddr(t *testing.T) {
 func TestRFC6068URI(t *testing.T) {
 
 	tests := []struct {
-		a *Addr
+		a     *Addr
 		query string
-		want string
+		want  string
 	}{
 		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, "", "<mailto:anna@example.com>"},
 		{&Addr{Display: "Anna", Local: "anna", Domain: "example.com"}, "subject=unsubscribe", "<mailto:anna@example.com?subject=unsubscribe>"},
@@ -185,7 +185,7 @@ func TestRFC6068URI(t *testing.T) {
 func TestDisplayOrLocal(t *testing.T) {
 
 	tests := []struct {
-		a *Addr
+		a    *Addr
 		want string
 	}{
 		{&Addr{Local: "anna", Domain: "example.com"}, "anna"},

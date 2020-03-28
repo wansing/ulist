@@ -9,9 +9,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// add/remove up to 10000 rows at once
-const BatchLimit = 10000
-
 type Database struct {
 	*sql.DB
 	addKnownStmt          *sql.Stmt

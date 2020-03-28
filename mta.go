@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"net/mail"
 	"os/exec"
 
@@ -25,7 +26,13 @@ type MTA interface {
 
 type DummyMTA struct{}
 
-func (DummyMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, _ io.Reader) error {
+func (DummyMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
+
+	var debug = &bytes.Buffer{}
+	mailutil.WriteHeader(debug, header)
+	io.Copy(debug, body)
+	log.Printf("----\nDummyMTA:\nenvelope-from: %s, envelope-to: %v\n%s\n----", envelopeFrom, envelopeTo, debug.String())
+
 	return nil
 }
 
@@ -37,7 +44,7 @@ type Sendmail struct{}
 
 func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
 
-	args := []string{"-i", "-f", envelopeFrom, "--"}
+	args := []string{"-i", "-f", envelopeFrom, "--"} // -i When reading a message from standard input, don't treat a line with only a . character as the end of input.
 	args = append(args, envelopeTo...)
 
 	sendmail := exec.Command("/usr/sbin/sendmail", args...)
@@ -70,14 +77,14 @@ func (Sendmail) String() string {
 }
 
 // used for testing
-type ChanMTAMessage struct {
+type MTAEnvelope struct {
 	EnvelopeFrom string
 	EnvelopeTo   []string
 	Message      string
 }
 
 // used for testing
-type ChanMTA chan *ChanMTAMessage
+type ChanMTA chan *MTAEnvelope
 
 func (c ChanMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
 
@@ -86,7 +93,7 @@ func (c ChanMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Head
 		return err
 	}
 
-	chan *ChanMTAMessage(c) <- &ChanMTAMessage{envelopeFrom, envelopeTo, buf.String()}
+	chan *MTAEnvelope(c) <- &MTAEnvelope{envelopeFrom, envelopeTo, buf.String()}
 
 	return nil
 }

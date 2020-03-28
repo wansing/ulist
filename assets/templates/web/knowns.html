@@ -2,11 +2,11 @@
 	<h1>Known senders of {{ .RFC5322AddrSpec }}</h1>
 	<form action="" method="post">
 		<div class="form-group">
-			<label>Email addresses (one RFC 5322 address-list per line)</label>
+			<label>Email addresses (up to {{ BatchLimit }}, one RFC 5322 address-list per line)</label>
 			<textarea name="emails" class="form-control" placeholder="Email addresses"></textarea> <!-- TODO is not preserved across errors at the moment -->
 		</div>
-		<button name="add" value="1" type="submit" class="btn btn-primary">Add up to 10000 known senders</button> <!-- TODO DatabaseBatchLimit -->
-		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove up to 10000 known senders</button> <!-- TODO DatabaseBatchLimit -->
+		<button name="add" value="1" type="submit" class="btn btn-primary">Add known senders</button>
+		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove known senders</button>
 	</form>
 	{{ with .Knowns }}
 		<h2>Known From addresses</h2>

@@ -2,11 +2,16 @@ package main
 
 import (
 	"database/sql"
+	"fmt"
 	"io/ioutil"
 	"log"
+	"net/http"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/emersion/go-smtp"
 	"github.com/wansing/ulist/mailutil"
@@ -14,77 +19,13 @@ import (
 )
 
 const testDbPath = "/tmp/ulist-test.sqlite3"
-const testGDPRLogPath = "/tmp/gdpr.log"
 
-var expectGDPRLog string
-var messageChannel = make(chan *ChanMTAMessage, 100)
+var gdprChannel = make(chan string, 100)
+var messageChannel = make(chan *MTAEnvelope, 100)
 
-func init() {
-	mta = ChanMTA(messageChannel)
-	SpoolDir = "/tmp/"
-	Testmode = true
-	WebUrl = "https://lists.example.com"
-
-	_ = os.Remove(testGDPRLogPath)
-	var err error
-	if gdprLogger, err = util.NewFileLogger(testGDPRLogPath); err != nil {
-		log.Fatalf("error creating GDPR logfile: %v", err)
-	}
-}
-
-func expectErr(t *testing.T, err error, expect string) {
-	if err.Error() != expect {
-		t.Fatalf("got %v, expected %s", err, expect)
-	}
-}
-
-func expectMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message string) {
-
-	message = strings.ReplaceAll(message, "\n", "\r\n") // this file has LF, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) have CRLF line breaks
-	got := <-messageChannel
-
-	if envelopeFrom != got.EnvelopeFrom {
-		t.Fatalf("expected envelope-from %s, got %s", envelopeFrom, got.EnvelopeFrom)
-	}
-
-	if len(envelopeTo) != len(got.EnvelopeTo) {
-		t.Fatalf("expected %d envelope-to addresses, got %d", len(envelopeTo), len(got.EnvelopeTo))
-	}
-
-	for i := range envelopeTo {
-		if envelopeTo[i] != got.EnvelopeTo[i] {
-			t.Fatalf("expected envelope-to %s, got %s", envelopeTo[i], got.EnvelopeTo[i])
-		}
-	}
-
-	if message != got.Message {
-		t.Fatalf("expected message %s, got %s", message, got.Message)
-	}
-}
-
-func lmtpTransaction(envelopeFrom string, envelopeTo []string, data string) error {
-
-	backend := &LMTPBackend{}
-
-	session, err := backend.AnonymousLogin(nil)
-	if err != nil {
-		return err
-	}
-
-	err = session.Mail(envelopeFrom, smtp.MailOptions{})
-	if err != nil {
-		return err
-	}
-
-	for _, to := range envelopeTo {
-		err := session.Rcpt(to)
-		if err != nil {
-			return err
-		}
-	}
-
-	return session.Data(strings.NewReader(data))
-}
+var mimeBoundaryPattern = regexp.MustCompile("[0-9a-f]{60}")
+var timestampHMACPattern = regexp.MustCompile("[0-9]{10}/[-_0-9a-zA-Z]{86}")
+var urlPattern = regexp.MustCompile("/(join|leave)/[^/\n]+(/[^/\n]+/" + timestampHMACPattern.String() + ")?") // without WebUrl
 
 type testAlerter struct{}
 
@@ -94,474 +35,1131 @@ func (testAlerter) Alertf(format string, a ...interface{}) {
 
 func (testAlerter) Successf(format string, a ...interface{}) {}
 
-func TestUlist(t *testing.T) {
+func init() {
 
-	var err error
+	gdprLogger = util.ChanLogger(gdprChannel)
+	mta = ChanMTA(messageChannel)
+	SpoolDir = "/tmp/"
+	DummyMode = true
+	WebUrl = "https://lists.example.com"
 
 	_ = os.Remove(testDbPath)
 
-	Db, _ = OpenDatabase("sqlite3", testDbPath)
+	var err error
+	Db, err = OpenDatabase("sqlite3", testDbPath)
+	if err != nil {
+		log.Fatalf("error creating database: %v", err)
+	}
+
+	WebListen = "127.0.0.1:8080"
+	go webui()
+}
+
+func mustParse(email string) *mailutil.Addr {
+	addr, err := mailutil.ParseAddress(email)
+	if err != nil {
+		panic(err)
+	}
+	return addr
+}
+
+func wantErr(t *testing.T, got error, want string) {
+	if got == nil {
+		t.Fatalf("got nil, want %s", want)
+	}
+	if got.Error() != want {
+		t.Fatalf("got %v, want %s", got, want)
+	}
+}
+
+// appends a line break to want
+func wantGDPREvent(t *testing.T, want string) {
+	want += "\n"
+	got := <-gdprChannel
+	if want != got {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+}
+
+func wantMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message string) (href string) {
+
+	message = strings.ReplaceAll(message, "\n", "\r\n") // this file has LF line breaks, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) must have CRLF line breaks
+
+	got := <-messageChannel
+
+	// unify MIME boundaries
+
+	var boundaries = make(map[string]string) // random boundary -> stable id
+
+	got.Message = mimeBoundaryPattern.ReplaceAllStringFunc(got.Message, func(boundary string) string {
+		id, ok := boundaries[boundary]
+		if !ok {
+			id = fmt.Sprintf("boundary-%d", len(boundaries))
+			boundaries[boundary] = id
+		}
+		return id
+	})
+
+	// extract href
+
+	href = urlPattern.FindString(got.Message)
+
+	// replace HMACs in urls by "hmac"
+
+	got.Message = timestampHMACPattern.ReplaceAllString(got.Message, "timestamp/hmac")
+
+	// compare
+
+	if got.EnvelopeFrom != envelopeFrom {
+		t.Fatalf("got envelope-from %s, want %s", got.EnvelopeFrom, envelopeFrom)
+	}
+
+	if len(got.EnvelopeTo) != len(envelopeTo) {
+		t.Fatalf("got %d envelope-to, want %d", len(got.EnvelopeTo), len(envelopeTo))
+	}
+
+	for i := range envelopeTo {
+		if got.EnvelopeTo[i] != envelopeTo[i] {
+			t.Fatalf("got envelope-to[%d] %s, want %s", i, got.EnvelopeTo[i], envelopeTo[i])
+		}
+	}
+
+	if got.Message != message {
+		ioutil.WriteFile("/tmp/got", []byte(got.Message), os.ModePerm)
+		ioutil.WriteFile("/tmp/want", []byte(message), os.ModePerm)
+		t.Fatalf("got message %s, want %s", got.Message, message)
+	}
+
+	return
+}
+
+func wantChansEmpty(t *testing.T) {
+	time.Sleep(10 * time.Millisecond) // wait until all emails are sent and all events are written
+	var failed = false
+	for {
+		select {
+		case event := <-gdprChannel:
+			failed = true
+			t.Logf("want empty GDPR channel, got event:\n%s", event)
+		case envelope := <-messageChannel:
+			failed = true
+			t.Logf("want empty message channel, got message:\n%s", envelope.Message)
+		default:
+			if failed {
+				t.FailNow()
+			} else {
+				return
+			}
+		}
+	}
+}
+
+func mustTransactOne(envelopeFrom string, envelopeTo []string, data string) {
+	if err := transactOne(envelopeFrom, envelopeTo, data); err != nil {
+		panic(err)
+	}
+}
+
+func transactOne(envelopeFrom string, envelopeTo []string, data string) error {
+	return transact(
+		&MTAEnvelope{
+			EnvelopeFrom: envelopeFrom,
+			EnvelopeTo:   envelopeTo,
+			Message:      data,
+		},
+	)
+}
+
+func mustTransact(envelopes ...*MTAEnvelope) {
+	if err := transact(envelopes...); err != nil {
+		panic(err)
+	}
+}
+
+func transact(envelopes ...*MTAEnvelope) error {
+
+	backend := &LMTPBackend{}
+
+	session, err := backend.AnonymousLogin(nil)
+	if err != nil {
+		return err
+	}
+
+	for _, envelope := range envelopes {
+
+		err = session.Mail(envelope.EnvelopeFrom, smtp.MailOptions{})
+		if err != nil {
+			return err
+		}
+
+		for _, to := range envelope.EnvelopeTo {
+			err := session.Rcpt(to)
+			if err != nil {
+				return err
+			}
+		}
+
+		// this file has LF line breaks, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) must have CRLF line breaks
+		err = session.Data(strings.NewReader(strings.ReplaceAll(envelope.Message, "\n", "\r\n")))
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func TestCreateListBounceSuffix(t *testing.T) {
+	_, err := CreateList("suffix+bounces@example.com", "name", "", "testing", testAlerter{})
+	wantErr(t, err, `list address can't end with "+bounces"`)
+	wantChansEmpty(t)
+}
+
+func TestGetList(t *testing.T) {
+
+	if _, err := CreateList("get-list@example.com", "Created List", "", "testing", testAlerter{}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetList(mustParse("get-list@example.com"))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// create list with "+bounces" address
+	// HMACKey is random
 
-	_, err = CreateList("list_b+bounces@example.com", "B", "otto@example.org", testAlerter{})
-
-	expectErr(t, err, `list address can't end with "+bounces"`)
-
-	// create list
-
-	if _, err = CreateList("list_a@example.com", "A", "chris@example.com, norah@example.net", testAlerter{}); err != nil {
-		t.Fatal(err)
+	if len(got.HMACKey) != 32 {
+		t.Fatalf("got %d bytes HMAC key, want 32", len(got.HMACKey))
 	}
 
-	if _, err = CreateList("list_b@example.com", "B", "otto@example.org", testAlerter{}); err != nil {
-		t.Fatal(err)
+	var sum = 0
+	for _, b := range got.HMACKey {
+		sum += int(b)
 	}
 
-	// load list
-
-	listAddrA, _ := mailutil.ParseAddress("list_a@example.com")
-
-	listA, err := GetList(listAddrA)
-	if err != nil {
-		t.Fatal(err)
+	if sum == 0 {
+		t.Fatalf("HMACKey is all zeroes")
 	}
 
-	listAddrB, _ := mailutil.ParseAddress("list_b@example.com")
+	got.HMACKey = nil
 
-	listB, err := GetList(listAddrB)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// compare ListInfo
 
-	// listB set public signup
-
-	if err = listB.Update("B", true, false, Pass, Pass, Pass, Mod); err != nil {
-		t.Fatal(err)
-	}
-
-	// add member
-
-	claire, err := mailutil.ParseAddress("claire@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = listA.AddMember(claire, true, false, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// add members
-
-	noemi, err := mailutil.ParseAddress("noemi@example.net")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	oscar, err := mailutil.ParseAddress("oscar@example.org")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	listA.AddMembers(false, []*mailutil.Addr{noemi, oscar}, false, true, false, false, testAlerter{})
-
-	// add known
-
-	chris, err := mailutil.ParseAddress("chris@example.com")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = listB.AddKnown(chris)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// add knowns
-
-	noah, err := mailutil.ParseAddress("noah@example.net")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	owen, err := mailutil.ParseAddress("owen@example.org")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	listA.AddKnowns([]*mailutil.Addr{noah, owen}, testAlerter{})
-
-	// get members
-
-	membersA, err := listA.Members()
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	expectListInfoA := ListInfo{
-		mailutil.Addr{
-			Display: "A",
-			Local:   "list_a",
+	want := ListInfo{
+		Addr: mailutil.Addr{
+			Display: "Created List",
+			Local:   "get-list",
 			Domain:  "example.com",
 		},
 	}
 
-	expectMembersA := []Membership{
-		Membership{
-			ListInfo:      expectListInfoA,
-			MemberAddress: "chris@example.com",
-			Receive:       true,
-			Moderate:      true,
-			Notify:        true,
-			Admin:         true,
-		},
-		Membership{
-			ListInfo:      expectListInfoA,
-			MemberAddress: "claire@example.com",
+	if got.ListInfo != want {
+		t.Fatalf("got list %+v, want %+v", got.ListInfo, want)
+	}
+
+	wantChansEmpty(t)
+}
+
+func TestDeleteList(t *testing.T) {
+
+	CreateList("delete-list@example.com", "List", "", "testing", testAlerter{})
+
+	list, _ := GetList(mustParse("delete-list@example.com"))
+
+	err := list.Delete()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = GetList(mustParse("delete-list@example.com"))
+	wantErr(t, err, sql.ErrNoRows.Error())
+
+	wantChansEmpty(t)
+}
+
+func TestMultipleReceivers(t *testing.T) {
+
+	CreateList("createlist@example.com", "Created List", "alice@example.com, bob@example.net, carol@example.org", "testing", testAlerter{})
+
+	wantGDPREvent(t, `alice@example.com joined the list createlist@example.com, reason: testing
+bob@example.net joined the list createlist@example.com, reason: testing
+carol@example.org joined the list createlist@example.com, reason: testing`)
+
+	wantMessage(t, "createlist+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "Created List" <createlist@example.com>
+Subject: [Created List] Welcome
+To: alice@example.com
+
+Welcome to the mailing list createlist@example.com.
+
+----
+
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+
+	wantMessage(t, "createlist+bounces@example.com", []string{"bob@example.net"}, `Content-Type: text/plain; charset=utf-8
+From: "Created List" <createlist@example.com>
+Subject: [Created List] Welcome
+To: bob@example.net
+
+Welcome to the mailing list createlist@example.com.
+
+----
+
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+
+	wantMessage(t, "createlist+bounces@example.com", []string{"carol@example.org"}, `Content-Type: text/plain; charset=utf-8
+From: "Created List" <createlist@example.com>
+Subject: [Created List] Welcome
+To: carol@example.org
+
+Welcome to the mailing list createlist@example.com.
+
+----
+
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+
+	mustTransactOne("some_envelope@example.com", []string{"createlist@example.com"},
+		`From: bob@example.net
+To: createlist@example.com
+Subject: Hi
+
+Hello World`)
+
+	wantMessage(t, "createlist+bounces@example.com", []string{"alice@example.com", "bob@example.net", "carol@example.org"}, `From: "bob via Created List" <createlist@example.com>
+List-Id: "Created List" <createlist@example.com>
+List-Post: <mailto:createlist@example.com>
+List-Unsubscribe: <mailto:createlist@example.com?subject=leave>
+Reply-To: <bob@example.net>
+Subject: [Created List] Hi
+To: createlist@example.com
+
+Hello World
+
+----
+
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+
+	wantChansEmpty(t)
+}
+
+func TestMultipleLists(t *testing.T) {
+
+	CreateList("multiple-a@example.com", "A", "alice@example.com", "testing", testAlerter{})
+	CreateList("multiple-b@example.net", "B", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice A
+	<-messageChannel // welcome alice B
+
+	wantGDPREvent(t, "alice@example.com joined the list multiple-a@example.com, reason: testing")
+	wantGDPREvent(t, "alice@example.com joined the list multiple-b@example.net, reason: testing")
+
+	// one email, two recipients (envelope-to)
+
+	mustTransactOne("some_envelope@example.com", []string{"multiple-a@example.com", "multiple-b@example.net"},
+		`From: alice@example.com
+To: multiple-a@example.com, multiple-b@example.net
+Subject: Hi
+
+Hello World`)
+
+	wantMessage(t, "multiple-a+bounces@example.com", []string{"alice@example.com"}, `From: "alice via A" <multiple-a@example.com>
+List-Id: "A" <multiple-a@example.com>
+List-Post: <mailto:multiple-a@example.com>
+List-Unsubscribe: <mailto:multiple-a@example.com?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [A] Hi
+To: multiple-a@example.com, multiple-b@example.net
+
+Hello World
+
+----
+
+You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a%40example.com`)
+
+	wantMessage(t, "multiple-b+bounces@example.net", []string{"alice@example.com"}, `From: "alice via B" <multiple-b@example.net>
+List-Id: "B" <multiple-b@example.net>
+List-Post: <mailto:multiple-b@example.net>
+List-Unsubscribe: <mailto:multiple-b@example.net?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [B] Hi
+To: multiple-a@example.com, multiple-b@example.net
+
+Hello World
+
+----
+
+You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b%40example.net`)
+
+	// one SMTP transaction, two emails
+
+	mustTransact(
+		&MTAEnvelope{
+			EnvelopeFrom: "some_envelope@example.com",
+			EnvelopeTo:   []string{"multiple-a@example.com"},
+			Message: `From: alice@example.com
+To: multiple-a@example.com
+Subject: Hi
+
+Hello`},
+		&MTAEnvelope{
+			EnvelopeFrom: "some_envelope@example.com",
+			EnvelopeTo:   []string{"multiple-b@example.net"},
+			Message: `From: alice@example.com
+To: multiple-b@example.net
+Subject: Hi
+
+Hello`},
+	)
+
+	wantMessage(t, "multiple-a+bounces@example.com", []string{"alice@example.com"}, `From: "alice via A" <multiple-a@example.com>
+List-Id: "A" <multiple-a@example.com>
+List-Post: <mailto:multiple-a@example.com>
+List-Unsubscribe: <mailto:multiple-a@example.com?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [A] Hi
+To: multiple-a@example.com
+
+Hello
+
+----
+
+You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a%40example.com`)
+
+	wantMessage(t, "multiple-b+bounces@example.net", []string{"alice@example.com"}, `From: "alice via B" <multiple-b@example.net>
+List-Id: "B" <multiple-b@example.net>
+List-Post: <mailto:multiple-b@example.net>
+List-Unsubscribe: <mailto:multiple-b@example.net?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [B] Hi
+To: multiple-b@example.net
+
+Hello
+
+----
+
+You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b%40example.net`)
+
+	wantChansEmpty(t)
+}
+
+func TestPublicList(t *testing.T) {
+
+	CreateList("public@example.com", "Whoops", "", "testing", testAlerter{})
+
+	list, _ := GetList(mustParse("public@example.com"))
+
+	if err := list.Update("Public", true, false, Pass, Pass, Pass, Mod); err != nil {
+		t.Fatal(err)
+	}
+
+	// ask join
+
+	mustTransactOne("some_envelope@example.com", []string{"public@example.com"},
+		`From: bob@example.com
+To: public@example.com
+Subject: join
+
+`)
+
+	confirmJoinHref := wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
+		`Content-Type: text/plain; charset=utf-8
+From: "Public" <public@example.com>
+Subject: [Public] Please confirm: join the mailing list public@example.com
+To: bob@example.com
+
+You receive this mail because you (or someone else) asked to join your email address bob@example.com to the mailing list public@example.com.
+
+To confirm, please visit this address:
+
+https://lists.example.com/join/public%40example.com/bob%40example.com/timestamp/hmac
+
+If you didn't request this, please ignore this email.`)
+
+	// confirm join
+
+	(&http.Client{}).Post("http://127.0.0.1:8080"+confirmJoinHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_join": []string{"yes"}}.Encode()))
+	// returns an error because it tries to follow the redirect to lists.example.com, but we can ignore that
+
+	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
+		`Content-Type: text/plain; charset=utf-8
+From: "Public" <public@example.com>
+Subject: [Public] Welcome
+To: bob@example.com
+
+Welcome to the mailing list public@example.com.
+
+----
+
+You can leave the mailing list "Public" here: https://lists.example.com/leave/public%40example.com`)
+
+	wantGDPREvent(t, "bob@example.com joined the list public@example.com, reason: user confirmed in web ui")
+
+	// test membership
+
+	if got, err := list.GetMember(mustParse("bob@example.com")); err == nil {
+		want := Membership{
+			ListInfo: ListInfo{
+				mailutil.Addr{
+					Display: "Public",
+					Local:   "public",
+					Domain:  "example.com",
+				},
+			},
+			MemberAddress: "bob@example.com",
 			Receive:       true,
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
-		},
-		Membership{
-			ListInfo:      expectListInfoA,
-			MemberAddress: "noemi@example.net",
-			Receive:       false,
-			Moderate:      true,
-			Notify:        false,
-			Admin:         false,
-		},
-		Membership{
-			ListInfo:      expectListInfoA,
-			MemberAddress: "norah@example.net",
-			Receive:       true,
-			Moderate:      true,
-			Notify:        true,
-			Admin:         true,
-		},
-		Membership{
-			ListInfo:      expectListInfoA,
-			MemberAddress: "oscar@example.org",
-			Receive:       false,
-			Moderate:      true,
-			Notify:        false,
-			Admin:         false,
-		},
-	}
-
-	if len(expectMembersA) != len(membersA) {
-		t.Fatalf("expected %d members, got %d", len(expectMembersA), len(membersA))
-	}
-
-	for i := range expectMembersA {
-		if membersA[i] != expectMembersA[i] {
-			t.Fatal()
 		}
-	}
-
-	// get knowns
-
-	expectKnownsA := []string{
-		"noah@example.net",
-		"owen@example.org",
-	}
-
-	expectKnownsB := []string{
-		"chris@example.com",
-	}
-
-	knownsA, err := listA.Knowns()
-	if err != nil {
+		if *got != want {
+			t.Fatalf("got %v, want %v", *got, want)
+		}
+	} else {
 		t.Fatal(err)
 	}
 
-	knownsB, err := listB.Knowns()
-	if err != nil {
-		t.Fatal(err)
+	// ask leave
+
+	mustTransactOne("some_envelope@example.com", []string{"public@example.com"},
+		`From: bob@example.com
+To: public@example.com
+Subject: leave
+
+`)
+
+	confirmLeaveHref := wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
+		`Content-Type: text/plain; charset=utf-8
+From: "Public" <public@example.com>
+Subject: [Public] Please confirm: leave the mailing list public@example.com
+To: bob@example.com
+
+You receive this mail because you (or someone else) asked to remove your email address bob@example.com from the mailing list public@example.com.
+
+To confirm, please visit this address:
+
+https://lists.example.com/leave/public%40example.com/bob%40example.com/timestamp/hmac
+
+If you didn't request this, please ignore this email.`)
+
+	// confirm leave
+
+	(&http.Client{}).Post("http://127.0.0.1:8080"+confirmLeaveHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_leave": []string{"yes"}}.Encode()))
+
+	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
+		`Content-Type: text/plain; charset=utf-8
+From: "Public" <public@example.com>
+Subject: [Public] Goodbye
+To: bob@example.com
+
+You left the mailing list public@example.com.
+
+Goodbye!`)
+
+	wantGDPREvent(t, "bob@example.com left the list public@example.com, reason: user confirmed in web ui")
+
+	// test membership
+
+	if membership, err := list.GetMember(mustParse("bob@example.com")); membership != nil || err != nil {
+		t.Fatalf("got %v, %v, want nil, nil", membership, err)
 	}
 
-	for i := range expectKnownsA {
-		if knownsA[i] != expectKnownsA[i] {
-			t.Fatal()
-		}
+	wantChansEmpty(t)
+}
+
+func TestRejectAll(t *testing.T) {
+
+	CreateList("reject-all@example.com", "List name", "", "testing", testAlerter{})
+	list, _ := GetList(mustParse("reject-all@example.com"))
+	list.Update("List name", false, false, Reject, Reject, Reject, Reject)
+
+	list.AddKnown(mustParse("known@example.com"))
+	list.AddMember(false, mustParse("member@example.com"), true, false, false, false, "testing")
+	list.AddMember(false, mustParse("mod@example.com"), true, true, false, false, "testing")
+
+	wantGDPREvent(t, "member@example.com joined the list reject-all@example.com, reason: testing")
+	wantGDPREvent(t, "mod@example.com joined the list reject-all@example.com, reason: testing")
+
+	for _, test := range []string{"unknown", "known", "member", "mod"} {
+		err := transactOne("some_envelope@example.com", []string{"reject-all@example.com"},
+			`From: `+test+`@example.com
+To: reject-all@example.com
+
+`)
+		wantErr(t, err, "user not found")
 	}
 
-	for i := range expectKnownsB {
-		if knownsB[i] != expectKnownsB[i] {
-			t.Fatal()
-		}
-	}
+	wantChansEmpty(t)
+}
 
-	// send mail to two lists
+func TestLoop(t *testing.T) {
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com", "list_b@example.com"},
+	CreateList("loop@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel    // alice
+
+	err := transactOne("some_envelope@example.com", []string{"loop@example.com"},
 		`From: chris@example.com
-To: list_a@example.com, list_b@example.com
-Subject: foo
+To: loop@example.com
+List-Id: "List" <loop@example.com>
+Subject: Hi
 
 Hello`)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantErr(t, err, "email loop detected: loop@example.com")
 
-	expectMessage(t, "list_a+bounces@example.com", []string{"claire@example.com"}, `Content-Type: text/plain; charset=utf-8
-From: "A" <list_a@example.com>
-Subject: [A] Welcome
-To: claire@example.com
+	wantChansEmpty(t)
+}
 
-Welcome to the mailing list list_a@example.com.
+func TestMultipleNotifieds(t *testing.T) {
 
-If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_a@example.com.
-`)
+	CreateList("multiple-notifieds@example.com", "List", "alice@example.com, bob@example.com, carol@example.com", "testing", testAlerter{})
 
-	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com", "claire@example.com", "norah@example.net"}, `From: "chris via A" <list_a@example.com>
-List-Id: "A" <list_a@example.com>
-List-Post: <mailto:list_a@example.com>
-List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
-Reply-To: <chris@example.com>
-Subject: [A] foo
-To: list_a@example.com, list_b@example.com
+	<-messageChannel // welcome alice
+	<-messageChannel // welcome bob
+	<-messageChannel // welcome carol
 
-Hello`)
+	wantGDPREvent(t, `alice@example.com joined the list multiple-notifieds@example.com, reason: testing
+bob@example.com joined the list multiple-notifieds@example.com, reason: testing
+carol@example.com joined the list multiple-notifieds@example.com, reason: testing`)
 
-	expectMessage(t, "list_b+bounces@example.com", []string{"otto@example.org"}, `From: "chris via B" <list_b@example.com>
-List-Id: "B" <list_b@example.com>
-List-Post: <mailto:list_b@example.com>
-List-Unsubscribe: <mailto:list_b@example.com?subject=unsubscribe>
-Reply-To: <chris@example.com>
-Subject: [B] foo
-To: list_a@example.com, list_b@example.com
+	mustTransactOne("some_envelope@example.com", []string{"multiple-notifieds@example.com"},
+		`From: unknown@example.com
+To: multiple-notifieds@example.com
+Subject: Hi
 
 Hello`)
 
-	// send mail which is moderated because of the "From" header
+	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List" <multiple-notifieds@example.com>
+Subject: [List] A message needs moderation
+To: alice@example.com
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"},
-		`From: norah@example.net
-To: list_b@example.com
-Subject: foo
+A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-Hello`)
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
 
-	if err != nil {
-		t.Fatal(err)
-	}
+----
 
-	expectMessage(t, "list_b+bounces@example.com", []string{"otto@example.org"}, `Content-Type: text/plain; charset=utf-8
-From: "B" <list_b@example.com>
-Subject: [B] A message needs moderation
-To: otto@example.org
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
 
-A message at "B" <list_b@example.com> is waiting for moderation.
+	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"bob@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List" <multiple-notifieds@example.com>
+Subject: [List] A message needs moderation
+To: bob@example.com
 
-You can moderate it here: https://lists.example.com/mod/list_b%40example.com
-`)
+A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-	// join a list which allows for public signup
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_b@example.com"},
-		`From: cleo@example.com
-To: list_b@example.com
-Subject: subscribe
+----
 
-Hello`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"carol@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List" <multiple-notifieds@example.com>
+Subject: [List] A message needs moderation
+To: carol@example.com
 
-	expectGDPRLog += "subscribing cleo@example.com to the list list_b@example.com, reason: email\n"
+A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-	expectMessage(t, "list_b+bounces@example.com", []string{"cleo@example.com"}, `Content-Type: text/plain; charset=utf-8
-From: "B" <list_b@example.com>
-Subject: [B] Welcome
-To: cleo@example.com
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
 
-Welcome to the mailing list list_b@example.com.
+----
 
-If you want to unsubscribe, please send an email with the subject "unsubscribe" to list_b@example.com.
-`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
 
-	// send mail which is moderated because of the "X-Spam-Status" header
+	wantChansEmpty(t)
+}
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"},
-		`From: norah@example.net
-To: list_a@example.com
-Subject: foo
+func TestXSpamStatus(t *testing.T) {
+
+	CreateList("x-spam-status@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel    // alice
+
+	mustTransactOne("some_envelope@example.com", []string{"x-spam-status@example.com"},
+		`From: alice@example.com
+To: x-spam-status@example.com
+Subject: Hi
 X-Spam-Status: Yes, score=12
 
 Hello`)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	wantMessage(t, "x-spam-status+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List" <x-spam-status@example.com>
+Subject: [List] A message needs moderation
+To: alice@example.com
 
-	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com"}, `Content-Type: text/plain; charset=utf-8
-From: "A" <list_a@example.com>
-Subject: [A] A message needs moderation
-To: chris@example.com
+A message at "List" <x-spam-status@example.com> is waiting for moderation.
 
-A message at "A" <list_a@example.com> is waiting for moderation.
+You can moderate it here: https://lists.example.com/mod/x-spam-status%40example.com
 
-You can moderate it here: https://lists.example.com/mod/list_a%40example.com
-`)
+----
 
-	expectMessage(t, "list_a+bounces@example.com", []string{"norah@example.net"}, `Content-Type: text/plain; charset=utf-8
-From: "A" <list_a@example.com>
-Subject: [A] A message needs moderation
-To: norah@example.net
+You can leave the mailing list "List" here: https://lists.example.com/leave/x-spam-status%40example.com`)
 
-A message at "A" <list_a@example.com> is waiting for moderation.
+	wantChansEmpty(t)
+}
 
-You can moderate it here: https://lists.example.com/mod/list_a%40example.com
-`)
+func TestMailToBounce(t *testing.T) {
 
-	// send looped mail with List-Id header
+	CreateList("mail-to-bounce@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a@example.com"},
-		`From: chris@example.com
-To: list_a@example.com
-List-Id: "A" <list_a@example.com>
-Subject: foo
+	<-messageChannel // welcome alice
+	<-gdprChannel    // alice
+
+	err := transactOne("some_envelope@example.com", []string{"mail-to-bounce+bounces@example.com"},
+		`From: alice@example.com
+To: mail-to-bounce+bounces@example.com
+Subject: Hi
 
 Hello`)
 
-	expectErr(t, err, "email loop detected: list_a@example.com")
+	wantErr(t, err, "bounce address accepts only bounce notifications (with empty envelope-from)")
 
-	// send email to bounce address
+	wantChansEmpty(t)
+}
 
-	err = lmtpTransaction("some_envelope@example.com", []string{"list_a+bounces@example.com"},
-		`From: chris@example.com
-To: list_a+bounces@example.com
-Subject: foo
+func TestBounceToList(t *testing.T) {
 
-bar`)
+	CreateList("bounce-to-list@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
-	expectErr(t, err, "bounce address accepts only bounce notifications (with empty envelope-from)")
+	<-messageChannel // welcome alice
+	<-gdprChannel    // alice
 
-	// send bounce notification to list address
+	err := transactOne("", []string{"bounce-to-list@example.com"},
+		`From: alice@example.com
+To: bounce-to-list@example.com
+Subject: Hi
 
-	err = lmtpTransaction("", []string{"list_a@example.com"},
-		`From: chris@example.com
-To: list_a@example.com
-Subject: foo
+Hello`)
 
-bar`)
+	wantErr(t, err, "got bounce notification (with empty envelope-from) to non-bounce address")
 
-	expectErr(t, err, "got bounce notification (with empty envelope-from) to non-bounce address")
+	wantChansEmpty(t)
+}
 
-	// send bounce notification to bounce address
+func TestBounceToBounce(t *testing.T) {
 
-	err = lmtpTransaction("", []string{"list_a+bounces@example.com"},
-		`From: chris@example.com
-To: list_a+bounces@example.com
-Subject: Some Subject
+	CreateList("bounce-to-bounce@example.com", "List", "carol@example.com", "testing", testAlerter{})
 
-This is a bounce notification blah blah.`)
+	<-messageChannel // welcome carol
+	<-gdprChannel    // carol
 
-	expectMessage(t, "", []string{"chris@example.com", "norah@example.net"}, `Content-Type: text/plain; charset=utf-8
-From: "A" <list_a@example.com>
-Subject: [A] Bounce notification: Some Subject
-To: list_a+bounces@example.com
+	mustTransactOne("", []string{"bounce-to-bounce+bounces@example.com"},
+		`From: carol@example.com
+To: bounce-to-bounce+bounces@example.com
+Subject: could not deliver message
 
-This is a bounce notification blah blah.`)
+Sorry`)
 
-	// send message with list not in To or Cc
+	wantMessage(t, "", []string{"carol@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List" <bounce-to-bounce@example.com>
+Subject: [List] Bounce notification: could not deliver message
+To: bounce-to-bounce+bounces@example.com
 
-	err = lmtpTransaction("some_envelope@example.net", []string{"list_a@example.com"},
-		`From: norah@example.net
-To: something_else@example.com
-Cc: more@example.com
-Subject: Some Subject
+Sorry`)
 
-Hi`)
+	wantChansEmpty(t)
+}
 
-	expectErr(t, err, "list address list_a@example.com is not in To or Cc")
+func TestCcBcc(t *testing.T) {
 
-	// send same message with list in Cc
+	CreateList("cc-bcc@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
-	err = lmtpTransaction("some_envelope@example.net", []string{"list_a@example.com"},
-		`From: norah@example.net
-To: something_else@example.com
-Cc: more@example.com, list_a@example.com
-Subject: Some Subject
+	<-messageChannel // welcome alice
+	<-gdprChannel    // alice
 
-Hi`)
+	// BCC
 
-	expectMessage(t, "list_a+bounces@example.com", []string{"chris@example.com", "claire@example.com", "norah@example.net"},
-`Cc: more@example.com, list_a@example.com
-From: "norah via A" <list_a@example.com>
-List-Id: "A" <list_a@example.com>
-List-Post: <mailto:list_a@example.com>
-List-Unsubscribe: <mailto:list_a@example.com?subject=unsubscribe>
-Reply-To: <norah@example.net>
-Subject: [A] Some Subject
-To: something_else@example.com
+	err := transactOne("some_envelope@example.com", []string{"cc-bcc@example.com"},
+		`From: alice@example.com
+To: foo@example.com
+Cc: bar@example.com
+Subject: Hi
 
-Hi`)
+Hello`)
 
-	// test encoding of special characters
+	wantErr(t, err, "list address cc-bcc@example.com is not in To or Cc")
 
-	if _, err = CreateList("list_ue@example.com", "List Ü", "user_ue@example.com", testAlerter{}); err != nil {
-		t.Fatal(err)
-	}
+	// CC
 
-	err = lmtpTransaction("user_ue@example.com", []string{"list_ue@example.com"},
+	mustTransactOne("some_envelope@example.net", []string{"cc-bcc@example.com"},
+		`From: alice@example.com
+To: foo@example.com
+Cc: bar@example.com, cc-bcc@example.com
+Subject: Hi
+
+Hello`)
+
+	wantMessage(t, "cc-bcc+bounces@example.com", []string{"alice@example.com"},
+		`Cc: bar@example.com, cc-bcc@example.com
+From: "alice via List" <cc-bcc@example.com>
+List-Id: "List" <cc-bcc@example.com>
+List-Post: <mailto:cc-bcc@example.com>
+List-Unsubscribe: <mailto:cc-bcc@example.com?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [List] Hi
+To: foo@example.com
+
+Hello
+
+----
+
+You can leave the mailing list "List" here: https://lists.example.com/leave/cc-bcc%40example.com`)
+
+	wantChansEmpty(t)
+}
+
+func TestEncodeSpecialChars(t *testing.T) {
+
+	CreateList("list_ue@example.com", "List Ü", "user_ue@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome user_ue
+	<-gdprChannel    // alice
+
+	mustTransactOne("user_ue@example.com", []string{"list_ue@example.com"},
 		`From: =?utf-8?q?User_=C3=9C?= <user_ue@example.com>
 To: "List Ü" <list_ue@example.com>
 Subject: =?utf-8?q?Hell=C3=B6?=
 
 Hi`) // note that the "To" header is not encoded properly
 
-	expectMessage(t, "list_ue+bounces@example.com", []string{"user_ue@example.com"},
-`From: =?utf-8?q?User_=C3=9C_via_List_=C3=9C?= <list_ue@example.com>
+	wantMessage(t, "list_ue+bounces@example.com", []string{"user_ue@example.com"},
+		`From: =?utf-8?q?User_=C3=9C_via_List_=C3=9C?= <list_ue@example.com>
 List-Id: =?utf-8?q?List_=C3=9C?= <list_ue@example.com>
 List-Post: <mailto:list_ue@example.com>
-List-Unsubscribe: <mailto:list_ue@example.com?subject=unsubscribe>
+List-Unsubscribe: <mailto:list_ue@example.com?subject=leave>
 Reply-To: =?utf-8?q?User_=C3=9C?= <user_ue@example.com>
 Subject: =?utf-8?q?[List_=C3=9C]_Hell=C3=B6?=
 To: "List Ü" <list_ue@example.com>
 
-Hi`) // the "To" header stays unencoded, as we're minimally invasive here
+Hi
 
-	// delete list
+----
 
-	err = listA.Delete()
+You can leave the mailing list "List Ü" here: https://lists.example.com/leave/list_ue%40example.com`) // the "To" header stays unencoded, as we're minimally invasive here
+
+	wantChansEmpty(t)
+}
+
+func TestMultipartAlternativeMessageFooter(t *testing.T) {
+
+	CreateList("multipart-alternative-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel
+
+	mustTransactOne("some_envelope@example.com", []string{"multipart-alternative-message@example.com"},
+		`From: alice@example.com
+To: multipart-alternative-message@example.com
+Subject: Hi
+Content-Type: multipart/alternative; boundary="original-boundary"
+
+--original-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+Hello plain text world!
+
+--original-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+<p>Hello HTML world!</p>
+
+--original-boundary--
+`)
+
+	wantMessage(t, "multipart-alternative-message+bounces@example.com", []string{"alice@example.com"},
+		`Content-Type: multipart/mixed;
+ boundary=boundary-0
+From: "alice via List" <multipart-alternative-message@example.com>
+List-Id: "List" <multipart-alternative-message@example.com>
+List-Post: <mailto:multipart-alternative-message@example.com>
+List-Unsubscribe: <mailto:multipart-alternative-message@example.com?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [List] Hi
+To: multipart-alternative-message@example.com
+
+--boundary-0
+Content-Type: multipart/alternative; boundary="original-boundary"
+
+--original-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+Hello plain text world!
+
+--original-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+<p>Hello HTML world!</p>
+
+--original-boundary--
+
+--boundary-0
+Content-Disposition: inline
+Content-Type: multipart/alternative; boundary=boundary-1
+
+--boundary-1
+Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
+
+You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-alternative-message%40example.com
+--boundary-1
+Content-Disposition: inline
+Content-Type: text/html; charset=us-ascii
+
+<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-alternative-message%40example.com">here</a>.</span>
+--boundary-1--
+
+--boundary-0--
+`)
+
+	wantChansEmpty(t)
+}
+
+func TestMultipartMixedMessageFooter(t *testing.T) {
+
+	CreateList("multipart-mixed-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel
+
+	mustTransactOne("some_envelope@example.com", []string{"multipart-mixed-message@example.com"},
+		`From: alice@example.com
+To: multipart-mixed-message@example.com
+Subject: Hi
+Content-Type: multipart/mixed; boundary="original-boundary"
+
+--original-boundary
+Content-Type: text/plain; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: inline
+
+Hello plain text world!
+
+--original-boundary
+Content-Type: text/html; charset="utf-8"
+Content-Transfer-Encoding: quoted-printable
+Content-Disposition: attachment; filename=hello.html
+
+<p>This is an attachment.</p>
+
+--original-boundary--
+`)
+
+	wantMessage(t, "multipart-mixed-message+bounces@example.com", []string{"alice@example.com"},
+		`Content-Type: multipart/mixed; boundary="original-boundary"
+From: "alice via List" <multipart-mixed-message@example.com>
+List-Id: "List" <multipart-mixed-message@example.com>
+List-Post: <mailto:multipart-mixed-message@example.com>
+List-Unsubscribe: <mailto:multipart-mixed-message@example.com?subject=leave>
+Reply-To: <alice@example.com>
+Subject: [List] Hi
+To: multipart-mixed-message@example.com
+
+--original-boundary
+Content-Disposition: inline
+Content-Type: text/plain; charset="utf-8"
+
+Hello plain text world!
+
+--original-boundary
+Content-Disposition: inline
+Content-Type: multipart/alternative; boundary=boundary-0
+
+--boundary-0
+Content-Disposition: inline
+Content-Type: text/plain; charset=us-ascii
+
+You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-mixed-message%40example.com
+--boundary-0
+Content-Disposition: inline
+Content-Type: text/html; charset=us-ascii
+
+<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-mixed-message%40example.com">here</a>.</span>
+--boundary-0--
+
+--original-boundary
+Content-Disposition: attachment; filename=hello.html
+Content-Type: text/html; charset="utf-8"
+
+<p>This is an attachment.</p>
+
+--original-boundary--
+`)
+
+	wantChansEmpty(t)
+}
+
+func TestKnowns(t *testing.T) {
+
+	CreateList("knowns@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel
+
+	list, _ := GetList(mustParse("knowns@example.com"))
+	list.AddKnowns([]*mailutil.Addr{mustParse("bob@example.com"), mustParse("carol@example.com"), mustParse("known@example.com")}, testAlerter{})
+
+	mustTransactOne("some_envelope@example.com", []string{"knowns@example.com"},
+		`From: known@example.com
+To: knowns@example.com
+Subject: Hi
+
+Hello`)
+
+	wantMessage(t, "knowns+bounces@example.com", []string{"alice@example.com"},
+		`From: "known via List" <knowns@example.com>
+List-Id: "List" <knowns@example.com>
+List-Post: <mailto:knowns@example.com>
+List-Unsubscribe: <mailto:knowns@example.com?subject=leave>
+Reply-To: <known@example.com>
+Subject: [List] Hi
+To: knowns@example.com
+
+Hello
+
+----
+
+You can leave the mailing list "List" here: https://lists.example.com/leave/knowns%40example.com`)
+
+	wantKnowns := []string{
+		"bob@example.com",
+		"carol@example.com",
+		"known@example.com",
+	}
+
+	knowns, err := list.Knowns()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	err = listB.Delete()
+	if len(wantKnowns) != len(knowns) {
+		t.Fatalf("got %d knowns, want %d", len(knowns), len(wantKnowns))
+	}
+
+	for i := range wantKnowns {
+		if knowns[i] != wantKnowns[i] {
+			t.Fatalf("got %s, want %s", knowns[i], wantKnowns[i])
+		}
+	}
+
+	wantChansEmpty(t)
+}
+
+func TestMembers(t *testing.T) {
+
+	CreateList("members@example.com", "List", "alice@example.com", "testing", testAlerter{})
+
+	<-messageChannel // welcome alice
+	<-gdprChannel    // welcome alice
+
+	list, _ := GetList(mustParse("members@example.com"))
+	list.Update("List", false, false, Reject, Pass, Reject, Reject) // members only
+	list.AddMembers(
+		false, // sendWelcome
+		[]*mailutil.Addr{mustParse("bob@example.com"), mustParse("carol@example.com"), mustParse("dave@example.com")},
+		false,         // receive
+		false,         // moderate
+		false,         // notify
+		false,         // admin
+		"testing",     // reason
+		testAlerter{}, // alerter
+	)
+
+	wantGDPREvent(t, `bob@example.com joined the list members@example.com, reason: testing
+carol@example.com joined the list members@example.com, reason: testing
+dave@example.com joined the list members@example.com, reason: testing`)
+
+	mustTransactOne("some_envelope@example.com", []string{"members@example.com"},
+		`From: dave@example.com
+To: members@example.com
+Subject: Hi
+
+Hello`)
+
+	wantMessage(t, "members+bounces@example.com", []string{"alice@example.com"},
+		`From: "dave via List" <members@example.com>
+List-Id: "List" <members@example.com>
+List-Post: <mailto:members@example.com>
+List-Unsubscribe: <mailto:members@example.com?subject=leave>
+Reply-To: <dave@example.com>
+Subject: [List] Hi
+To: members@example.com
+
+Hello
+
+----
+
+You can leave the mailing list "List" here: https://lists.example.com/leave/members%40example.com`)
+
+	members, err := list.Members()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// check that list is deleted
-
-	_, err = GetList(listAddrA)
-	if err != sql.ErrNoRows {
-		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
+	wantListInfo := ListInfo{
+		mailutil.Addr{
+			Display: "List",
+			Local:   "members",
+			Domain:  "example.com",
+		},
 	}
 
-	_, err = GetList(listAddrB)
-	if err != sql.ErrNoRows {
-		t.Fatalf("list has not been deleted, expected %v, got %v", sql.ErrNoRows, err)
+	wantMembers := []Membership{
+		Membership{
+			ListInfo:      wantListInfo,
+			MemberAddress: "alice@example.com",
+			Receive:       true,
+			Moderate:      true,
+			Notify:        true,
+			Admin:         true,
+		},
+		Membership{
+			ListInfo:      wantListInfo,
+			MemberAddress: "bob@example.com",
+			Receive:       false,
+			Moderate:      false,
+			Notify:        false,
+			Admin:         false,
+		},
+		Membership{
+			ListInfo:      wantListInfo,
+			MemberAddress: "carol@example.com",
+			Receive:       false,
+			Moderate:      false,
+			Notify:        false,
+			Admin:         false,
+		},
+		Membership{
+			ListInfo:      wantListInfo,
+			MemberAddress: "dave@example.com",
+			Receive:       false,
+			Moderate:      false,
+			Notify:        false,
+			Admin:         false,
+		},
 	}
 
-	// check GDPR log
-
-	gotBytes, err := ioutil.ReadFile(testGDPRLogPath)
-	if err != nil {
-		t.Fatal(err)
+	if len(wantMembers) != len(members) {
+		t.Fatalf("got %d members, want %d", len(members), len(wantMembers))
 	}
-	got := string(gotBytes[20:])
 
-	if got != expectGDPRLog {
-		t.Fatalf("got %s, expected %s", got, expectGDPRLog)
+	for i := range wantMembers {
+		if members[i] != wantMembers[i] {
+			t.Fatalf("got %+v, want %+v", members[i], wantMembers[i])
+		}
 	}
+
+	wantChansEmpty(t)
 }

@@ -1,0 +1,7 @@
+You receive this mail because you (or someone else) asked to join your email address {{ .MailAddress }} to the mailing list {{ .ListAddress }}.
+
+To confirm, please visit this address:
+
+{{ .Url }}
+
+If you didn't request this, please ignore this email.

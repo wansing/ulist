@@ -7,6 +7,17 @@ import (
 	"sync"
 )
 
+type Logger interface {
+	Printf(format string, v ...interface{}) error
+}
+
+type ChanLogger chan string
+
+func (c ChanLogger) Printf(format string, v ...interface{}) error {
+	chan string(c) <- fmt.Sprintf(format, v...)
+	return nil
+}
+
 // Logs into a file. Timestamps are in UTC.
 type FileLogger struct {
 	file   *os.File
@@ -40,8 +51,14 @@ func (l *FileLogger) printf(format string, v ...interface{}) error {
 // log.Printf drops the returned error, we don't.
 // In case of a write error, we reopen the file and try again.
 func (l *FileLogger) Printf(format string, v ...interface{}) error {
+
+	if l == nil {
+		return nil
+	}
+
 	l.lock.Lock()
 	defer l.lock.Unlock()
+
 	if err := l.printf(format, v...); err != nil {
 		// reopen file
 		_ = l.file.Close()

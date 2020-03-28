@@ -1,6 +1,8 @@
 package main
 
-import "database/sql"
+import (
+	"github.com/wansing/ulist/mailutil"
+)
 
 type Status int
 
@@ -23,25 +25,23 @@ func (s Status) String() string {
 	}
 }
 
-func (l *List) GetStatus(address string) ([]Status, error) {
+func (l *List) GetStatus(address *mailutil.Addr) ([]Status, error) {
 
 	var s = []Status{}
 
-	m, err := l.GetMember(address)
-	switch err {
-	case nil:
-		if m.Moderate {
+	membership, err := l.GetMember(address)
+	if err != nil {
+		return nil, err
+	}
+	if membership != nil {
+		if membership.Moderate {
 			s = append(s, Moderator)
 		} else {
 			s = append(s, Member)
 		}
-	case sql.ErrNoRows:
-		// not a member, go on
-	default:
-		return nil, err
 	}
 
-	isKnown, err := l.IsKnown(address)
+	isKnown, err := l.IsKnown(address.RFC5322AddrSpec())
 	if err != nil {
 		return nil, err
 	}

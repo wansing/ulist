@@ -59,6 +59,22 @@ func (a *Addr) RFC6068URI(query string) string {
 	return "<" + u.String() + ">" // "URIs are enclosed in '<' and '>'"
 }
 
+// Returns a.Display if it exists, else a.Local.
+//
+// rspamd has the rule "SPOOF_DISPLAY_NAME" which yields a huge penalty if the "From" field looks like "foo@example.net via List<list@example.com>" [1].
+// To be on the safe side, we crop the result at the first "@", if any.
+//
+// [1] https://github.com/rspamd/rspamd/blob/master/rules/misc.lua#L517
+func (a *Addr) DisplayOrLocal() string {
+	var result string
+	if a.Display != "" {
+		result = a.Display
+	} else {
+		result = a.Local
+	}
+	return strings.SplitN(result, "@", 2)[0]
+}
+
 // for URLs
 func (a *Addr) EscapeAddress() string {
 	return url.QueryEscape(a.RFC5322AddrSpec())
@@ -130,18 +146,10 @@ func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error
 	return
 }
 
-// Returns a.Display if it exists, else a.Local.
-//
-// rspamd has the rule "SPOOF_DISPLAY_NAME" which yields a huge penalty if the "From" field looks like "foo@example.net via List<list@example.com>" [1].
-// To be on the safe side, we crop the result at the first "@", if any.
-//
-// [1] https://github.com/rspamd/rspamd/blob/master/rules/misc.lua#L517
-func (a *Addr) DisplayOrLocal() string {
-	var result string
-	if a.Display != "" {
-		result = a.Display
-	} else {
-		result = a.Local
+/*func AddrsToStrs(addrs []*Addr) []string {
+	var strs = []string{}
+	for _, a := range addrs {
+		strs = append(strs, a.RFC5322AddrSpec())
 	}
-	return strings.SplitN(result, "@", 2)[0]
-}
+	return strs
+}*/

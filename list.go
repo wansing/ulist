@@ -9,8 +9,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"mime"
+	"mime/multipart"
 	"net/mail"
+	"net/textproto"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -18,8 +22,9 @@ import (
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 	"github.com/shurcooL/httpfs/text/vfstemplate"
 	"github.com/wansing/ulist/mailutil"
-	"github.com/wansing/ulist/util"
 )
+
+var ErrLink = errors.New("link is invalid or expired") // don't leak information by revealing the specific reason
 
 type List struct {
 	ListInfo
@@ -33,31 +38,62 @@ type List struct {
 	ActionUnknown Action
 }
 
-var sentOptInMails = make(map[string]int64) // canonicalized recipient address => unix time
+var sentJoinCheckbacks = make(map[string]int64)  // RFC5322AddrSpec => unix time
+var sentLeaveCheckbacks = make(map[string]int64) // RFC5322AddrSpec => unix time
 
 func texttmpl(filename string) *template.Template {
 	return template.Must(vfstemplate.ParseFiles(assets, template.New(filename+".txt"), "templates/mail/"+filename+".txt"))
 }
 
-var goodbyeTemplate = texttmpl("goodbye")
-var signUpTemplate = texttmpl("signup")
-var notifyTemplate = texttmpl("notify")
-var welcomeTemplate = texttmpl("welcome")
+// all these txt files should have CRLF line endings
+var checkbackJoinTemplate = texttmpl("checkback-join")
+var checkbackLeaveTemplate = texttmpl("checkback-leave")
+var notifyModsTemplate = texttmpl("notify-mods")
+var signoffJoinTemplate = texttmpl("signoff-join")
+var signoffLeaveTemplate = texttmpl("signoff-leave")
 
-func (l *List) HMAC(addr *mailutil.Addr) ([]byte, error) {
+// CreateHMAC creates an HMAC with a given user email address and the current time
+func (list *List) CreateHMAC(addr *mailutil.Addr) (int64, []byte, error) {
+	var now = time.Now().Unix()
+	var hmac, err = list.createHMAC(addr, now)
+	return now, hmac, err
+}
 
-	if len(l.HMACKey) == 0 {
-		return nil, errors.New("[ListStub] HMACKey is empty")
+// ValidateHMAC validates an HMAC. If the given timestamp is older than maxAgeDays, then ErrLink is returned.
+func (list *List) ValidateHMAC(inputHMAC []byte, addr *mailutil.Addr, timestamp int64, maxAgeDays int) error {
+
+	expectedHMAC, err := list.createHMAC(addr, timestamp)
+	if err != nil {
+		return err
 	}
 
-	if bytes.Equal(l.HMACKey, make([]byte, 32)) {
-		return nil, errors.New("[ListStub] HMACKey is all zeroes")
+	if !hmac.Equal(inputHMAC, expectedHMAC) {
+		return ErrLink
 	}
 
-	mac := hmac.New(sha512.New, l.HMACKey)
-	mac.Write([]byte(l.RFC5322AddrSpec()))
+	if timestamp < time.Now().AddDate(0, 0, -1*maxAgeDays).Unix() {
+		return ErrLink
+	}
+
+	return nil
+}
+
+func (list *List) createHMAC(addr *mailutil.Addr, timestamp int64) ([]byte, error) {
+
+	if len(list.HMACKey) == 0 {
+		return nil, errors.New("hmac: key is empty")
+	}
+
+	if bytes.Equal(list.HMACKey, make([]byte, 32)) {
+		return nil, errors.New("hmac: key is all zeroes")
+	}
+
+	mac := hmac.New(sha512.New, list.HMACKey)
+	mac.Write([]byte(list.RFC5322AddrSpec()))
 	mac.Write([]byte{0}) // separator
 	mac.Write([]byte(addr.RFC5322AddrSpec()))
+	mac.Write([]byte{0}) // separator
+	mac.Write([]byte(strconv.FormatInt(timestamp, 10)))
 
 	return mac.Sum(nil), nil
 }
@@ -92,7 +128,7 @@ func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPE
 
 	for _, from := range froms {
 
-		statuses, err := l.GetStatus(from.RFC5322AddrSpec())
+		statuses, err := l.GetStatus(from)
 		if err != nil {
 			return Reject, "", SMTPErrorf(451, "error getting status from database: %v", err)
 		}
@@ -171,12 +207,179 @@ func (list *List) Save(m *mailutil.Message) error {
 	return nil
 }
 
-func (list *List) Send(m *mailutil.Message) error {
+func (list *List) checkbackJoinUrl(recipient *mailutil.Addr) (string, error) {
+	timestamp, hmac, err := list.CreateHMAC(recipient)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/join/%s/%s/%d/%s", WebUrl, list.EscapeAddress(), recipient.EscapeAddress(), timestamp, base64.RawURLEncoding.EncodeToString(hmac)), nil
+}
+
+func (list *List) askLeaveUrl() string {
+	return fmt.Sprintf("%s/leave/%s", WebUrl, list.EscapeAddress())
+}
+
+func (list *List) checkbackLeaveUrl(recipient *mailutil.Addr) (string, error) {
+	timestamp, hmac, err := list.CreateHMAC(recipient)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/leave/%s/%s/%d/%s", WebUrl, list.EscapeAddress(), recipient.EscapeAddress(), timestamp, base64.RawURLEncoding.EncodeToString(hmac)), nil
+}
+
+func (list *List) plainFooter() string {
+	return fmt.Sprintf(`You can leave the mailing list "%s" here: %s`, list.DisplayOrLocal(), list.askLeaveUrl())
+}
+
+func (list *List) htmlFooter() string {
+	return fmt.Sprintf(`<span style="font-size: 9pt;">You can leave the mailing list "%s" <a href="%s">here</a>.</span>`, list.DisplayOrLocal(), list.askLeaveUrl())
+}
+
+func (list *List) writeMultipartFooter(mw *multipart.Writer) error {
+
+	var randomBoundary = multipart.NewWriter(nil).Boundary() // can't use footerMW.Boundary() because we need it now
+
+	var footerHeader = textproto.MIMEHeader{}
+	footerHeader.Add("Content-Type", mime.FormatMediaType("multipart/alternative", map[string]string{"boundary": randomBoundary}))
+	footerHeader.Add("Content-Disposition", "inline")
+
+	footer, err := mw.CreatePart(footerHeader)
+	if err != nil {
+		return err
+	}
+
+	footerMW := multipart.NewWriter(footer)
+	footerMW.SetBoundary(randomBoundary)
+	defer footerMW.Close()
+
+	// plain text footer
+
+	var footerPlainHeader = textproto.MIMEHeader{}
+	footerPlainHeader.Add("Content-Type", "text/plain; charset=us-ascii")
+	footerPlainHeader.Add("Content-Disposition", "inline")
+
+	plainWriter, err := footerMW.CreatePart(footerPlainHeader) // don't need the returned writer because the plain text footer content is inserted later
+	if err != nil {
+		return err
+	}
+	plainWriter.Write([]byte(list.plainFooter()))
+
+	// HTML footer
+
+	var footerHtmlHeader = textproto.MIMEHeader{}
+	footerHtmlHeader.Add("Content-Type", "text/html; charset=us-ascii")
+	footerHtmlHeader.Add("Content-Disposition", "inline")
+
+	htmlWriter, err := footerMW.CreatePart(footerHtmlHeader) // don't need the returned writer because the HTML footer content is inserted later
+	if err != nil {
+		return err
+	}
+	htmlWriter.Write([]byte(list.htmlFooter()))
+
+	return nil
+}
+
+func (list *List) insertFooter(header mail.Header, body io.Reader) (io.Reader, error) {
+
+	// RFC2045 5.2
+	// This default is assumed if no Content-Type header field is specified.
+	// It is also recommend that this default be assumed when a syntactically invalid Content-Type header field is encountered.
+	var msgContentType = "text/plain"
+	var msgBoundary = ""
+
+	if mediatype, params, err := mime.ParseMediaType(header.Get("Content-Type")); err == nil { // Internet Media Type = MIME Type
+		msgContentType = mediatype
+		if boundary, ok := params["boundary"]; ok {
+			msgBoundary = boundary
+		}
+	}
+
+	var bodyWithFooter = &bytes.Buffer{}
+
+	switch msgContentType {
+	case "text/plain": // append footer to plain text
+		io.Copy(bodyWithFooter, body)
+		bodyWithFooter.WriteString("\r\n\r\n----\r\n\r\n")
+		bodyWithFooter.WriteString(list.plainFooter())
+
+	case "multipart/mixed": // insert footer as a part
+
+		var multipartReader = multipart.NewReader(body, msgBoundary)
+
+		var multipartWriter = multipart.NewWriter(bodyWithFooter)
+		multipartWriter.SetBoundary(msgBoundary) // re-use boundary
+
+		var footerWritten bool
+
+		for {
+			p, err := multipartReader.NextPart() // p implements io.Reader
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return nil, err
+			}
+
+			partWriter, err := multipartWriter.CreatePart(p.Header)
+			if err != nil {
+				return nil, err
+			}
+
+			io.Copy(partWriter, p)
+
+			if !footerWritten {
+				if err = list.writeMultipartFooter(multipartWriter); err != nil {
+					return nil, err
+				}
+				footerWritten = true
+			}
+		}
+
+		multipartWriter.Close()
+
+	default: // create a multipart/mixed body with original message part and footer part
+
+		var multipartWriter = multipart.NewWriter(bodyWithFooter)
+
+		// extract stuff from message header
+		// RFC2183 2.10: "It is permissible to use Content-Disposition on the main body of an [RFC 822] message."
+		var mainPartHeader = textproto.MIMEHeader{}
+		if d := header.Get("Content-Disposition"); d != "" {
+			mainPartHeader.Set("Content-Disposition", d)
+		}
+		if e := header.Get("Content-Transfer-Encoding"); e != "" {
+			mainPartHeader.Set("Content-Transfer-Encoding", e)
+		}
+		if t := header.Get("Content-Type"); t != "" {
+			mainPartHeader.Set("Content-Type", t)
+		}
+
+		mainPart, err := multipartWriter.CreatePart(mainPartHeader)
+		if err != nil {
+			return nil, err
+		}
+		io.Copy(mainPart, body)
+
+		if err := list.writeMultipartFooter(multipartWriter); err != nil {
+			return nil, err
+		}
+
+		multipartWriter.Close()
+
+		// delete stuff which has been extracted, and set new message Content-Type
+		delete(header, "Content-Disposition")
+		delete(header, "Content-Transfer-Encoding")
+		header["Content-Type"] = []string{mime.FormatMediaType("multipart/mixed", map[string]string{"boundary": multipartWriter.Boundary()})}
+	}
+
+	return bodyWithFooter, nil
+}
+
+func (list *List) Forward(m *mailutil.Message) error {
 
 	// make a copy of the header
 
-	header := make(mail.Header)
-
+	header := make(mail.Header) // mail.Header has no Set method
 	for k, vals := range m.Header {
 		header[k] = append(header[k], vals...)
 	}
@@ -185,8 +388,8 @@ func (list *List) Send(m *mailutil.Message) error {
 	// Header keys use this notation: https://golang.org/pkg/net/textproto/#CanonicalMIMEHeaderKey
 
 	header["List-Id"] = []string{list.RFC5322NameAddr()}
-	header["List-Post"] = []string{list.RFC6068URI("")}                           // required for "Reply to list" button in Thunderbird
-	header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=unsubscribe")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
+	header["List-Post"] = []string{list.RFC6068URI("")}                     // required for "Reply to list" button in Thunderbird
+	header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=leave")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
 	header["Subject"] = []string{list.PrefixSubject(header.Get("Subject"))}
 
 	// DKIM signatures usually sign "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field and we should drop it. See RFC 6376 B.2.3.
@@ -232,19 +435,25 @@ func (list *List) Send(m *mailutil.Message) error {
 
 	header["Sender"] = []string{}
 
-	// send
+	// add footer
 
-	receivers, err := list.Receivers()
+	var bodyWithFooter, err = list.insertFooter(header, m.BodyReader())
 	if err != nil {
 		return err
 	}
 
-	// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
-	return mta.Send(list.BounceAddress(), receivers, header, m.BodyReader())
+	// send emails
+
+	if recipients, err := list.Receivers(); err == nil {
+		// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
+		return mta.Send(list.BounceAddress(), recipients, header, bodyWithFooter)
+	} else {
+		return err
+	}
 }
 
-// sends an email to a single user
-func (list *List) sendUserMail(recipient string, subject string, body io.Reader) error {
+// Notify notifies recipients about something related to the list.
+func (list *List) Notify(recipient string, subject string, body io.Reader) error {
 
 	header := make(mail.Header)
 	header["From"] = []string{list.RFC5322NameAddr()}
@@ -255,44 +464,28 @@ func (list *List) sendUserMail(recipient string, subject string, body io.Reader)
 	return mta.Send(list.BounceAddress(), []string{recipient}, header, body)
 }
 
-// like sendUserMail with multiple recipients, and body is a template
-func (l *List) sendUsersMailTemplate(recipients []*mailutil.Addr, subject string, body *template.Template, alerter util.Alerter) {
+// sendJoinCheckback does not check the authorization of the asking person. This must be done by the caller.
+func (list *List) sendJoinCheckback(recipient *mailutil.Addr) error {
 
-	bodybuf := &bytes.Buffer{}
-	if err := body.Execute(bodybuf, l.RFC5322AddrSpec()); err != nil {
-		alerter.Alertf("error executing email template: %v", err)
-		return
-	}
+	// rate limiting
 
-	for _, recipient := range recipients {
-		if err := l.sendUserMail(recipient.RFC5322AddrSpec(), subject, bodybuf); err != nil {
-			alerter.Alertf("error sending email to user: %v", err)
+	if lastSentTimestamp, ok := sentJoinCheckbacks[recipient.RFC5322AddrSpec()]; ok {
+		if lastSentTimestamp < time.Now().AddDate(0, 0, 7).Unix() {
+			return fmt.Errorf("A join request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", recipient)
 		}
 	}
-}
 
-// for lists with public signup
-func (list *List) sendPublicOptIn(recipient *mailutil.Addr) error {
-
-	if !list.PublicSignup {
-		return errors.New("sendPublicOptIn is designed for public signup lists only")
-	}
-
-	if m, _ := list.GetMember(recipient.RFC5322AddrSpec()); m.Receive {
-		return nil // Already receiving. This might leak timing information on whether the person is a member of the list. However this applies only to public-signup lists.
-	}
-
-	// prevent spamming
-
-	if lastSentTimestamp, ok := sentOptInMails[recipient.RFC5322AddrSpec()]; ok {
-		if lastSentTimestamp < time.Now().AddDate(0, 0, 14).Unix() {
-			return errors.New(`An opt-in request has already been sent to this email address. In order to prevent spamming, opt-in requests can be sent every 14 days only. Alternatively you can send a message with the subject "subscribe" to the list address.`)
+	if m, err := list.GetMember(recipient); err == nil {
+		if m != nil { // already a member
+			return nil // Let's return nil (after rate limiting!), so we don't reveal the subscription. Timing might still leak information.
 		}
+	} else {
+		return err
 	}
 
 	// create mail
 
-	hmac, err := list.HMAC(recipient)
+	var url, err = list.checkbackJoinUrl(recipient)
 	if err != nil {
 		return err
 	}
@@ -304,41 +497,101 @@ func (list *List) sendPublicOptIn(recipient *mailutil.Addr) error {
 	}{
 		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: recipient.RFC5322AddrSpec(),
-		Url:         WebUrl + "/public/" + list.EscapeAddress() + "/" + recipient.EscapeAddress() + "/" + base64.RawURLEncoding.EncodeToString(hmac),
+		Url:         url,
 	}
 
 	body := &bytes.Buffer{}
-
-	if err = signUpTemplate.Execute(body, mailData); err != nil {
+	if err = checkbackJoinTemplate.Execute(body, mailData); err != nil {
 		return err
 	}
 
-	if err = list.sendUserMail(recipient.RFC5322AddrSpec(), "Please confirm to join the mailing list "+list.RFC5322AddrSpec(), body); err != nil {
+	if err = list.Notify(recipient.RFC5322AddrSpec(), fmt.Sprintf("Please confirm: join the mailing list %s", list), body); err != nil {
 		return err
 	}
 
-	sentOptInMails[recipient.RFC5322AddrSpec()] = time.Now().Unix()
+	sentJoinCheckbacks[recipient.RFC5322AddrSpec()] = time.Now().Unix()
 
 	return nil
 }
 
-func (list *List) sendModerationNotification(recipient string) error {
+func (list *List) sendLeaveCheckback(recipient *mailutil.Addr) error {
+
+	// rate limiting
+
+	if lastSentTimestamp, ok := sentLeaveCheckbacks[recipient.RFC5322AddrSpec()]; ok {
+		if lastSentTimestamp < time.Now().AddDate(0, 0, 7).Unix() {
+			return fmt.Errorf("A leave request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", recipient)
+		}
+	}
+
+	if m, err := list.GetMember(recipient); err == nil {
+		if m == nil { // not a member
+			return nil // Let's return nil (after rate limiting!), so we don't reveal the lack of subscription. Timing might still leak information.
+		}
+	} else {
+		return err
+	}
+
+	// create mail
+
+	var url, err = list.checkbackLeaveUrl(recipient)
+	if err != nil {
+		return err
+	}
+
+	mailData := struct {
+		ListAddress string
+		MailAddress string
+		Url         string
+	}{
+		ListAddress: list.RFC5322AddrSpec(),
+		MailAddress: recipient.RFC5322AddrSpec(),
+		Url:         url,
+	}
 
 	body := &bytes.Buffer{}
+	if err = checkbackLeaveTemplate.Execute(body, mailData); err != nil {
+		return err
+	}
 
+	if err = list.Notify(recipient.RFC5322AddrSpec(), fmt.Sprintf("Please confirm: leave the mailing list %s", list), body); err != nil {
+		return err
+	}
+
+	sentLeaveCheckbacks[recipient.RFC5322AddrSpec()] = time.Now().Unix()
+
+	return nil
+}
+
+// does append a footer
+func (list *List) notifyMods(recipients []string) error {
+
+	// render template
+
+	body := &bytes.Buffer{}
 	data := struct {
+		Footer  string
 		List    *ListInfo // pointer because it has pointer receivers, else template execution will fail
 		ModHref string
 	}{
+		Footer:  list.plainFooter(),
 		List:    &list.ListInfo,
 		ModHref: WebUrl + "/mod/" + list.EscapeAddress(),
 	}
 
-	if err := notifyTemplate.Execute(body, data); err != nil {
+	if err := notifyModsTemplate.Execute(body, data); err != nil {
 		return err
 	}
 
-	return list.sendUserMail(recipient, "A message needs moderation", body)
+	// send emails
+
+	var lastErr error
+	for _, recipient := range recipients {
+		if err := list.Notify(recipient, "A message needs moderation", bytes.NewReader(body.Bytes())); err != nil { // NewReader is important, else the Buffer would be consumed
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func (list *List) DeleteModeratedMail(filename string) error {

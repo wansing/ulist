@@ -23,9 +23,26 @@ See `docs/integration` for examples.
   * when running in a jail, you need access to `/etc/postfix`, `/var/log/postfix` and `/var/spool/postfix/maildrop`
   * easier than SMTP delivery (`localhost:25` usually accepts mail for localhost only and might drop emails for other recipients, `localhost:587` usually requires authentication and SSL/TLS)
 * From-Munging
-  * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address.
+  * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address and remove existing DKIM signatures.
 * Modifying emails
-  * As `From` is rewritten, it's feasible to modify the email. We can prepend the list name to the subject and add an unsubscribe footer to the content.
+  * As original DKIM signatures are removed, we can modify parts of the email. We can prepend the list name to the subject header and add an unsubscribe footer to the message body.
+* Subscribe and unsubscribe
+  * Issue: emails (like "subscribe" or "unsubscribe" instructions) can be spoofed
+  * Issue: opt-in backscatter spam is an issue rather with web forms (trade a http request for an email) than email (trade an email for an email)
+  * Issue: individual unsubscribe links in the footer will fall into others hands, as people will forward or full-quote emails
+  * Decision: signup web form must be protected against spam bots and use rate limiting
+  * Decision: subscribe/unsubscribe requesters get an email with a confirmation link
+  * Terms
+    1. user: ask (via web or email with special subject)
+    2. server: checkback (send email with link)
+    3. user: confirm (click link)
+    4. server: sign off (send welcome or goodbye email)
+* Memory consumption
+  * Issue: some people use email aliases and don't remember which address they subscribed
+  * Issue: individual list emails consume much memory, e.g. 1000 recipients × 10 MB message = 10 GB
+  * Decision: notification emails (checkback, sign-off, moderation) are individual
+  * Decision: list emails are not individual, MTA gets one email with many recipients (envelope-to)
+  * List receivers must maintain an overview over their email aliases or check the Delivered-To header line.
 
 ## Security Considerations
 

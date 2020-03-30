@@ -526,7 +526,9 @@ func membersAddHandler(ctx *Context, list *List) error {
 					ctx.Alertf("Error sending join checkback: %v", err)
 				}
 			}
-			ctx.Successf("Sent %d checkback emails", sent)
+			if sent > 0 {
+				ctx.Successf("Sent %d checkback emails", sent)
+			}
 		case "signoff":
 			list.AddMembers(true, addrs, true, false, false, false, fmt.Sprintf("added by list admin %s", ctx.User), ctx)
 		case "silent":
@@ -561,7 +563,9 @@ func membersRemoveHandler(ctx *Context, list *List) error {
 					ctx.Alertf("Error sending join checkback: %v", err)
 				}
 			}
-			ctx.Successf("Sent %d checkback emails", sent)
+			if sent > 0 {
+				ctx.Successf("Sent %d checkback emails", sent)
+			}
 		case "signoff":
 			list.RemoveMembers(true, addrs, fmt.Sprintf("removed by list admin %s", ctx.User), ctx)
 		case "silent":
@@ -589,7 +593,7 @@ func memberHandler(ctx *Context, list *List) error {
 		return err
 	}
 	if m == nil {
-		return errors.New("This person is not a member of the list")
+		return errors.New("this person is not a member of the list")
 	}
 
 	if ctx.r.Method == http.MethodPost {
@@ -837,7 +841,7 @@ func viewHandler(ctx *Context, list *List) error {
 
 	emlFilename := ctx.ps.ByName("emlfilename")
 	if strings.Contains(emlFilename, "..") || strings.Contains(emlFilename, "/") {
-		return errors.New("Filename contains forbidden characters")
+		return errors.New("filename contains forbidden characters")
 	}
 
 	ctx.ServeFile(list.StorageFolder() + "/" + emlFilename)

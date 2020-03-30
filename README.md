@@ -16,6 +16,15 @@ See `build.sh`.
 
 See `docs/integration` for examples.
 
+## Features
+
+* single binary
+* nice web interface
+* works with SPF, DKIM etc. out of the box
+* pluggable authentication
+* probably GDPR compliant
+* appends a footer with an unsubscribe link
+
 ## Design Choices
 
 * Email delivery via the sendmail interface
@@ -50,17 +59,15 @@ See `docs/integration` for examples.
 
 ## TODO
 
+* docs: mention the postfix transport_maps [interface](http://www.postfix.org/DATABASE_README.html#types) interface instead of letting postfix access the ulist database
+* LDAP authenticator
 * more unit tests
-* opt-in after adding members manually
 * GDPR: require opt-in after n days or member won't get mails any more
 * more sophisticated bounce processing
-* append an unsubscribe link to the content
-* remove unsubscribing via email (it's prone to spoofing and can leak memberships)
 * web UI: list creation permissions per domain
 * remove IP address of sender (or check that removal works)
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
-* ability to block people (maybe keep membership and set `optInExpiry` timestamp to -1)
-* docs: mention the postfix transport_maps [interface](http://www.postfix.org/DATABASE_README.html#types) interface instead of letting postfix access the ulist database
+* ability to block people (maybe keep membership and set `optInExpiry` timestamp or so to -1)
 * maybe issue with Apple Mail: two line breaks after header
 
 ## Omitted features

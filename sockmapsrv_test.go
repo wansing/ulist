@@ -20,8 +20,8 @@ postmap-b@example.com	lmtp:unix:/tmp/lmtp.sock
 
 func TestPostmap(t *testing.T) {
 
-	CreateList("postmap-a@example.com", "A", "", "testing", nil)
-	CreateList("postmap-b@example.com", "A", "", "testing", nil)
+	db.CreateList("postmap-a@example.com", "A", "", "testing", nil)
+	db.CreateList("postmap-b@example.com", "A", "", "testing", nil)
 
 	go sockmapsrv("/tmp/lmtp.sock", sockmapsrvTestSocketmap)
 

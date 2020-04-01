@@ -1,4 +1,4 @@
-package main
+package listdb
 
 import (
 	"database/sql/driver"

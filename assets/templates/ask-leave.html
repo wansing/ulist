@@ -7,7 +7,7 @@
 			<input name="email" type="email" class="form-control" placeholder="Email address" value="{{ .Email }}">
 		</div>
 		<div class="form-group" style="display: none;">
-			<input name="{{ .RandomName }}" class="form-control" value="" />
+			{{ CreateCaptcha }}
 		</div>
 		<button name="leave" value="1" type="submit" class="btn btn-primary">Leave</button>
 	</form>

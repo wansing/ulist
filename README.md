@@ -24,6 +24,7 @@ See `docs/integration` for examples.
 * pluggable authentication
 * probably GDPR compliant
 * appends a footer with an unsubscribe link
+* socketmap server for postfix
 
 ## Design Choices
 
@@ -69,6 +70,7 @@ See `docs/integration` for examples.
 * ensure that the sender is not leaked if `HideFrom` is true, e.g. by removing `Delivered-To` headers?
 * ability to block people (maybe keep membership and set `optInExpiry` timestamp or so to -1)
 * maybe issue with Apple Mail: two line breaks after header
+* one mails sent through multiple lists has the same Message-Id, mixing up replies if a user is in both lists
 
 ## Omitted features
 

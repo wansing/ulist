@@ -1,4 +1,4 @@
-package main
+package listdb
 
 import (
 	"github.com/wansing/ulist/mailutil"

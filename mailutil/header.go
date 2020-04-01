@@ -12,6 +12,7 @@ import (
 // RFC5322 says CRLF. Postfix works with both \n and \r\n.
 const lineSeparator = "\r\n"
 
+// ParseAddressesFromHeader parses email addresses from a header line. In contrast to ParseAddresses, parsing is strictly.
 func ParseAddressesFromHeader(header mail.Header, fieldName string, limit int) ([]*Addr, error) {
 
 	field := header.Get(fieldName)

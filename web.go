@@ -1,5 +1,8 @@
 package main
 
+// In handlers, use Alertf if the user may retry or redact their input, or if there may be multiple results (alert or success messages).
+// Else just return an error, and the middleware will show an error template.
+
 import (
 	"encoding/base64"
 	"encoding/gob"
@@ -21,6 +24,8 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/julienschmidt/httprouter"
 	"github.com/shurcooL/httpfs/html/vfstemplate"
+	"github.com/wansing/ulist/captcha"
+	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
@@ -47,12 +52,13 @@ func tmpl(filename string) *template.Template {
 			assets,
 			template.New("web").Funcs(
 				template.FuncMap{
-					"BatchLimit":    func() uint { return BatchLimit },
+					"BatchLimit":    func() uint { return listdb.BatchLimit },
+					"CreateCaptcha": captcha.Create,
 					"TryMimeDecode": mailutil.TryMimeDecode,
 				},
 			),
-			"templates/web/web.html",
-			"templates/web/"+filename+".html",
+			"templates/web.html",
+			"templates/"+filename+".html",
 		),
 	)
 }
@@ -136,30 +142,11 @@ func (ctx *Context) ServeFile(name string) {
 	http.ServeFile(ctx.w, ctx.r, name)
 }
 
-func (ctx *Context) Login(email, password string) bool {
-
-	email = strings.ToLower(strings.TrimSpace(email))
-
-	success, err := authenticators.Authenticate(email, password)
-	if err != nil {
-		ctx.Alertf("Error loggin in: %v", err)
-	}
-
-	if DummyMode {
-		email = Superadmin
-		success = true
-	}
-
-	if success {
-		sessionManager.Put(ctx.r.Context(), "user", email)
-		ctx.Successf("Welcome!")
-	} else {
-		ctx.Alertf("Wrong email address or password")
-	}
-
-	return success
+func (ctx *Context) setUser(email string) {
+	sessionManager.Put(ctx.r.Context(), "user", email)
 }
 
+// sets the logged-in user unconditionally
 func (ctx *Context) LoggedIn() bool {
 	return ctx.User != nil
 }
@@ -225,7 +212,7 @@ func (r *Mux) GETAndPOST(path string, handle httprouter.Handle) {
 }
 
 // Sets up the httprouter and starts the web ui listener.
-// Db should be initialized at this point.
+// db should be initialized at this point.
 func webui() {
 
 	mux := Mux{httprouter.New()}
@@ -235,10 +222,10 @@ func webui() {
 	// join and leave
 
 	mux.GET("/", middleware(false, publicListsHandler))
-	mux.GETAndPOST("/join/:list", middleware(false, loadList(makeAskHandler(askJoinHandler))))
-	mux.GETAndPOST("/join/:list/:email/:timestamp/:hmac", middleware(false, loadList(confirmJoinHandler)))
-	mux.GETAndPOST("/leave/:list", middleware(false, loadList(makeAskHandler(askLeaveHandler))))
-	mux.GETAndPOST("/leave/:list/:email/:timestamp/:hmac", middleware(false, loadList(confirmLeaveHandler)))
+	mux.GETAndPOST("/join/:list", middleware(false, loadList(askJoinHandler)))
+	mux.GETAndPOST("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoinHandler)))
+	mux.GETAndPOST("/leave/:list", middleware(false, askLeaveHandler))
+	mux.GETAndPOST("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeaveHandler)))
 
 	// logged-in users
 
@@ -306,7 +293,7 @@ func webui() {
 
 // helper functions
 
-func loadList(f func(*Context, *List) error) func(*Context) error {
+func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
 
 	return func(ctx *Context) error {
 
@@ -315,16 +302,17 @@ func loadList(f func(*Context, *List) error) func(*Context) error {
 			return ErrNoList
 		}
 
-		if list, err := GetList(listAddr); err == nil {
-			return f(ctx, list)
-		} else {
+		list, err := db.GetList(listAddr)
+		if list == nil || err != nil {
 			return ErrNoList
 		}
+
+		return f(ctx, list)
 	}
 }
 
-func requireAdminPermission(f func(*Context, *List) error) func(*Context, *List) error {
-	return func(ctx *Context, list *List) error {
+func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
+	return func(ctx *Context, list *listdb.List) error {
 		if m, _ := list.GetMember(ctx.User); ctx.IsSuperAdmin() || (m != nil && m.Admin) {
 			return f(ctx, list)
 		} else {
@@ -333,8 +321,8 @@ func requireAdminPermission(f func(*Context, *List) error) func(*Context, *List)
 	}
 }
 
-func requireModPermission(f func(*Context, *List) error) func(*Context, *List) error {
-	return func(ctx *Context, list *List) error {
+func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
+	return func(ctx *Context, list *listdb.List) error {
 		if m, _ := list.GetMember(ctx.User); ctx.IsSuperAdmin() || (m != nil && m.Moderate) {
 			return f(ctx, list)
 		} else {
@@ -347,7 +335,7 @@ func requireModPermission(f func(*Context, *List) error) func(*Context, *List) e
 
 func myListsHandler(ctx *Context) error {
 
-	memberships, err := Memberships(ctx.User)
+	memberships, err := db.Memberships(ctx.User)
 	if err != nil {
 		return err
 	}
@@ -362,25 +350,40 @@ func loginHandler(ctx *Context) error {
 		return nil
 	}
 
+	if DummyMode {
+		ctx.setUser(Superadmin)
+		ctx.Redirect("/my")
+		return nil
+	}
+
 	data := struct {
 		CanLogin bool
 		Mail     string
 	}{
 		CanLogin: authenticators.Available() || DummyMode,
+		Mail:     ctx.r.PostFormValue("email"),
 	}
 
 	if ctx.r.Method == http.MethodPost {
 
-		data.Mail = ctx.r.PostFormValue("email")
+		email := strings.ToLower(strings.TrimSpace(data.Mail))
 
-		if ctx.Login(data.Mail, ctx.r.PostFormValue("password")) {
+		success, err := authenticators.Authenticate(email, ctx.r.PostFormValue("password"))
+		if err != nil {
+			return err
+		}
 
+		if success {
+			ctx.setUser(email)
+			ctx.Successf("Welcome!")
 			if redirect := ctx.r.URL.Query()["redirect"]; len(redirect) > 0 && !strings.Contains(redirect[0], ":") { // basic protection against hijacking (?redirect=https://eve.example.com)
 				ctx.Redirect(redirect[0])
 			} else {
 				ctx.Redirect("/my")
 			}
 			return nil
+		} else {
+			ctx.Alertf("Wrong email address or password")
 		}
 	}
 
@@ -393,26 +396,26 @@ func logoutHandler(ctx *Context) error {
 	return nil
 }
 
-func settingsHandler(ctx *Context, list *List) error {
+func settingsHandler(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		actionMod, err := ParseAction(ctx.r.PostFormValue("action_mod"))
+		actionMod, err := listdb.ParseAction(ctx.r.PostFormValue("action_mod"))
 		if err != nil {
 			return err
 		}
 
-		actionMember, err := ParseAction(ctx.r.PostFormValue("action_member"))
+		actionMember, err := listdb.ParseAction(ctx.r.PostFormValue("action_member"))
 		if err != nil {
 			return err
 		}
 
-		actionKnown, err := ParseAction(ctx.r.PostFormValue("action_known"))
+		actionKnown, err := listdb.ParseAction(ctx.r.PostFormValue("action_known"))
 		if err != nil {
 			return err
 		}
 
-		actionUnknown, err := ParseAction(ctx.r.PostFormValue("action_unknown"))
+		actionUnknown, err := listdb.ParseAction(ctx.r.PostFormValue("action_unknown"))
 		if err != nil {
 			return err
 		}
@@ -426,11 +429,10 @@ func settingsHandler(ctx *Context, list *List) error {
 			actionKnown,
 			actionUnknown,
 		); err != nil {
-			ctx.Alertf("Error saving settings: %v", err)
-		} else {
-			ctx.Successf("Your changes to the settings of %s have been saved.", list)
+			return err
 		}
 
+		ctx.Successf("Your changes to the settings of %s have been saved.", list)
 		ctx.Redirect("/settings/" + list.EscapeAddress()) // reload in order to see the effect
 		return nil
 	}
@@ -444,7 +446,7 @@ func allHandler(ctx *Context) error {
 		return errors.New("Unauthorized")
 	}
 
-	allLists, err := AllLists()
+	allLists, err := db.AllLists()
 	if err != nil {
 		return err
 	}
@@ -469,32 +471,30 @@ func createHandler(ctx *Context) error {
 	data.AdminMods = ctx.r.PostFormValue("admin_mods")
 
 	if ctx.r.Method == http.MethodPost {
-
-		if list, err := CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User), ctx); err == nil {
-			ctx.Successf("The mailing list %s has been created.", list)
-			ctx.Redirect("/members/" + list.EscapeAddress())
-			return nil
-		} else {
-			ctx.Alertf("Error creating list: %v", err)
+		list, err := db.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User), ctx)
+		if err != nil {
+			return err
 		}
+		ctx.Successf("The mailing list %s has been created.", list)
+		ctx.Redirect("/members/" + list.EscapeAddress())
+		return nil
 	}
 
 	return ctx.Execute(createTemplate, data)
 }
 
-func deleteHandler(ctx *Context, list *List) error {
+func deleteHandler(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost && ctx.r.PostFormValue("delete") == "delete" {
 
 		if ctx.r.PostFormValue("confirm_delete") == "yes" {
 			if err := list.Delete(); err != nil {
-				ctx.Alertf("Error deleting list: %v", err)
-			} else {
-				log.Printf("[web-ui] %s deleted the mailing list %s", ctx.User, list)
-				ctx.Successf("The mailing list %s has been deleted.", list)
-				ctx.Redirect("/")
-				return nil
+				return err
 			}
+			log.Printf("[web-ui] %s deleted the mailing list %s", ctx.User, list)
+			ctx.Successf("The mailing list %s has been deleted.", list)
+			ctx.Redirect("/")
+			return nil
 		} else {
 			ctx.Alertf("You must confirm the checkbox in order to delete the list.")
 		}
@@ -503,15 +503,15 @@ func deleteHandler(ctx *Context, list *List) error {
 	return ctx.Execute(deleteTemplate, list)
 }
 
-func membersHandler(ctx *Context, list *List) error {
+func membersHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(membersTemplate, list)
 }
 
-func membersAddHandler(ctx *Context, list *List) error {
+func membersAddHandler(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email addresses: %v", err)
 		}
@@ -520,7 +520,7 @@ func membersAddHandler(ctx *Context, list *List) error {
 		case "checkback":
 			var sent = 0
 			for _, addr := range addrs {
-				if err := list.sendJoinCheckback(addr); err == nil {
+				if err := list.SendJoinCheckback(addr); err == nil {
 					sent++
 				} else {
 					ctx.Alertf("Error sending join checkback: %v", err)
@@ -544,27 +544,29 @@ func membersAddHandler(ctx *Context, list *List) error {
 	return ctx.Execute(membersAddTemplate, list)
 }
 
-func membersRemoveHandler(ctx *Context, list *List) error {
+func membersRemoveHandler(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email addresses: %v", err)
 		}
 
 		switch ctx.r.PostFormValue("stage") {
 		case "checkback":
-			var sent = 0
+			var sentCounter = 0
 			for _, addr := range addrs {
-				if err := list.sendLeaveCheckback(addr); err == nil {
-					sent++
+				if sent, err := list.SendLeaveCheckback(addr); err == nil {
+					if sent {
+						sentCounter++
+					}
 				} else {
-					ctx.Alertf("Error sending join checkback: %v", err)
+					ctx.Alertf("Error sending leave checkback: %v", err)
 				}
 			}
-			if sent > 0 {
-				ctx.Successf("Sent %d checkback emails", sent)
+			if sentCounter > 0 {
+				ctx.Successf("Sent %d checkback emails", sentCounter)
 			}
 		case "signoff":
 			list.RemoveMembers(true, addrs, fmt.Sprintf("removed by list admin %s", ctx.User), ctx)
@@ -581,7 +583,7 @@ func membersRemoveHandler(ctx *Context, list *List) error {
 	return ctx.Execute(membersRemoveTemplate, list)
 }
 
-func memberHandler(ctx *Context, list *List) error {
+func memberHandler(ctx *Context, list *listdb.List) error {
 
 	member, err := mailutil.ParseAddress(ctx.ps.ByName("email"))
 	if err != nil {
@@ -614,8 +616,8 @@ func memberHandler(ctx *Context, list *List) error {
 	}
 
 	data := struct {
-		List   *List
-		Member *Membership
+		List   *listdb.List
+		Member *listdb.Membership
 	}{
 		List:   list,
 		Member: m,
@@ -624,11 +626,11 @@ func memberHandler(ctx *Context, list *List) error {
 	return ctx.Execute(memberTemplate, data)
 }
 
-func knownsHandler(ctx *Context, list *List) error {
+func knownsHandler(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email address: %v", err)
 		}
@@ -651,7 +653,7 @@ type StoredMessage struct {
 	Filename string
 }
 
-func modHandler(ctx *Context, list *List) error {
+func modHandler(ctx *Context, list *listdb.List) error {
 
 	var err error
 
@@ -688,7 +690,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-delete-"+emlFilename) != "" {
-					if from, ok := m.SingleFrom(); ok && list.ActionKnown == Reject { // same condition as in template
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == listdb.Reject { // same condition as in template
 						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
 						} else {
@@ -709,7 +711,7 @@ func modHandler(ctx *Context, list *List) error {
 				}
 
 				if ctx.r.PostFormValue("addknown-pass-"+emlFilename) != "" {
-					if from, ok := m.SingleFrom(); ok && list.ActionKnown == Pass { // same condition as in template
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == listdb.Pass { // same condition as in template
 						if err := list.AddKnown(from); err == nil {
 							notifyAddedKnown++
 						} else {
@@ -777,7 +779,7 @@ func modHandler(ctx *Context, list *List) error {
 	// template data
 
 	data := struct {
-		List      *List
+		List      *listdb.List
 		Page      int
 		PageLinks []PageLink
 		Messages  []StoredMessage
@@ -837,7 +839,7 @@ func modHandler(ctx *Context, list *List) error {
 	return ctx.Execute(modTemplate, data)
 }
 
-func viewHandler(ctx *Context, list *List) error {
+func viewHandler(ctx *Context, list *listdb.List) error {
 
 	emlFilename := ctx.ps.ByName("emlfilename")
 	if strings.Contains(emlFilename, "..") || strings.Contains(emlFilename, "/") {
@@ -869,20 +871,20 @@ func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timest
 func publicListsHandler(ctx *Context) error {
 
 	data := struct {
-		PublicLists []ListInfo
+		PublicLists []listdb.ListInfo
 		MyLists     map[string]interface{}
 	}{
 		MyLists: make(map[string]interface{}),
 	}
 
 	var err error
-	data.PublicLists, err = PublicLists()
+	data.PublicLists, err = db.PublicLists()
 	if err != nil {
 		return err
 	}
 
 	if ctx.LoggedIn() {
-		memberships, err := Memberships(ctx.User)
+		memberships, err := db.Memberships(ctx.User)
 		if err != nil {
 			return err
 		}
@@ -894,108 +896,116 @@ func publicListsHandler(ctx *Context) error {
 	return ctx.Execute(publicTemplate, data)
 }
 
-func makeAskHandler(f func(*Context, *List, *mailutil.Addr, interface{}) error) func(*Context, *List) error {
-	return func(ctx *Context, list *List) error {
-
-		data := struct {
-			Email       string
-			ListAddress string
-			RandomName  string
-		}{
-			Email:       ctx.r.PostFormValue("email"),
-			ListAddress: list.RFC5322AddrSpec(),
-		}
-
-		var err error
-		if data.RandomName, err = util.RandomString32(); err != nil {
-			return err
-		}
-
-		var email *mailutil.Addr
-
-		if ctx.r.Method == http.MethodPost {
-
-			if email, err = mailutil.ParseAddress(data.Email); err != nil {
-				ctx.Alertf("Error parsing email address: %v", err)
-			}
-
-			// spam protection: we assume that a spam bot would fill the random-named field as well
-			for k, vs := range ctx.r.PostForm { // form has already been parsed
-				if k == "email" || k == "join" || k == "leave" {
-					continue
-				}
-				for _, v := range vs {
-					if v != "" { // assuming a spam bot populates it
-						ctx.Alertf("Spam bot detected, sorry: %v", len(v))
-						ctx.Redirect("/")
-						return nil
-					}
-				}
-			}
-		}
-
-		return f(ctx, list, email, data)
-	}
-}
-
-func askJoinHandler(ctx *Context, list *List, email *mailutil.Addr, data interface{}) error {
+func askJoinHandler(ctx *Context, list *listdb.List) error {
 
 	// public lists only
 	if !list.PublicSignup {
 		return ErrNoList
 	}
 
-	// logged-in users can confirm instantly
+	// convenience feature: logged-in users don't have to validate their email address
 	if ctx.LoggedIn() {
-		if checkbackUrl, err := list.checkbackJoinUrl(ctx.User); err == nil {
-			ctx.Redirect(checkbackUrl)
-			return nil
-		} else {
+		checkbackUrl, err := list.CheckbackJoinUrl(ctx.User)
+		if err != nil {
 			return err
 		}
+		ctx.Redirect(checkbackUrl)
+		return nil
+	}
+
+	data := struct {
+		Email       string
+		ListAddress string
+	}{
+		Email:       ctx.r.PostFormValue("email"),
+		ListAddress: list.RFC5322AddrSpec(),
 	}
 
 	if ctx.r.Method == http.MethodPost {
-		if err := list.sendJoinCheckback(email); err != nil {
-			ctx.Alertf("Error sending opt-in email: %v", err)
-		} else {
-			log.Printf("[web-ui] sending join checkback link to %v", email)
-			ctx.Successf("A confirmation link was sent to your email address.")
-			ctx.Redirect("/")
-			return nil
+
+		if err := captcha.Check(ctx.r); err != nil {
+			return err
 		}
+
+		email, err := mailutil.ParseAddress(data.Email)
+		if err != nil {
+			return err
+		}
+
+		if err := list.SendJoinCheckback(email); err != nil {
+			return err
+		}
+
+		log.Printf("[web-ui] sending join checkback link to %v", email)
+		ctx.Successf("If you are not a member yet, a confirmation link has been sent to your email address.")
+		ctx.Redirect("/")
+		return nil
 	}
 
 	return ctx.Execute(askJoinTemplate, data)
 }
 
-func askLeaveHandler(ctx *Context, list *List, email *mailutil.Addr, data interface{}) error {
+func askLeaveHandler(ctx *Context) error {
 
-	// logged-in users can confirm instantly
-	if ctx.LoggedIn() {
-		if checkbackUrl, err := list.checkbackLeaveUrl(ctx.User); err == nil {
-			ctx.Redirect(checkbackUrl)
-			return nil
-		} else {
+	// We must not reveal whether the list exists!
+
+	listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+	if err != nil {
+		return err
+	}
+
+	list, _ := db.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+
+	// convenience feature: logged-in members don't have to validate their email address
+	if isMember, _ := list.IsMember(ctx.User); isMember {
+		checkbackUrl, err := list.CheckbackLeaveUrl(ctx.User)
+		if err != nil {
 			return err
 		}
+		ctx.Redirect(checkbackUrl)
+		return nil
+	}
+
+	data := struct {
+		Email       string
+		ListAddress string
+	}{
+		Email:       ctx.r.PostFormValue("email"),
+		ListAddress: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
 	}
 
 	if ctx.r.Method == http.MethodPost {
-		if err := list.sendLeaveCheckback(email); err != nil {
-			ctx.Alertf("Error sending opt-out email: %v", err)
-		} else {
-			log.Printf("[web-ui] sending leave checkback link to %v", email)
-			ctx.Successf("A confirmation link was sent to your email address.")
-			ctx.Redirect("/")
-			return nil
+
+		if err := captcha.Check(ctx.r); err != nil {
+			return err
 		}
+
+		if list != nil {
+
+			email, err := mailutil.ParseAddress(data.Email)
+			if err != nil {
+				return err
+			}
+
+			if sent, err := list.SendLeaveCheckback(email); err == nil {
+				if sent {
+					log.Printf("[web-ui] sending leave checkback: list: %s, user: %s", list, email)
+				}
+			} else {
+				log.Printf("[web-ui] error sending leave checkback: list: %s, user: %s, err: %v", list, email, err)
+			}
+			// don't return anything to the user, just log
+		}
+
+		ctx.Successf("If the list exists and you are a member, then a confirmation link has been sent to your email address.")
+		ctx.Redirect("/")
+		return nil
 	}
 
 	return ctx.Execute(askLeaveTemplate, data)
 }
 
-func confirmJoinHandler(ctx *Context, list *List) error {
+func confirmJoinHandler(ctx *Context, list *listdb.List) error {
 
 	// get address, validate HMAC
 
@@ -1015,9 +1025,7 @@ func confirmJoinHandler(ctx *Context, list *List) error {
 		return err
 	}
 	if m != nil {
-		ctx.Alertf("You are already a member of this list.")
-		ctx.Redirect(WebUrl)
-		return nil
+		return errors.New("You are already a member of this list.")
 	}
 
 	// join list if web button is clicked
@@ -1026,9 +1034,8 @@ func confirmJoinHandler(ctx *Context, list *List) error {
 		if err = list.AddMember(true, addr, true, false, false, false, "user confirmed in web ui"); err != nil {
 			return err
 		}
-		delete(sentJoinCheckbacks, addr.RFC5322AddrSpec())
 		ctx.Successf("You have joined the mailing list %s", list)
-		ctx.Redirect(WebUrl)
+		ctx.Redirect("/")
 		return nil
 	}
 
@@ -1045,7 +1052,7 @@ func confirmJoinHandler(ctx *Context, list *List) error {
 	return ctx.Execute(confirmJoinTemplate, data)
 }
 
-func confirmLeaveHandler(ctx *Context, list *List) error {
+func confirmLeaveHandler(ctx *Context, list *listdb.List) error {
 
 	// get address, validate HMAC
 
@@ -1065,9 +1072,7 @@ func confirmLeaveHandler(ctx *Context, list *List) error {
 		return err
 	}
 	if m == nil {
-		ctx.Alertf("You are not a member of this list.")
-		ctx.Redirect(WebUrl)
-		return nil
+		return errors.New("You are not a member of this list.")
 	}
 
 	// leave list if web button is clicked
@@ -1076,9 +1081,8 @@ func confirmLeaveHandler(ctx *Context, list *List) error {
 		if err = list.RemoveMember(true, addr, "user confirmed in web ui"); err != nil {
 			return err
 		}
-		delete(sentLeaveCheckbacks, addr.RFC5322AddrSpec())
 		ctx.Successf("You have left the mailing list %s", list)
-		ctx.Redirect(WebUrl)
+		ctx.Redirect("/")
 		return nil
 	}
 

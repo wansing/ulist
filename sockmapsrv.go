@@ -26,7 +26,7 @@ import (
 // foo@example.com	lmtp:unix:/tmp/lmtp.sock
 // list@example.com	lmtp:unix:/tmp/lmtp.sock
 
-// Db should be initialized at this point
+// db should be initialized at this point
 func sockmapsrv(lmtpSock, socketmapSock string) {
 
 	// make lmtpSock absolute
@@ -101,7 +101,7 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 					continue
 				}
 
-				if exists, err := IsList(listAddr); err == nil {
+				if exists, err := db.IsList(listAddr); err == nil {
 					if exists {
 						conn.Write(util.EncodeNetstring("OK lmtp:unix:" + lmtpSock))
 					} else {

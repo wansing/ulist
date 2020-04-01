@@ -1,4 +1,4 @@
-package main
+package listdb
 
 import (
 	"bytes"
@@ -11,22 +11,31 @@ import (
 	"github.com/wansing/ulist/util"
 )
 
-func IsList(address *mailutil.Addr) (bool, error) {
+func (db *Database) IsList(address *mailutil.Addr) (bool, error) {
 	var exists bool
-	return exists, Db.isListStmt.QueryRow(address.Local, address.Domain).Scan(&exists)
+	return exists, db.isListStmt.QueryRow(address.Local, address.Domain).Scan(&exists)
 }
 
-// *List is never nil, error can be sql.ErrNoRows
-func GetList(listAddress *mailutil.Addr) (*List, error) {
-	list := &List{}
+// *List can be nil, error is never sql.ErrNoRows
+func (db *Database) GetList(listAddress *mailutil.Addr) (*List, error) {
+	var list = &List{}
+	list.db = db
 	list.Local = listAddress.Local
 	list.Domain = listAddress.Domain
-	return list, Db.getListStmt.QueryRow(listAddress.Local, listAddress.Domain).Scan(&list.Id, &list.Display, &list.HMACKey, &list.PublicSignup, &list.HideFrom, &list.ActionMod, &list.ActionMember, &list.ActionUnknown, &list.ActionKnown)
+	var err = db.getListStmt.QueryRow(listAddress.Local, listAddress.Domain).Scan(&list.Id, &list.Display, &list.HMACKey, &list.PublicSignup, &list.HideFrom, &list.ActionMod, &list.ActionMember, &list.ActionUnknown, &list.ActionKnown)
+	switch err {
+	case nil:
+		return list, nil
+	case sql.ErrNoRows:
+		return nil, nil
+	default:
+		return nil, err
+	}
 }
 
 func (list *List) Update(display string, publicSignup, hideFrom bool, actionMod, actionMember, actionKnown, actionUnknown Action) error {
 
-	_, err := Db.updateListStmt.Exec(display, publicSignup, hideFrom, actionMod, actionMember, actionKnown, actionUnknown, list.Id)
+	_, err := list.db.updateListStmt.Exec(display, publicSignup, hideFrom, actionMod, actionMember, actionKnown, actionUnknown, list.Id)
 	if err != nil {
 		return err
 	}
@@ -42,13 +51,13 @@ func (list *List) Update(display string, publicSignup, hideFrom bool, actionMod,
 }
 
 func (list *List) Admins() ([]string, error) {
-	return list.membersWhere(Db.getAdminsStmt)
+	return list.membersWhere(list.db.getAdminsStmt)
 }
 
 // *Membership can be nil, error is never sql.ErrNoRows
 func (list *List) GetMember(addr *mailutil.Addr) (*Membership, error) {
 	var receive, moderate, notify, admin bool
-	var err = Db.getMemberStmt.QueryRow(list.Id, addr.RFC5322AddrSpec()).Scan(&receive, &moderate, &notify, &admin)
+	var err = list.db.getMemberStmt.QueryRow(list.Id, addr.RFC5322AddrSpec()).Scan(&receive, &moderate, &notify, &admin)
 	switch err {
 	case nil:
 		return &Membership{
@@ -66,9 +75,18 @@ func (list *List) GetMember(addr *mailutil.Addr) (*Membership, error) {
 	}
 }
 
+// list and addr can be nil
+func (list *List) IsMember(addr *mailutil.Addr) (bool, error) {
+	if list == nil || addr == nil {
+		return false, nil
+	}
+	membership, err := list.GetMember(addr)
+	return membership != nil, err
+}
+
 func (list *List) Members() ([]Membership, error) {
 
-	rows, err := Db.getMembersStmt.Query(list.Id)
+	rows, err := list.db.getMembersStmt.Query(list.Id)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -86,16 +104,16 @@ func (list *List) Members() ([]Membership, error) {
 }
 
 func (list *List) Notifieds() ([]string, error) {
-	return list.membersWhere(Db.getNotifiedsStmt)
+	return list.membersWhere(list.db.getNotifiedsStmt)
 }
 
 func (list *List) Receivers() ([]string, error) {
-	return list.membersWhere(Db.getReceiversStmt)
+	return list.membersWhere(list.db.getReceiversStmt)
 }
 
 func (list *List) Knowns() ([]string, error) {
 
-	rows, err := Db.getKnownsStmt.Query(list.Id)
+	rows, err := list.db.getKnownsStmt.Query(list.Id)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -116,12 +134,13 @@ func (list *List) Knowns() ([]string, error) {
 func (list *List) AddMember(sendWelcome bool, addr *mailutil.Addr, receive, moderate, notify, admin bool, reason string) error {
 	var err = &util.Err{}
 	list.AddMembers(sendWelcome, []*mailutil.Addr{addr}, receive, moderate, notify, admin, reason, err)
+	delete(sentJoinCheckbacks, addr.RFC5322AddrSpec())
 	return err.Last
 }
 
 func (list *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, moderate, notify, admin bool, reason string, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, Db.addMemberStmt, list.Id, addrs, receive, moderate, notify, admin)
+	affectedRows := list.withListAndAddresses(alerter, list.db.addMemberStmt, list.Id, addrs, receive, moderate, notify, admin)
 	if affectedRows == 0 {
 		return
 	} else {
@@ -167,19 +186,20 @@ func (list *List) UpdateMember(rawAddress string, receive, moderate, notify, adm
 		return err
 	}
 
-	_, err = Db.updateMemberStmt.Exec(receive, moderate, notify, admin, list.Id, addr.RFC5322AddrSpec())
+	_, err = list.db.updateMemberStmt.Exec(receive, moderate, notify, admin, list.Id, addr.RFC5322AddrSpec())
 	return err
 }
 
 func (list *List) RemoveMember(sendGoodbye bool, addr *mailutil.Addr, reason string) error {
 	var err = &util.Err{}
 	list.RemoveMembers(sendGoodbye, []*mailutil.Addr{addr}, reason, err)
+	delete(sentLeaveCheckbacks, addr.RFC5322AddrSpec())
 	return err.Last
 }
 
 func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason string, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, Db.removeMemberStmt, list.Id, addrs)
+	affectedRows := list.withListAndAddresses(alerter, list.db.removeMemberStmt, list.Id, addrs)
 	if affectedRows == 0 {
 		return
 	} else {
@@ -211,12 +231,12 @@ func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason
 }
 
 func (list *List) AddKnown(addr *mailutil.Addr) error {
-	return list.withListAndAddress(Db.addKnownStmt, list.Id, addr)
+	return list.withListAndAddress(list.db.addKnownStmt, list.Id, addr)
 }
 
 func (list *List) AddKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, Db.addKnownStmt, list.Id, addrs)
+	affectedRows := list.withListAndAddresses(alerter, list.db.addKnownStmt, list.Id, addrs)
 	if affectedRows > 0 {
 		alerter.Successf("%d known addresses have been added to the mailing list %s", affectedRows, list.RFC5322AddrSpec())
 	}
@@ -230,12 +250,12 @@ func (list *List) IsKnown(rawAddress string) (bool, error) {
 	}
 
 	var known bool
-	return known, Db.isKnownStmt.QueryRow(list.Id, address.RFC5322AddrSpec()).Scan(&known)
+	return known, list.db.isKnownStmt.QueryRow(list.Id, address.RFC5322AddrSpec()).Scan(&known)
 }
 
 func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, Db.removeKnownStmt, list.Id, addrs)
+	affectedRows := list.withListAndAddresses(alerter, list.db.removeKnownStmt, list.Id, addrs)
 	if affectedRows > 0 {
 		alerter.Successf("%d known addresses have been removed from the mailing list %s", affectedRows, list.RFC5322AddrSpec())
 	}
@@ -243,24 +263,24 @@ func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
 func (list *List) Delete() error {
 
-	tx, err := Db.Begin()
+	tx, err := list.db.Begin()
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Stmt(Db.removeListStmt).Exec(list.Id)
-	if err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-
-	_, err = tx.Stmt(Db.removeListKnownsStmt).Exec(list.Id)
+	_, err = tx.Stmt(list.db.removeListStmt).Exec(list.Id)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 
-	_, err = tx.Stmt(Db.removeListMembersStmt).Exec(list.Id)
+	_, err = tx.Stmt(list.db.removeListKnownsStmt).Exec(list.Id)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+
+	_, err = tx.Stmt(list.db.removeListMembersStmt).Exec(list.Id)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -302,7 +322,7 @@ func (list *List) withListAndAddress(stmt *sql.Stmt, listId int, addr *mailutil.
 // A transaction is used because batch inserts in SQLite are very slow without.
 func (list *List) withListAndAddresses(alerter util.Alerter, stmt *sql.Stmt, listId int, addrs []*mailutil.Addr, args ...interface{}) (affectedRows int64) {
 
-	tx, err := Db.Begin()
+	tx, err := list.db.Begin()
 	if err != nil {
 		alerter.Alertf("error starting database transaction: %v", err)
 		return

@@ -1,4 +1,4 @@
-package main
+package listdb
 
 import (
 	"mime"
@@ -6,8 +6,6 @@ import (
 
 	"github.com/wansing/ulist/mailutil"
 )
-
-const BounceAddressSuffix = "+bounces"
 
 type ListInfo struct {
 	mailutil.Addr

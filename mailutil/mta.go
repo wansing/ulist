@@ -1,4 +1,4 @@
-package main
+package mailutil
 
 import (
 	"bytes"
@@ -7,12 +7,10 @@ import (
 	"log"
 	"net/mail"
 	"os/exec"
-
-	"github.com/wansing/ulist/mailutil"
 )
 
 func writeMail(writer io.Writer, header mail.Header, body io.Reader) error {
-	if err := mailutil.WriteHeader(writer, header); err != nil {
+	if err := WriteHeader(writer, header); err != nil {
 		return err
 	}
 	_, err := io.Copy(writer, body)
@@ -29,7 +27,7 @@ type DummyMTA struct{}
 func (DummyMTA) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
 
 	var debug = &bytes.Buffer{}
-	mailutil.WriteHeader(debug, header)
+	WriteHeader(debug, header)
 	io.Copy(debug, body)
 	log.Printf("----\nDummyMTA:\nenvelope-from: %s, envelope-to: %v\n%s\n----", envelopeFrom, envelopeTo, debug.String())
 

@@ -3,9 +3,7 @@
 package main
 
 import (
-	"database/sql"
 	"flag"
-	"golang.org/x/sys/unix"
 	"io"
 	"log"
 	"net/mail"
@@ -18,32 +16,27 @@ import (
 
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 	"github.com/wansing/auth/client"
+	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
-
-// for database operations
-const BatchLimit = 1000
 
 const WarnFormat = "\033[1;31m%s\033[0m"
 
 var GitCommit string // hash
 
-var gdprLogger util.Logger
+var db *listdb.Database
+
 var lastLogId uint32 = 0
-var mta MTA = Sendmail{}
 
 var smtpsAuth = &client.SMTPS{}
 var starttlsAuth = &client.STARTTLS{}
 var saslPlainAuth = &client.SASLPlain{}
 var authenticators = client.Authenticators{saslPlainAuth, smtpsAuth, starttlsAuth} // SQL first. If smtps and starttls are given, and smtps auth is negative, then starttls is tried again.
 
-var Db *Database
 var DummyMode bool
-var SpoolDir string
 var Superadmin string // can create new mailing lists and modify all mailing lists
 var WebListen string
-var WebUrl string
 
 func main() {
 
@@ -58,11 +51,11 @@ func main() {
 	// mail flow
 	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "path of LMTP socket for accepting incoming mail")
 	socketmapSock := flag.String("socketmap", "", "path of socketmap socket")
-	flag.StringVar(&SpoolDir, "spool", "spool", "spool folder for unmoderated messages")
+	spoolDir := flag.String("spool", "spool", "spool directory for unmoderated messages")
 
 	// web interface
 	flag.StringVar(&WebListen, "http", "127.0.0.1:8080", "ip:port or socket path of web listener")
-	flag.StringVar(&WebUrl, "weburl", "http://127.0.0.1:8080", "url of the web interface")
+	webUrl := flag.String("weburl", "http://127.0.0.1:8080", "url of the web interface")
 
 	// authentication
 	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
@@ -85,32 +78,18 @@ func main() {
 		Superadmin = superadminAddr.RFC5322AddrSpec()
 	}
 
-	// validate SpoolDir
+	// open list database
 
-	if !strings.HasSuffix(SpoolDir, "/") {
-		SpoolDir = SpoolDir + "/"
-	}
-
-	if unix.Access(SpoolDir, unix.W_OK) == nil {
-		log.Printf("spool directory: %s", SpoolDir)
-	} else {
-		log.Fatalf("spool directory %s is not writeable", SpoolDir)
-	}
-
-	// create GDPR logger
-
-	var err error
-	if gdprLogger, err = util.NewFileLogger(*gdprLogfile); err != nil {
+	gdprLogger, err := util.NewFileLogger(*gdprLogfile)
+	if err != nil {
 		log.Fatalf("error creating GDPR logfile: %v", err)
 	}
 
-	// open database
-
-	Db, err = OpenDatabase(*dbDriver, *dbDSN)
+	db, err = listdb.Open(*dbDriver, *dbDSN, gdprLogger, *spoolDir, *webUrl)
 	if err != nil {
 		log.Fatalln(err)
 	}
-	defer Db.Close()
+	defer db.Close()
 
 	log.Printf("database: %s %s", *dbDriver, *dbDSN)
 
@@ -121,7 +100,7 @@ func main() {
 	}
 
 	if DummyMode {
-		mta = DummyMTA{}
+		listdb.Mta = mailutil.DummyMTA{}
 		Superadmin = "test@example.com"
 		log.Printf(WarnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
@@ -187,7 +166,7 @@ func (LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error)
 
 // implements smtp.Session
 type LMTPSession struct {
-	Lists    []*List
+	Lists    []*listdb.List
 	isBounce bool // indicated by empty Envelope-From
 	logId    uint32
 }
@@ -234,7 +213,7 @@ func (s *LMTPSession) rcpt(toStr string) error {
 		return SMTPErrorf(510, "parsing envelope-to address: %v", err) // 510 Bad email address
 	}
 
-	toBounce := strings.HasSuffix(to.Local, BounceAddressSuffix)
+	toBounce := strings.HasSuffix(to.Local, listdb.BounceAddressSuffix)
 
 	switch {
 	case toBounce && !s.isBounce:
@@ -242,15 +221,15 @@ func (s *LMTPSession) rcpt(toStr string) error {
 	case !toBounce && s.isBounce:
 		return SMTPErrorf(541, "got bounce notification (with empty envelope-from) to non-bounce address") // 541 The recipient address rejected your message
 	case toBounce && s.isBounce:
-		to.Local = strings.TrimSuffix(to.Local, BounceAddressSuffix)
+		to.Local = strings.TrimSuffix(to.Local, listdb.BounceAddressSuffix)
 	}
 
-	list, err := GetList(to)
-	switch {
-	case err == sql.ErrNoRows:
-		return SMTPErrUserNotExist
-	case err != nil:
+	list, err := db.GetList(to)
+	if err != nil {
 		return SMTPErrorf(451, "getting list from database: %v", err) // 451 Aborted – Local error in processing
+	}
+	if list == nil {
+		return SMTPErrUserNotExist
 	}
 
 	s.Lists = append(s.Lists, list)
@@ -368,12 +347,12 @@ func (s *LMTPSession) data(r io.Reader) error {
 			header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] Bounce notification: " + message.Header.Get("Subject")}
 			header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
-			err = mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
+			err = listdb.Mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
 			if err != nil {
 				s.logf("error forwarding bounce notification: %v", err)
 			}
 
-			s.logf("forwarded bounce to admins of %s through %s", list, mta)
+			s.logf("forwarded bounce to admins of %s through %s", list, listdb.Mta)
 
 			continue // to next list
 		}
@@ -408,16 +387,16 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(451, "getting membership from database: %v", err)
 			}
 
-			// public signup check is crucial, as sendJoinCheckback sends a confirmation link which allows the receiver to join
+			// public signup check is crucial, as SendJoinCheckback sends a confirmation link which allows the receiver to join
 			if list.PublicSignup && m == nil && command == "join" {
-				if err = list.sendJoinCheckback(personalFrom); err != nil {
+				if err = list.SendJoinCheckback(personalFrom); err != nil {
 					return SMTPErrorf(451, "subscribing: %v", err)
 				}
 				continue // next list
 			}
 
 			if m != nil && command == "leave" {
-				if err = list.sendLeaveCheckback(personalFrom); err != nil {
+				if _, err = list.SendLeaveCheckback(personalFrom); err != nil {
 					return SMTPErrorf(451, "unsubscribing: %v", err)
 				}
 				continue // next list
@@ -428,28 +407,38 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 		// determine action
 
-		action, reason, smtpErr := list.GetAction(message)
-		if smtpErr != nil {
-			return smtpErr
+		froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10) // 10 for DoS mitigation
+		if err != nil {
+			return SMTPErrorf(510, `error parsing "From" header: %s"`, err) // 510 Bad email address
+		}
+		if len(froms) == 0 {
+			return SMTPErrorf(510, `no "From" addresses given`) // 510 Bad email address
+		}
+
+		action, reason, err := list.GetAction(message.Header, froms)
+		if err != nil {
+			return SMTPErrorf(451, "error getting status from database: %v", err) // 451 Aborted – Local error in processing
 		}
 
 		s.logf("list: %s, action: %s, reason: %s", list, action, reason)
 
-		if action == Reject {
-			return SMTPErrUserNotExist
-		}
-
 		// do action
 
-		if action == Pass {
+		switch action {
+
+		case listdb.Reject:
+
+			return SMTPErrUserNotExist
+
+		case listdb.Pass:
 
 			if err = list.Forward(message); err != nil {
 				return SMTPErrorf(451, "sending email: %v", err)
 			}
 
-			s.logf("sent email through %s", mta)
+			s.logf("sent email through %s", listdb.Mta)
 
-		} else if action == Mod {
+		case listdb.Mod:
 
 			err = list.Save(message)
 			if err != nil {
@@ -461,11 +450,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 				return SMTPErrorf(451, "getting notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
-			if err = list.notifyMods(notifieds); err != nil {
+			if err = list.NotifyMods(notifieds); err != nil {
 				s.logf("sending moderation notificiation: %v", err)
 			}
 
-			s.logf("stored email")
+			s.logf("stored email for moderation")
 		}
 	}
 

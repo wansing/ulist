@@ -1,4 +1,4 @@
-package main
+package listdb
 
 import (
 	"github.com/wansing/ulist/mailutil"
@@ -25,11 +25,11 @@ func (s Status) String() string {
 	}
 }
 
-func (l *List) GetStatus(address *mailutil.Addr) ([]Status, error) {
+func (list *List) GetStatus(address *mailutil.Addr) ([]Status, error) {
 
 	var s = []Status{}
 
-	membership, err := l.GetMember(address)
+	membership, err := list.GetMember(address)
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (l *List) GetStatus(address *mailutil.Addr) ([]Status, error) {
 		}
 	}
 
-	isKnown, err := l.IsKnown(address.RFC5322AddrSpec())
+	isKnown, err := list.IsKnown(address.RFC5322AddrSpec())
 	if err != nil {
 		return nil, err
 	}

@@ -1,9 +1,9 @@
-package main
+package listdb
 
 import (
 	"bytes"
 	"crypto/hmac"
-	"crypto/sha512"
+	"crypto/sha256"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -19,14 +19,14 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 	"github.com/shurcooL/httpfs/text/vfstemplate"
 	"github.com/wansing/ulist/mailutil"
 )
 
-var ErrLink = errors.New("link is invalid or expired") // don't leak information by revealing the specific reason
+var ErrLink = errors.New("link is invalid or expired") // HMAC related, don't leak the reason
 
 type List struct {
+	db *Database
 	ListInfo
 	Id            int
 	HMACKey       []byte // [32]byte would require check when reading from database
@@ -42,7 +42,7 @@ var sentJoinCheckbacks = make(map[string]int64)  // RFC5322AddrSpec => unix time
 var sentLeaveCheckbacks = make(map[string]int64) // RFC5322AddrSpec => unix time
 
 func texttmpl(filename string) *template.Template {
-	return template.Must(vfstemplate.ParseFiles(assets, template.New(filename+".txt"), "templates/mail/"+filename+".txt"))
+	return template.Must(vfstemplate.ParseFiles(assets, template.New(filename+".txt"), "templates/"+filename+".txt"))
 }
 
 // all these txt files should have CRLF line endings
@@ -52,11 +52,11 @@ var notifyModsTemplate = texttmpl("notify-mods")
 var signoffJoinTemplate = texttmpl("signoff-join")
 var signoffLeaveTemplate = texttmpl("signoff-leave")
 
-// CreateHMAC creates an HMAC with a given user email address and the current time
-func (list *List) CreateHMAC(addr *mailutil.Addr) (int64, []byte, error) {
+// CreateHMAC creates an HMAC with a given user email address and the current time. The HMAC is returned as a base64 RawURLEncoding string.
+func (list *List) CreateHMAC(addr *mailutil.Addr) (int64, string, error) {
 	var now = time.Now().Unix()
 	var hmac, err = list.createHMAC(addr, now)
-	return now, hmac, err
+	return now, base64.RawURLEncoding.EncodeToString(hmac), err
 }
 
 // ValidateHMAC validates an HMAC. If the given timestamp is older than maxAgeDays, then ErrLink is returned.
@@ -78,6 +78,7 @@ func (list *List) ValidateHMAC(inputHMAC []byte, addr *mailutil.Addr, timestamp 
 	return nil
 }
 
+// addr can be nil
 func (list *List) createHMAC(addr *mailutil.Addr, timestamp int64) ([]byte, error) {
 
 	if len(list.HMACKey) == 0 {
@@ -88,49 +89,32 @@ func (list *List) createHMAC(addr *mailutil.Addr, timestamp int64) ([]byte, erro
 		return nil, errors.New("hmac: key is all zeroes")
 	}
 
-	mac := hmac.New(sha512.New, list.HMACKey)
+	mac := hmac.New(sha256.New, list.HMACKey)
 	mac.Write([]byte(list.RFC5322AddrSpec()))
 	mac.Write([]byte{0}) // separator
-	mac.Write([]byte(addr.RFC5322AddrSpec()))
-	mac.Write([]byte{0}) // separator
+	if addr != nil {
+		mac.Write([]byte(addr.RFC5322AddrSpec()))
+		mac.Write([]byte{0}) // separator
+	}
 	mac.Write([]byte(strconv.FormatInt(timestamp, 10)))
 
 	return mac.Sum(nil), nil
 }
 
-// determines the action of an email by the "From" addresses and the "X-Spam-Status" header
+// GetAction determines the maximum action of an email by the "From" addresses and the "X-Spam-Status" header. It also returns a human-readable reason for the decision.
 //
 // The SMTP envelope sender is ignored, because it's actually something different and a case for the spam filtering system.
 // (Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html)
-//
-// returns:
-//
-// * max action
-// * human-readable reason
-// * an smtp.SMTPError
-func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPError) {
+func (list *List) GetAction(header mail.Header, froms []*mailutil.Addr) (Action, string, error) {
 
-	action := l.ActionUnknown
+	action := list.ActionUnknown
 	reason := `all "From" addresses are unknown`
-
-	froms, err := mailutil.ParseAddressesFromHeader(message.Header, "From", 10)
-	if err != nil {
-		return Reject, "", SMTPErrorf(510, `could not parse "From" header "%s": %s"`, message.Header.Get("From"), err) // 510 Bad email address
-	}
-
-	if len(froms) == 0 {
-		return Reject, "", SMTPErrorf(510, `no "From" addresses given`) // 510 Bad email address
-	}
-
-	if len(froms) > 8 {
-		froms = froms[:8] // DoS mitigation
-	}
 
 	for _, from := range froms {
 
-		statuses, err := l.GetStatus(from)
+		statuses, err := list.GetStatus(from)
 		if err != nil {
-			return Reject, "", SMTPErrorf(451, "error getting status from database: %v", err)
+			return Reject, "", fmt.Errorf("error getting status from database: %v", err)
 		}
 
 		for _, status := range statuses {
@@ -139,11 +123,11 @@ func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPE
 
 			switch status {
 			case Known:
-				fromAction = l.ActionKnown
+				fromAction = list.ActionKnown
 			case Member:
-				fromAction = l.ActionMember
+				fromAction = list.ActionMember
 			case Moderator:
-				fromAction = l.ActionMod
+				fromAction = list.ActionMod
 			}
 
 			if action < fromAction {
@@ -156,7 +140,7 @@ func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPE
 	// Pass becomes Mod if X-Spam-Status header starts with "yes"
 
 	if action == Pass {
-		if xssHeader := strings.ToLower(strings.TrimSpace(message.Header.Get("X-Spam-Status"))); strings.HasPrefix(xssHeader, "yes") {
+		if xssHeader := strings.ToLower(strings.TrimSpace(header.Get("X-Spam-Status"))); strings.HasPrefix(xssHeader, "yes") {
 			action = Mod
 			reason = `X-Spam-Status starts with "yes"`
 		}
@@ -166,7 +150,7 @@ func (l *List) GetAction(message *mailutil.Message) (Action, string, *smtp.SMTPE
 }
 
 func (list *List) StorageFolder() string {
-	return fmt.Sprintf("%s%d", SpoolDir, list.Id)
+	return fmt.Sprintf("%s%d", spoolDir, list.Id)
 }
 
 func (list *List) Open(filename string) (*mailutil.Message, error) {
@@ -207,24 +191,24 @@ func (list *List) Save(m *mailutil.Message) error {
 	return nil
 }
 
-func (list *List) checkbackJoinUrl(recipient *mailutil.Addr) (string, error) {
-	timestamp, hmac, err := list.CreateHMAC(recipient)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s/join/%s/%s/%d/%s", WebUrl, list.EscapeAddress(), recipient.EscapeAddress(), timestamp, base64.RawURLEncoding.EncodeToString(hmac)), nil
-}
-
 func (list *List) askLeaveUrl() string {
-	return fmt.Sprintf("%s/leave/%s", WebUrl, list.EscapeAddress())
+	return fmt.Sprintf("%s/leave/%s", webUrl, list.EscapeAddress())
 }
 
-func (list *List) checkbackLeaveUrl(recipient *mailutil.Addr) (string, error) {
+func (list *List) CheckbackJoinUrl(recipient *mailutil.Addr) (string, error) {
 	timestamp, hmac, err := list.CreateHMAC(recipient)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/leave/%s/%s/%d/%s", WebUrl, list.EscapeAddress(), recipient.EscapeAddress(), timestamp, base64.RawURLEncoding.EncodeToString(hmac)), nil
+	return fmt.Sprintf("%s/join/%s/%d/%s/%s", webUrl, list.EscapeAddress(), timestamp, hmac, recipient.EscapeAddress()), nil
+}
+
+func (list *List) CheckbackLeaveUrl(recipient *mailutil.Addr) (string, error) {
+	timestamp, hmac, err := list.CreateHMAC(recipient)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s/leave/%s/%d/%s/%s", webUrl, list.EscapeAddress(), timestamp, hmac, recipient.EscapeAddress()), nil
 }
 
 func (list *List) plainFooter() string {
@@ -375,6 +359,7 @@ func (list *List) insertFooter(header mail.Header, body io.Reader) (io.Reader, e
 	return bodyWithFooter, nil
 }
 
+// Forwards a message over the mailing list. This is the main job of this software.
 func (list *List) Forward(m *mailutil.Message) error {
 
 	// make a copy of the header
@@ -446,7 +431,7 @@ func (list *List) Forward(m *mailutil.Message) error {
 
 	if recipients, err := list.Receivers(); err == nil {
 		// Envelope-From is the list's bounce address. That's technically correct, plus else SPF would fail.
-		return mta.Send(list.BounceAddress(), recipients, header, bodyWithFooter)
+		return Mta.Send(list.BounceAddress(), recipients, header, bodyWithFooter)
 	} else {
 		return err
 	}
@@ -461,11 +446,11 @@ func (list *List) Notify(recipient string, subject string, body io.Reader) error
 	header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] " + subject}
 	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
 
-	return mta.Send(list.BounceAddress(), []string{recipient}, header, body)
+	return Mta.Send(list.BounceAddress(), []string{recipient}, header, body)
 }
 
-// sendJoinCheckback does not check the authorization of the asking person. This must be done by the caller.
-func (list *List) sendJoinCheckback(recipient *mailutil.Addr) error {
+// SendJoinCheckback does not check the authorization of the asking person. This must be done by the caller.
+func (list *List) SendJoinCheckback(recipient *mailutil.Addr) error {
 
 	// rate limiting
 
@@ -485,7 +470,7 @@ func (list *List) sendJoinCheckback(recipient *mailutil.Addr) error {
 
 	// create mail
 
-	var url, err = list.checkbackJoinUrl(recipient)
+	var url, err = list.CheckbackJoinUrl(recipient)
 	if err != nil {
 		return err
 	}
@@ -514,29 +499,34 @@ func (list *List) sendJoinCheckback(recipient *mailutil.Addr) error {
 	return nil
 }
 
-func (list *List) sendLeaveCheckback(recipient *mailutil.Addr) error {
+// SendLeaveCheckback sends a checkback email if the user is a member of the list.
+//
+// If the user is not a member, the returned error is nil, so it doesn't reveal about the membership. However both timing and other errors can still reveal it.
+//
+// The returned bool value indicates whether the email was sent.
+func (list *List) SendLeaveCheckback(user *mailutil.Addr) (bool, error) {
 
 	// rate limiting
 
-	if lastSentTimestamp, ok := sentLeaveCheckbacks[recipient.RFC5322AddrSpec()]; ok {
+	if lastSentTimestamp, ok := sentLeaveCheckbacks[user.RFC5322AddrSpec()]; ok {
 		if lastSentTimestamp < time.Now().AddDate(0, 0, 7).Unix() {
-			return fmt.Errorf("A leave request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", recipient)
+			return false, fmt.Errorf("A leave request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", user)
 		}
 	}
 
-	if m, err := list.GetMember(recipient); err == nil {
+	if m, err := list.GetMember(user); err == nil {
 		if m == nil { // not a member
-			return nil // Let's return nil (after rate limiting!), so we don't reveal the lack of subscription. Timing might still leak information.
+			return false, nil // err is nil and does not reveal about the membership
 		}
 	} else {
-		return err
+		return false, err
 	}
 
 	// create mail
 
-	var url, err = list.checkbackLeaveUrl(recipient)
+	var url, err = list.CheckbackLeaveUrl(user)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	mailData := struct {
@@ -545,26 +535,26 @@ func (list *List) sendLeaveCheckback(recipient *mailutil.Addr) error {
 		Url         string
 	}{
 		ListAddress: list.RFC5322AddrSpec(),
-		MailAddress: recipient.RFC5322AddrSpec(),
+		MailAddress: user.RFC5322AddrSpec(),
 		Url:         url,
 	}
 
 	body := &bytes.Buffer{}
 	if err = checkbackLeaveTemplate.Execute(body, mailData); err != nil {
-		return err
+		return false, err
 	}
 
-	if err = list.Notify(recipient.RFC5322AddrSpec(), fmt.Sprintf("Please confirm: leave the mailing list %s", list), body); err != nil {
-		return err
+	if err = list.Notify(user.RFC5322AddrSpec(), fmt.Sprintf("Please confirm: leave the mailing list %s", list), body); err != nil {
+		return false, err
 	}
 
-	sentLeaveCheckbacks[recipient.RFC5322AddrSpec()] = time.Now().Unix()
+	sentLeaveCheckbacks[user.RFC5322AddrSpec()] = time.Now().Unix()
 
-	return nil
+	return true, nil
 }
 
-// does append a footer
-func (list *List) notifyMods(recipients []string) error {
+// appends a footer
+func (list *List) NotifyMods(mods []string) error {
 
 	// render template
 
@@ -576,7 +566,7 @@ func (list *List) notifyMods(recipients []string) error {
 	}{
 		Footer:  list.plainFooter(),
 		List:    &list.ListInfo,
-		ModHref: WebUrl + "/mod/" + list.EscapeAddress(),
+		ModHref: webUrl + "/mod/" + list.EscapeAddress(),
 	}
 
 	if err := notifyModsTemplate.Execute(body, data); err != nil {
@@ -586,8 +576,8 @@ func (list *List) notifyMods(recipients []string) error {
 	// send emails
 
 	var lastErr error
-	for _, recipient := range recipients {
-		if err := list.Notify(recipient, "A message needs moderation", bytes.NewReader(body.Bytes())); err != nil { // NewReader is important, else the Buffer would be consumed
+	for _, mod := range mods {
+		if err := list.Notify(mod, "A message needs moderation", bytes.NewReader(body.Bytes())); err != nil { // NewReader is important, else the Buffer would be consumed
 			lastErr = err
 		}
 	}

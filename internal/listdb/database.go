@@ -1,12 +1,15 @@
-package main
+package listdb
 
 import (
 	"database/sql"
 	"log"
+	"strings"
 
+	"golang.org/x/sys/unix"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/wansing/ulist/util"
 )
 
 type Database struct {
@@ -41,7 +44,25 @@ func (db *Database) MustPrepare(query string) *sql.Stmt {
 	}
 }
 
-func OpenDatabase(backend, connStr string) (*Database, error) {
+func Open(backend, connStr string, gdpr util.Logger, spool, web string) (*Database, error) {
+
+	gdprLogger = gdpr
+	spoolDir = spool
+	webUrl = web
+
+	// check spool directory
+
+	if !strings.HasSuffix(spoolDir, "/") {
+		spoolDir = spoolDir + "/"
+	}
+
+	if unix.Access(spoolDir, unix.W_OK) == nil {
+		log.Printf("spool directory: %s", spoolDir)
+	} else {
+		log.Fatalf("spool directory %s is not writeable", spoolDir)
+	}
+
+	// database
 
 	sqlDB, err := sql.Open(backend, connStr)
 	if err != nil {

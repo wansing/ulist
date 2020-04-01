@@ -18,7 +18,7 @@
 				{{ range . }}
 					{{ if ne $domain .Domain }}
 						<tr>
-							<th colspan="6">{{ .Domain }}</th>
+							<th colspan="7">{{ .Domain }}</th>
 						</tr>
 					{{ end }}
 					{{ $domain = .Domain }}

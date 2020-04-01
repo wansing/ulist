@@ -112,7 +112,7 @@ func ParseAddress(rfc5322Address string) (*Addr, error) {
 	return NewAddr(parsed)
 }
 
-// expects one RFC 5322 address-list per line, lax parsing, for user input
+// ParseAddresses expects one RFC 5322 address-list per line. It does lax parsing and is intended for user input.
 func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error) {
 
 	for _, line := range strings.Split(rawAddresses, "\n") {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"database/sql"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -14,6 +13,7 @@ import (
 	"time"
 
 	"github.com/emersion/go-smtp"
+	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
@@ -21,11 +21,11 @@ import (
 const testDbPath = "/tmp/ulist-test.sqlite3"
 
 var gdprChannel = make(chan string, 100)
-var messageChannel = make(chan *MTAEnvelope, 100)
+var messageChannel = make(chan *mailutil.MTAEnvelope, 100)
 
 var mimeBoundaryPattern = regexp.MustCompile("[0-9a-f]{60}")
-var timestampHMACPattern = regexp.MustCompile("[0-9]{10}/[-_0-9a-zA-Z]{86}")
-var urlPattern = regexp.MustCompile("/(join|leave)/[^/\n]+(/[^/\n]+/" + timestampHMACPattern.String() + ")?") // without WebUrl
+var timestampHMACPattern = regexp.MustCompile("[0-9]{10}/[-_0-9a-zA-Z]{43}")
+var urlPattern = regexp.MustCompile("/(join|leave)/[^/\r\n]+(/" + timestampHMACPattern.String() + "/[^/\r\n]+)?") // without WebUrl
 
 type testAlerter struct{}
 
@@ -37,21 +37,18 @@ func (testAlerter) Successf(format string, a ...interface{}) {}
 
 func init() {
 
-	gdprLogger = util.ChanLogger(gdprChannel)
-	mta = ChanMTA(messageChannel)
-	SpoolDir = "/tmp/"
-	DummyMode = true
-	WebUrl = "https://lists.example.com"
-
 	_ = os.Remove(testDbPath)
 
+	DummyMode = true
+	WebListen = "127.0.0.1:8080"
+	listdb.Mta = mailutil.ChanMTA(messageChannel)
+
 	var err error
-	Db, err = OpenDatabase("sqlite3", testDbPath)
+	db, err = listdb.Open("sqlite3", testDbPath, util.ChanLogger(gdprChannel), "/tmp", "https://lists.example.com")
 	if err != nil {
 		log.Fatalf("error creating database: %v", err)
 	}
 
-	WebListen = "127.0.0.1:8080"
 	go webui()
 }
 
@@ -162,7 +159,7 @@ func mustTransactOne(envelopeFrom string, envelopeTo []string, data string) {
 
 func transactOne(envelopeFrom string, envelopeTo []string, data string) error {
 	return transact(
-		&MTAEnvelope{
+		&mailutil.MTAEnvelope{
 			EnvelopeFrom: envelopeFrom,
 			EnvelopeTo:   envelopeTo,
 			Message:      data,
@@ -170,13 +167,13 @@ func transactOne(envelopeFrom string, envelopeTo []string, data string) error {
 	)
 }
 
-func mustTransact(envelopes ...*MTAEnvelope) {
+func mustTransact(envelopes ...*mailutil.MTAEnvelope) {
 	if err := transact(envelopes...); err != nil {
 		panic(err)
 	}
 }
 
-func transact(envelopes ...*MTAEnvelope) error {
+func transact(envelopes ...*mailutil.MTAEnvelope) error {
 
 	backend := &LMTPBackend{}
 
@@ -210,18 +207,18 @@ func transact(envelopes ...*MTAEnvelope) error {
 }
 
 func TestCreateListBounceSuffix(t *testing.T) {
-	_, err := CreateList("suffix+bounces@example.com", "name", "", "testing", testAlerter{})
+	_, err := db.CreateList("suffix+bounces@example.com", "name", "", "testing", testAlerter{})
 	wantErr(t, err, `list address can't end with "+bounces"`)
 	wantChansEmpty(t)
 }
 
 func TestGetList(t *testing.T) {
 
-	if _, err := CreateList("get-list@example.com", "Created List", "", "testing", testAlerter{}); err != nil {
+	if _, err := db.CreateList("get-list@example.com", "Created List", "", "testing", testAlerter{}); err != nil {
 		t.Fatal(err)
 	}
 
-	got, err := GetList(mustParse("get-list@example.com"))
+	got, err := db.GetList(mustParse("get-list@example.com"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,9 +240,9 @@ func TestGetList(t *testing.T) {
 
 	got.HMACKey = nil
 
-	// compare ListInfo
+	// compare listdb.ListInfo
 
-	want := ListInfo{
+	want := listdb.ListInfo{
 		Addr: mailutil.Addr{
 			Display: "Created List",
 			Local:   "get-list",
@@ -262,24 +259,26 @@ func TestGetList(t *testing.T) {
 
 func TestDeleteList(t *testing.T) {
 
-	CreateList("delete-list@example.com", "List", "", "testing", testAlerter{})
+	db.CreateList("delete-list@example.com", "List", "", "testing", testAlerter{})
 
-	list, _ := GetList(mustParse("delete-list@example.com"))
+	list, _ := db.GetList(mustParse("delete-list@example.com"))
 
 	err := list.Delete()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	_, err = GetList(mustParse("delete-list@example.com"))
-	wantErr(t, err, sql.ErrNoRows.Error())
+	list, err = db.GetList(mustParse("delete-list@example.com"))
+	if list != nil || err != nil {
+		t.Fatalf("got %v, %v, want nil, nil", list, err)
+	}
 
 	wantChansEmpty(t)
 }
 
 func TestMultipleReceivers(t *testing.T) {
 
-	CreateList("createlist@example.com", "Created List", "alice@example.com, bob@example.net, carol@example.org", "testing", testAlerter{})
+	db.CreateList("createlist@example.com", "Created List", "alice@example.com, bob@example.net, carol@example.org", "testing", testAlerter{})
 
 	wantGDPREvent(t, `alice@example.com joined the list createlist@example.com, reason: testing
 bob@example.net joined the list createlist@example.com, reason: testing
@@ -344,8 +343,8 @@ You can leave the mailing list "Created List" here: https://lists.example.com/le
 
 func TestMultipleLists(t *testing.T) {
 
-	CreateList("multiple-a@example.com", "A", "alice@example.com", "testing", testAlerter{})
-	CreateList("multiple-b@example.net", "B", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("multiple-a@example.com", "A", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("multiple-b@example.net", "B", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice A
 	<-messageChannel // welcome alice B
@@ -393,7 +392,7 @@ You can leave the mailing list "B" here: https://lists.example.com/leave/multipl
 	// one SMTP transaction, two emails
 
 	mustTransact(
-		&MTAEnvelope{
+		&mailutil.MTAEnvelope{
 			EnvelopeFrom: "some_envelope@example.com",
 			EnvelopeTo:   []string{"multiple-a@example.com"},
 			Message: `From: alice@example.com
@@ -401,7 +400,7 @@ To: multiple-a@example.com
 Subject: Hi
 
 Hello`},
-		&MTAEnvelope{
+		&mailutil.MTAEnvelope{
 			EnvelopeFrom: "some_envelope@example.com",
 			EnvelopeTo:   []string{"multiple-b@example.net"},
 			Message: `From: alice@example.com
@@ -444,11 +443,11 @@ You can leave the mailing list "B" here: https://lists.example.com/leave/multipl
 
 func TestPublicList(t *testing.T) {
 
-	CreateList("public@example.com", "Whoops", "", "testing", testAlerter{})
+	db.CreateList("public@example.com", "Whoops", "", "testing", testAlerter{})
 
-	list, _ := GetList(mustParse("public@example.com"))
+	list, _ := db.GetList(mustParse("public@example.com"))
 
-	if err := list.Update("Public", true, false, Pass, Pass, Pass, Mod); err != nil {
+	if err := list.Update("Public", true, false, listdb.Pass, listdb.Pass, listdb.Pass, listdb.Mod); err != nil {
 		t.Fatal(err)
 	}
 
@@ -471,7 +470,7 @@ You receive this mail because you (or someone else) asked to join your email add
 
 To confirm, please visit this address:
 
-https://lists.example.com/join/public%40example.com/bob%40example.com/timestamp/hmac
+https://lists.example.com/join/public%40example.com/timestamp/hmac/bob%40example.com
 
 If you didn't request this, please ignore this email.`)
 
@@ -497,8 +496,8 @@ You can leave the mailing list "Public" here: https://lists.example.com/leave/pu
 	// test membership
 
 	if got, err := list.GetMember(mustParse("bob@example.com")); err == nil {
-		want := Membership{
-			ListInfo: ListInfo{
+		want := listdb.Membership{
+			ListInfo: listdb.ListInfo{
 				mailutil.Addr{
 					Display: "Public",
 					Local:   "public",
@@ -537,7 +536,7 @@ You receive this mail because you (or someone else) asked to remove your email a
 
 To confirm, please visit this address:
 
-https://lists.example.com/leave/public%40example.com/bob%40example.com/timestamp/hmac
+https://lists.example.com/leave/public%40example.com/timestamp/hmac/bob%40example.com
 
 If you didn't request this, please ignore this email.`)
 
@@ -568,9 +567,9 @@ Goodbye!`)
 
 func TestRejectAll(t *testing.T) {
 
-	CreateList("reject-all@example.com", "List name", "", "testing", testAlerter{})
-	list, _ := GetList(mustParse("reject-all@example.com"))
-	list.Update("List name", false, false, Reject, Reject, Reject, Reject)
+	db.CreateList("reject-all@example.com", "List name", "", "testing", testAlerter{})
+	list, _ := db.GetList(mustParse("reject-all@example.com"))
+	list.Update("List name", false, false, listdb.Reject, listdb.Reject, listdb.Reject, listdb.Reject)
 
 	list.AddKnown(mustParse("known@example.com"))
 	list.AddMember(false, mustParse("member@example.com"), true, false, false, false, "testing")
@@ -593,7 +592,7 @@ To: reject-all@example.com
 
 func TestLoop(t *testing.T) {
 
-	CreateList("loop@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("loop@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // alice
@@ -613,7 +612,7 @@ Hello`)
 
 func TestMultipleNotifieds(t *testing.T) {
 
-	CreateList("multiple-notifieds@example.com", "List", "alice@example.com, bob@example.com, carol@example.com", "testing", testAlerter{})
+	db.CreateList("multiple-notifieds@example.com", "List", "alice@example.com, bob@example.com, carol@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-messageChannel // welcome bob
@@ -674,7 +673,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/mult
 
 func TestXSpamStatus(t *testing.T) {
 
-	CreateList("x-spam-status@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("x-spam-status@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // alice
@@ -705,7 +704,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/x-sp
 
 func TestMailToBounce(t *testing.T) {
 
-	CreateList("mail-to-bounce@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("mail-to-bounce@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // alice
@@ -724,7 +723,7 @@ Hello`)
 
 func TestBounceToList(t *testing.T) {
 
-	CreateList("bounce-to-list@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("bounce-to-list@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // alice
@@ -743,7 +742,7 @@ Hello`)
 
 func TestBounceToBounce(t *testing.T) {
 
-	CreateList("bounce-to-bounce@example.com", "List", "carol@example.com", "testing", testAlerter{})
+	db.CreateList("bounce-to-bounce@example.com", "List", "carol@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome carol
 	<-gdprChannel    // carol
@@ -767,7 +766,7 @@ Sorry`)
 
 func TestCcBcc(t *testing.T) {
 
-	CreateList("cc-bcc@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("cc-bcc@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // alice
@@ -815,7 +814,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/cc-b
 
 func TestEncodeSpecialChars(t *testing.T) {
 
-	CreateList("list_ue@example.com", "List Ü", "user_ue@example.com", "testing", testAlerter{})
+	db.CreateList("list_ue@example.com", "List Ü", "user_ue@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome user_ue
 	<-gdprChannel    // alice
@@ -847,7 +846,7 @@ You can leave the mailing list "List Ü" here: https://lists.example.com/leave/l
 
 func TestMultipartAlternativeMessageFooter(t *testing.T) {
 
-	CreateList("multipart-alternative-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("multipart-alternative-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel
@@ -929,7 +928,7 @@ Content-Type: text/html; charset=us-ascii
 
 func TestMultipartMixedMessageFooter(t *testing.T) {
 
-	CreateList("multipart-mixed-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("multipart-mixed-message@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel
@@ -1003,12 +1002,12 @@ Content-Type: text/html; charset="utf-8"
 
 func TestKnowns(t *testing.T) {
 
-	CreateList("knowns@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("knowns@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel
 
-	list, _ := GetList(mustParse("knowns@example.com"))
+	list, _ := db.GetList(mustParse("knowns@example.com"))
 	list.AddKnowns([]*mailutil.Addr{mustParse("bob@example.com"), mustParse("carol@example.com"), mustParse("known@example.com")}, testAlerter{})
 
 	mustTransactOne("some_envelope@example.com", []string{"knowns@example.com"},
@@ -1059,13 +1058,13 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/know
 
 func TestMembers(t *testing.T) {
 
-	CreateList("members@example.com", "List", "alice@example.com", "testing", testAlerter{})
+	db.CreateList("members@example.com", "List", "alice@example.com", "testing", testAlerter{})
 
 	<-messageChannel // welcome alice
 	<-gdprChannel    // welcome alice
 
-	list, _ := GetList(mustParse("members@example.com"))
-	list.Update("List", false, false, Reject, Pass, Reject, Reject) // members only
+	list, _ := db.GetList(mustParse("members@example.com"))
+	list.Update("List", false, false, listdb.Reject, listdb.Pass, listdb.Reject, listdb.Reject) // members only
 	list.AddMembers(
 		false, // sendWelcome
 		[]*mailutil.Addr{mustParse("bob@example.com"), mustParse("carol@example.com"), mustParse("dave@example.com")},
@@ -1108,7 +1107,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 		t.Fatal(err)
 	}
 
-	wantListInfo := ListInfo{
+	wantListInfo := listdb.ListInfo{
 		mailutil.Addr{
 			Display: "List",
 			Local:   "members",
@@ -1116,8 +1115,8 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 		},
 	}
 
-	wantMembers := []Membership{
-		Membership{
+	wantMembers := []listdb.Membership{
+		listdb.Membership{
 			ListInfo:      wantListInfo,
 			MemberAddress: "alice@example.com",
 			Receive:       true,
@@ -1125,7 +1124,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Notify:        true,
 			Admin:         true,
 		},
-		Membership{
+		listdb.Membership{
 			ListInfo:      wantListInfo,
 			MemberAddress: "bob@example.com",
 			Receive:       false,
@@ -1133,7 +1132,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Notify:        false,
 			Admin:         false,
 		},
-		Membership{
+		listdb.Membership{
 			ListInfo:      wantListInfo,
 			MemberAddress: "carol@example.com",
 			Receive:       false,
@@ -1141,7 +1140,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Notify:        false,
 			Admin:         false,
 		},
-		Membership{
+		listdb.Membership{
 			ListInfo:      wantListInfo,
 			MemberAddress: "dave@example.com",
 			Receive:       false,

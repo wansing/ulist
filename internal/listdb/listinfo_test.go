@@ -1,9 +1,13 @@
 package listdb
 
 import (
-	"github.com/wansing/ulist/mailutil"
+	"regexp"
 	"testing"
+
+	"github.com/wansing/ulist/mailutil"
 )
+
+var messageIdPattern = regexp.MustCompile("[0-9a-z-_]{32}") // RFC5322 Message-Id compliant
 
 func TestBounceAddress(t *testing.T) {
 
@@ -22,6 +26,34 @@ func TestBounceAddress(t *testing.T) {
 	for _, test := range tests {
 		if result := test.input.BounceAddress(); result != test.expected {
 			t.Errorf("got %s, want %s", result, test.expected)
+		}
+	}
+}
+
+// we can't test the uniqueness across test runs here
+func TestNewMessageId(t *testing.T) {
+
+	var li = &ListInfo{
+		mailutil.Addr{
+			Local:  "list",
+			Domain: "example.com",
+		},
+	}
+
+	var gotPrev string
+	var want = "<message-id@example.com>"
+
+	for i := 0; i < 1000; i++ {
+
+		var got = li.NewMessageId()
+
+		if got == gotPrev {
+			t.Errorf("got previous, want different")
+		}
+		gotPrev = got
+
+		if got = messageIdPattern.ReplaceAllString(got, "message-id"); got != want {
+			t.Errorf("got %s, want %s", got, want)
 		}
 	}
 }

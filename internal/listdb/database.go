@@ -5,11 +5,11 @@ import (
 	"log"
 	"strings"
 
-	"golang.org/x/sys/unix"
 	_ "github.com/go-sql-driver/mysql"
 	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wansing/ulist/util"
+	"golang.org/x/sys/unix"
 )
 
 type Database struct {

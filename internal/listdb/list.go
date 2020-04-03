@@ -375,9 +375,10 @@ func (list *List) Forward(m *mailutil.Message) error {
 	header["List-Id"] = []string{list.RFC5322NameAddr()}
 	header["List-Post"] = []string{list.RFC6068URI("")}                     // required for "Reply to list" button in Thunderbird
 	header["List-Unsubscribe"] = []string{list.RFC6068URI("subject=leave")} // GMail and Outlook show the unsubscribe button for senders with high reputation only
+	header["Message-Id"] = []string{list.NewMessageId()}                    // old Message-Id is not unique any more if the email is sent over more than one list
 	header["Subject"] = []string{list.PrefixSubject(header.Get("Subject"))}
 
-	// DKIM signatures usually sign "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field and we should drop it. See RFC 6376 B.2.3.
+	// DKIM signatures usually sign at least "h=from:to:subject:date", so the signature becomes invalid when we change the "From" field and we should drop it. See RFC 6376 B.2.3.
 
 	header["Dkim-Signature"] = []string{}
 
@@ -441,10 +442,11 @@ func (list *List) Forward(m *mailutil.Message) error {
 func (list *List) Notify(recipient string, subject string, body io.Reader) error {
 
 	header := make(mail.Header)
-	header["From"] = []string{list.RFC5322NameAddr()}
-	header["To"] = []string{recipient}
-	header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] " + subject}
 	header["Content-Type"] = []string{"text/plain; charset=utf-8"}
+	header["From"] = []string{list.RFC5322NameAddr()}
+	header["Message-Id"] = []string{list.NewMessageId()}
+	header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] " + subject}
+	header["To"] = []string{recipient}
 
 	return Mta.Send(list.BounceAddress(), []string{recipient}, header, body)
 }

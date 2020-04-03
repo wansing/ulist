@@ -342,10 +342,11 @@ func (s *LMTPSession) data(r io.Reader) error {
 			}
 
 			header := make(mail.Header)
-			header["From"] = []string{list.RFC5322NameAddr()}
-			header["To"] = []string{list.BounceAddress()}
-			header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] Bounce notification: " + message.Header.Get("Subject")}
 			header["Content-Type"] = []string{"text/plain; charset=utf-8"}
+			header["From"] = []string{list.RFC5322NameAddr()}
+			header["Message-Id"] = []string{list.NewMessageId()}
+			header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] Bounce notification: " + message.Header.Get("Subject")}
+			header["To"] = []string{list.BounceAddress()}
 
 			err = listdb.Mta.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
 			if err != nil {

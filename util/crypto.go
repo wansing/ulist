@@ -16,7 +16,7 @@ func RandomString32() (string, error) {
 		return "", err
 	}
 
-	encoded := base64.URLEncoding.EncodeToString(b)
+	encoded := base64.URLEncoding.EncodeToString(b) // URLEncoding is with padding
 
 	if len(encoded) < 32 {
 		return "", errors.New("[RandomString32] Too short")

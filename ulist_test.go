@@ -23,6 +23,7 @@ const testDbPath = "/tmp/ulist-test.sqlite3"
 var gdprChannel = make(chan string, 100)
 var messageChannel = make(chan *mailutil.MTAEnvelope, 100)
 
+var messageIdPattern = regexp.MustCompile("[0-9a-z-_]{32}") // copied from listdb
 var mimeBoundaryPattern = regexp.MustCompile("[0-9a-f]{60}")
 var timestampHMACPattern = regexp.MustCompile("[0-9]{10}/[-_0-9a-zA-Z]{43}")
 var urlPattern = regexp.MustCompile("/(join|leave)/[^/\r\n]+(/" + timestampHMACPattern.String() + "/[^/\r\n]+)?") // without WebUrl
@@ -104,6 +105,10 @@ func wantMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message
 	// replace HMACs in urls by "hmac"
 
 	got.Message = timestampHMACPattern.ReplaceAllString(got.Message, "timestamp/hmac")
+
+	// replace message ids by "message-id"
+
+	got.Message = messageIdPattern.ReplaceAllString(got.Message, "message-id")
 
 	// compare
 
@@ -286,6 +291,7 @@ carol@example.org joined the list createlist@example.com, reason: testing`)
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: alice@example.com
 
@@ -297,6 +303,7 @@ You can leave the mailing list "Created List" here: https://lists.example.com/le
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"bob@example.net"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: bob@example.net
 
@@ -308,6 +315,7 @@ You can leave the mailing list "Created List" here: https://lists.example.com/le
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"carol@example.org"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: carol@example.org
 
@@ -328,6 +336,7 @@ Hello World`)
 List-Id: "Created List" <createlist@example.com>
 List-Post: <mailto:createlist@example.com>
 List-Unsubscribe: <mailto:createlist@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <bob@example.net>
 Subject: [Created List] Hi
 To: createlist@example.com
@@ -365,6 +374,7 @@ Hello World`)
 List-Id: "A" <multiple-a@example.com>
 List-Post: <mailto:multiple-a@example.com>
 List-Unsubscribe: <mailto:multiple-a@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <alice@example.com>
 Subject: [A] Hi
 To: multiple-a@example.com, multiple-b@example.net
@@ -379,6 +389,7 @@ You can leave the mailing list "A" here: https://lists.example.com/leave/multipl
 List-Id: "B" <multiple-b@example.net>
 List-Post: <mailto:multiple-b@example.net>
 List-Unsubscribe: <mailto:multiple-b@example.net?subject=leave>
+Message-Id: <message-id@example.net>
 Reply-To: <alice@example.com>
 Subject: [B] Hi
 To: multiple-a@example.com, multiple-b@example.net
@@ -414,6 +425,7 @@ Hello`},
 List-Id: "A" <multiple-a@example.com>
 List-Post: <mailto:multiple-a@example.com>
 List-Unsubscribe: <mailto:multiple-a@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <alice@example.com>
 Subject: [A] Hi
 To: multiple-a@example.com
@@ -428,6 +440,7 @@ You can leave the mailing list "A" here: https://lists.example.com/leave/multipl
 List-Id: "B" <multiple-b@example.net>
 List-Post: <mailto:multiple-b@example.net>
 List-Unsubscribe: <mailto:multiple-b@example.net?subject=leave>
+Message-Id: <message-id@example.net>
 Reply-To: <alice@example.com>
 Subject: [B] Hi
 To: multiple-b@example.net
@@ -463,6 +476,7 @@ Subject: join
 	confirmJoinHref := wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
 		`Content-Type: text/plain; charset=utf-8
 From: "Public" <public@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Public] Please confirm: join the mailing list public@example.com
 To: bob@example.com
 
@@ -482,6 +496,7 @@ If you didn't request this, please ignore this email.`)
 	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
 		`Content-Type: text/plain; charset=utf-8
 From: "Public" <public@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Public] Welcome
 To: bob@example.com
 
@@ -529,6 +544,7 @@ Subject: leave
 	confirmLeaveHref := wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
 		`Content-Type: text/plain; charset=utf-8
 From: "Public" <public@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Public] Please confirm: leave the mailing list public@example.com
 To: bob@example.com
 
@@ -547,6 +563,7 @@ If you didn't request this, please ignore this email.`)
 	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
 		`Content-Type: text/plain; charset=utf-8
 From: "Public" <public@example.com>
+Message-Id: <message-id@example.com>
 Subject: [Public] Goodbye
 To: bob@example.com
 
@@ -631,6 +648,7 @@ Hello`)
 
 	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <multiple-notifieds@example.com>
+Message-Id: <message-id@example.com>
 Subject: [List] A message needs moderation
 To: alice@example.com
 
@@ -644,6 +662,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/mult
 
 	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"bob@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <multiple-notifieds@example.com>
+Message-Id: <message-id@example.com>
 Subject: [List] A message needs moderation
 To: bob@example.com
 
@@ -657,6 +676,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/mult
 
 	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"carol@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <multiple-notifieds@example.com>
+Message-Id: <message-id@example.com>
 Subject: [List] A message needs moderation
 To: carol@example.com
 
@@ -688,6 +708,7 @@ Hello`)
 
 	wantMessage(t, "x-spam-status+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <x-spam-status@example.com>
+Message-Id: <message-id@example.com>
 Subject: [List] A message needs moderation
 To: alice@example.com
 
@@ -756,6 +777,7 @@ Sorry`)
 
 	wantMessage(t, "", []string{"carol@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <bounce-to-bounce@example.com>
+Message-Id: <message-id@example.com>
 Subject: [List] Bounce notification: could not deliver message
 To: bounce-to-bounce+bounces@example.com
 
@@ -799,6 +821,7 @@ From: "alice via List" <cc-bcc@example.com>
 List-Id: "List" <cc-bcc@example.com>
 List-Post: <mailto:cc-bcc@example.com>
 List-Unsubscribe: <mailto:cc-bcc@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <alice@example.com>
 Subject: [List] Hi
 To: foo@example.com
@@ -831,6 +854,7 @@ Hi`) // note that the "To" header is not encoded properly
 List-Id: =?utf-8?q?List_=C3=9C?= <list_ue@example.com>
 List-Post: <mailto:list_ue@example.com>
 List-Unsubscribe: <mailto:list_ue@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: =?utf-8?q?User_=C3=9C?= <user_ue@example.com>
 Subject: =?utf-8?q?[List_=C3=9C]_Hell=C3=B6?=
 To: "List Ü" <list_ue@example.com>
@@ -881,6 +905,7 @@ From: "alice via List" <multipart-alternative-message@example.com>
 List-Id: "List" <multipart-alternative-message@example.com>
 List-Post: <mailto:multipart-alternative-message@example.com>
 List-Unsubscribe: <mailto:multipart-alternative-message@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <alice@example.com>
 Subject: [List] Hi
 To: multipart-alternative-message@example.com
@@ -962,6 +987,7 @@ From: "alice via List" <multipart-mixed-message@example.com>
 List-Id: "List" <multipart-mixed-message@example.com>
 List-Post: <mailto:multipart-mixed-message@example.com>
 List-Unsubscribe: <mailto:multipart-mixed-message@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <alice@example.com>
 Subject: [List] Hi
 To: multipart-mixed-message@example.com
@@ -1022,6 +1048,7 @@ Hello`)
 List-Id: "List" <knowns@example.com>
 List-Post: <mailto:knowns@example.com>
 List-Unsubscribe: <mailto:knowns@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <known@example.com>
 Subject: [List] Hi
 To: knowns@example.com
@@ -1092,6 +1119,7 @@ Hello`)
 List-Id: "List" <members@example.com>
 List-Post: <mailto:members@example.com>
 List-Unsubscribe: <mailto:members@example.com?subject=leave>
+Message-Id: <message-id@example.com>
 Reply-To: <dave@example.com>
 Subject: [List] Hi
 To: members@example.com

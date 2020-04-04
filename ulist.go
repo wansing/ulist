@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -28,6 +29,7 @@ var GitCommit string // hash
 var db *listdb.Database
 
 var lastLogId uint32 = 0
+var waiting sync.WaitGroup
 
 var smtpsAuth = &client.SMTPS{}
 var starttlsAuth = &client.STARTTLS{}
@@ -151,6 +153,7 @@ func main() {
 
 	log.Println("received shutdown signal")
 	s.Close()
+	waiting.Wait()
 }
 
 type LMTPBackend struct{}
@@ -239,6 +242,10 @@ func (s *LMTPSession) rcpt(toStr string) error {
 
 // "DATA". Finishes a transaction.
 func (s *LMTPSession) Data(r io.Reader) error {
+
+	waiting.Add(1)
+	defer waiting.Done()
+
 	err := s.data(r)
 	if err != nil {
 		s.logf("\033[1;31mdata error: %v\033[0m", err) // red color

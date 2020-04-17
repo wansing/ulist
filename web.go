@@ -185,7 +185,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 
 		if err := f(ctx); err != nil {
 			if err != ErrUnauthorized && err != ErrNoList {
-				log.Printf("[web-ui] %v", err)
+				log.Printf("    web: %v", err)
 			}
 			_ = ctx.Execute(errorTemplate, err)
 		}
@@ -491,7 +491,7 @@ func deleteHandler(ctx *Context, list *listdb.List) error {
 			if err := list.Delete(); err != nil {
 				return err
 			}
-			log.Printf("[web-ui] %s deleted the mailing list %s", ctx.User, list)
+			log.Printf("    web: %s deleted the mailing list %s", ctx.User, list)
 			ctx.Successf("The mailing list %s has been deleted.", list)
 			ctx.Redirect("/")
 			return nil
@@ -607,7 +607,7 @@ func memberHandler(ctx *Context, list *listdb.List) error {
 
 		err = list.UpdateMember(m.MemberAddress, receive, moderate, notify, admin)
 		if err != nil {
-			log.Printf("[web-ui] error updating member: %v", err)
+			log.Printf("    web: error updating member: %v", err)
 		}
 
 		ctx.Successf("The membership settings of %s in %s have been saved.", m.MemberAddress, list)
@@ -675,7 +675,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 
 			m, err := list.Open(emlFilename)
 			if err != nil {
-				log.Printf("[web-ui] error opening eml file %s: %v", emlFilename, err)
+				log.Printf("    web: error opening eml file %s: %v", emlFilename, err)
 				continue
 			}
 
@@ -702,10 +702,10 @@ func modHandler(ctx *Context, list *listdb.List) error {
 			case "pass":
 
 				if err = list.Forward(m); err != nil {
-					log.Printf("[web-ui] error sending email through list %s: %v", list, err)
+					log.Printf("    web: error sending email through list %s: %v", list, err)
 					ctx.Alertf("Error sending email through list: %v", err)
 				} else {
-					log.Printf("[web-ui] email sent through list %s", list)
+					log.Printf("    web: email sent through list %s", list)
 					notifyPassed++
 					_ = list.DeleteModeratedMail(emlFilename)
 				}
@@ -829,7 +829,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 
 		message, err := list.Open(emlFilename)
 		if err != nil {
-			log.Printf("[web-ui] error opening eml file %s: %v", emlFilename, err)
+			log.Printf("    web: error opening eml file %s: %v", emlFilename, err)
 			continue
 		}
 
@@ -936,7 +936,7 @@ func askJoinHandler(ctx *Context, list *listdb.List) error {
 			return err
 		}
 
-		log.Printf("[web-ui] sending join checkback link to %v", email)
+		log.Printf("    web: sending join checkback link to %v", email)
 		ctx.Successf("If you are not a member yet, a confirmation link has been sent to your email address.")
 		ctx.Redirect("/")
 		return nil
@@ -989,10 +989,10 @@ func askLeaveHandler(ctx *Context) error {
 
 			if sent, err := list.SendLeaveCheckback(email); err == nil {
 				if sent {
-					log.Printf("[web-ui] sending leave checkback: list: %s, user: %s", list, email)
+					log.Printf("    web: sending leave checkback: list: %s, user: %s", list, email)
 				}
 			} else {
-				log.Printf("[web-ui] error sending leave checkback: list: %s, user: %s, err: %v", list, email, err)
+				log.Printf("    web: error sending leave checkback: list: %s, user: %s, err: %v", list, email, err)
 			}
 			// don't return anything to the user, just log
 		}

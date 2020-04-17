@@ -175,7 +175,7 @@ type LMTPSession struct {
 }
 
 func (s *LMTPSession) logf(format string, a ...interface{}) {
-	log.Printf("[% 6d] "+format, append([]interface{}{s.logId}, a...)...)
+	log.Printf("% 7d: "+format, append([]interface{}{s.logId}, a...)...)
 }
 
 // "RSET". Aborts the current mail transaction.

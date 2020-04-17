@@ -1,6 +1,6 @@
 # ulist
 
-A mailing list service that keeps it simple.
+A mailing list service that keeps it simple. An alternative to mailman in some use cases.
 
 ## Build
 
@@ -12,7 +12,10 @@ See `build.sh`.
 * mail delivery to system's MTA: ulist executes `/usr/sbin/sendmail`
 * Web UI: ulist listens to a port or a unix socket
 * Web UI authentication: against a local database or SMTP server, see [auth](https://github.com/wansing/auth)
-* Supported databases: SQLite, PostgreSQL (untested), MySQL/MariaDB (untested)
+* Supported databases
+  * SQLite
+  * PostgreSQL (untested, probably not working yet)
+  * MySQL/MariaDB (untested, probably not working yet)
 
 See `docs/integration` for examples.
 
@@ -25,6 +28,28 @@ See `docs/integration` for examples.
 * probably GDPR compliant
 * appends a footer with an unsubscribe link
 * [socketmap](http://www.postfix.org/socketmap_table.5.html) server for postfix
+
+## Screenshots
+
+<p align="center">
+	<img src="/docs/screenshots/all.png?raw=true" width="500">
+</p>
+
+<p align="center">
+	<img src="/docs/screenshots/members.png?raw=true" width="500">
+</p>
+
+<p align="center">
+	<img src="/docs/screenshots/members-add.png?raw=true" width="500">
+</p>
+
+<p align="center">
+	<img src="/docs/screenshots/member.png?raw=true" width="500">
+</p>
+
+<p align="center">
+	<img src="/docs/screenshots/settings.png?raw=true" width="500">
+</p>
 
 ## Design Choices
 

@@ -283,7 +283,7 @@ func (list *List) insertFooter(header mail.Header, body io.Reader) (io.Reader, e
 	switch msgContentType {
 	case "text/plain": // append footer to plain text
 		io.Copy(bodyWithFooter, body)
-		bodyWithFooter.WriteString("\r\n\r\n----\r\n\r\n")
+		bodyWithFooter.WriteString("\r\n----\r\n")
 		bodyWithFooter.WriteString(list.plainFooter())
 
 	case "multipart/mixed": // insert footer as a part

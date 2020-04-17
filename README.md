@@ -24,7 +24,7 @@ See `docs/integration` for examples.
 * pluggable authentication
 * probably GDPR compliant
 * appends a footer with an unsubscribe link
-* socketmap server for postfix
+* [socketmap](http://www.postfix.org/socketmap_table.5.html) server for postfix
 
 ## Design Choices
 
@@ -60,7 +60,6 @@ See `docs/integration` for examples.
 
 ## TODO
 
-* docs: mention the postfix transport_maps [interface](http://www.postfix.org/DATABASE_README.html#types) interface instead of letting postfix access the ulist database
 * LDAP authenticator
 * more unit tests
 * GDPR: require opt-in after n days or member won't get mails any more

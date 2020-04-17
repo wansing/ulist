@@ -25,6 +25,8 @@ import (
 // postmap -q - socketmap:unix:socketmap.sock:name < /tmp/addresses
 // foo@example.com	lmtp:unix:/tmp/lmtp.sock
 // list@example.com	lmtp:unix:/tmp/lmtp.sock
+//
+// The name of the socketmap (here: "name") is ignored.
 
 // db should be initialized at this point
 func sockmapsrv(lmtpSock, socketmapSock string) {
@@ -59,13 +61,14 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("[sockmapsrv] error accepting connection: %v", err)
+			log.Printf("sockmap: error accepting connection: %v", err)
 		}
 		go func(conn net.Conn) {
+			defer conn.Close()
 			for { // postmap transmits multiple addresses in one connection, waiting for a response after each
 				conn.SetDeadline(time.Now().Add(10 * time.Second))
 
-				input := make([]byte, 2000) // this limit is arbitrary
+				input := make([]byte, 500) // RFC 5321: max email address length is 254 or 320
 				n, err := conn.Read(input)
 				input = input[:n]
 
@@ -73,14 +76,17 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 					break
 				}
 				if err != nil {
-					log.Printf("[sockmapsrv] error reading from connection: %v", err)
+					if neterr, ok := err.(net.Error); ok && neterr.Timeout() {
+						break // don't log anything
+					}
+					log.Printf("sockmap: error reading from connection: %v", err)
 					conn.Write(util.EncodeNetstring("TEMP error reading from connection"))
 					break
 				}
 
 				data, err := util.DecodeNetstring(input)
 				if err != nil {
-					log.Printf("[sockmapsrv] error decoding netstring: %v", err)
+					log.Printf("sockmap: error decoding netstring: %v", err)
 					conn.Write(util.EncodeNetstring("PERM error decoding netstring"))
 					continue
 				}
@@ -89,15 +95,20 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 				if fields := strings.SplitN(data, " ", 2); len(fields) >= 2 {
 					key = fields[1] // ignore 0-th field (name of the socketmap)
 				} else {
-					log.Printf("[sockmapsrv] malformed request: %s", data)
+					log.Printf("sockmap: malformed request: %s", data)
 					conn.Write(util.EncodeNetstring("PERM malformed request"))
+					continue
+				}
+
+				if key == "*" { // postfix tries asterisk first
+					conn.Write(util.EncodeNetstring("NOTFOUND "))
 					continue
 				}
 
 				listAddr, err := mailutil.ParseAddress(key)
 				if err != nil {
-					log.Printf("[sockmapsrv] malformed key %s: %v", key, err)
-					conn.Write(util.EncodeNetstring("NOTFOUND ")) // both TEMP and PERM errors cause the whole transaction to fail, so we avoid them here
+					log.Printf("sockmap: request %s has malformed key %s: %v", data, key, err)
+					conn.Write(util.EncodeNetstring("NOTFOUND ")) // postmap considers the whole transaction failed on both TEMP and PERM errors, so we avoid them here
 					continue
 				}
 
@@ -108,7 +119,7 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 						conn.Write(util.EncodeNetstring("NOTFOUND "))
 					}
 				} else {
-					log.Printf("[sockmapsrv] database error: %v", err)
+					log.Printf("sockmap: database error: %v", err)
 					conn.Write(util.EncodeNetstring("TEMP database error"))
 				}
 			}

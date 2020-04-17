@@ -9,6 +9,7 @@ const sockmapsrvTestSocketmap = "/tmp/test-socketmap.sock"
 
 const postmapInput = `postmap-a@example.com
 postmap-c@example.com
+*
 postmap-a@example.com
 postmap-b@example.com
 postmap-c@example.com`

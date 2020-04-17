@@ -12,7 +12,7 @@ User=postfix
 Group=postfix
 Type=simple
 WorkingDirectory=/srv/ulist/data
-ExecStart=/usr/bin/ulist -lmtp /var/spool/postfix/private/ulist-lmtp -smtps 465 -superadmin admin@example.com -weburl "https://lists.example.com"
+ExecStart=/usr/bin/ulist -lmtp /var/spool/postfix/private/ulist-lmtp -smtps 465 -socketmap /var/spool/postfix/private/ulist-socketmap -superadmin admin@example.com -weburl "https://lists.example.com"
 
 [Install]
 WantedBy=multi-user.target
@@ -44,15 +44,6 @@ The `recipient_delimiter = +` is required in order to receive bounces at `listna
 recipient_delimiter = +
 virtual_mailbox_domains = example.com [...]
 virtual_transport = lmtp:unix:/var/spool/postfix/private/dovecot-lmtp
-transport_maps = sqlite:/etc/postfix/transport-maps.cf
+transport_maps = socketmap:unix:/var/spool/postfix/private/ulist-socketmap:name
 [...]
-```
-
-## `/etc/postfix/transport-maps.cf`
-
-```
-dbpath = /srv/ulist/data/ulist.sqlite
-query = SELECT CASE
-	WHEN EXISTS(SELECT 1 FROM list WHERE local = '%u' AND domain = '%d') THEN "lmtp:unix:/var/spool/postfix/private/ulist-lmtp"
-END;
 ```

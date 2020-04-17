@@ -3,5 +3,4 @@ A message at {{ .List.RFC5322NameAddr }} is waiting for moderation.
 You can moderate it here: {{ .ModHref }}
 
 ----
-
 {{ .Footer }}

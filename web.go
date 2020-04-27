@@ -684,11 +684,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 
 			emlFilename = strings.TrimPrefix(emlFilename, "action-")
 
-			m, err := list.ReadMessage(emlFilename)
-			if err != nil {
-				log.Printf("    web: error reading message %s: %v", emlFilename, err)
-				continue
-			}
+			m, err := list.ReadMessage(emlFilename) // err is evaluated in the switch
 
 			switch action[0] {
 
@@ -711,6 +707,10 @@ func modHandler(ctx *Context, list *listdb.List) error {
 				}
 
 			case "pass":
+
+				if err != nil {
+					break // don't forward emails with (probably header parsing) error
+				}
 
 				if err = list.Forward(m); err != nil {
 					log.Printf("    web: error sending email through list %s: %v", list, err)

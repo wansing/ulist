@@ -24,9 +24,15 @@ Here's the message body.`
 		t.Errorf("got %s, want %s", got.String(), want)
 	}
 
-	expectSingleFromStr := `alice@example.com`
+	var expectSingleFrom = Addr{
+		Display: "Alice",
+		Local:   "alice",
+		Domain:  "example.com",
+	}
 
-	if got := message.SingleFromStr(); got != expectSingleFromStr {
-		t.Errorf("got %s, want %s", got, expectSingleFromStr)
+	var gotSingleFrom, _ = message.SingleFrom()
+
+	if *gotSingleFrom != expectSingleFrom {
+		t.Errorf("got %s, want %s", *gotSingleFrom, expectSingleFrom)
 	}
 }

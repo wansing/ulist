@@ -38,6 +38,14 @@ func ParseAddressesFromHeader(header mail.Header, fieldName string, limit int) (
 	return addrs, nil
 }
 
+func SingleFrom(header mail.Header) (*Addr, bool) {
+	if froms, err := ParseAddressesFromHeader(header, "From", 2); len(froms) == 1 && err == nil {
+		return froms[0], true
+	} else {
+		return nil, false
+	}
+}
+
 // Tries to restore the original folding.
 //
 // RFC5322: "Each line of characters MUST be no more than 998 characters [...] excluding the CRLF."

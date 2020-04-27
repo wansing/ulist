@@ -14,6 +14,7 @@ import (
 	"math"
 	"net"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"os"
 	"sort"
@@ -649,8 +650,17 @@ func knownsHandler(ctx *Context, list *listdb.List) error {
 }
 
 type StoredMessage struct {
-	*mailutil.Message
+	mail.Header
 	Filename string
+}
+
+// for template
+func (stored *StoredMessage) SingleFromStr() string {
+	if from, ok := mailutil.SingleFrom(stored.Header); ok {
+		return from.RFC5322AddrSpec()
+	} else {
+		return ""
+	}
 }
 
 func modHandler(ctx *Context, list *listdb.List) error {
@@ -673,9 +683,9 @@ func modHandler(ctx *Context, list *listdb.List) error {
 
 			emlFilename = strings.TrimPrefix(emlFilename, "action-")
 
-			m, err := list.Open(emlFilename)
+			m, err := list.ReadMessage(emlFilename)
 			if err != nil {
-				log.Printf("    web: error opening eml file %s: %v", emlFilename, err)
+				log.Printf("    web: error reading message %s: %v", emlFilename, err)
 				continue
 			}
 
@@ -827,13 +837,13 @@ func modHandler(ctx *Context, list *listdb.List) error {
 
 	for _, emlFilename := range emlFilenames {
 
-		message, err := list.Open(emlFilename)
+		header, err := list.ReadHeader(emlFilename)
 		if err != nil {
-			log.Printf("    web: error opening eml file %s: %v", emlFilename, err)
+			log.Printf("    web: error reading header %s: %v", emlFilename, err)
 			continue
 		}
 
-		data.Messages = append(data.Messages, StoredMessage{message, emlFilename})
+		data.Messages = append(data.Messages, StoredMessage{header, emlFilename})
 	}
 
 	return ctx.Execute(modTemplate, data)

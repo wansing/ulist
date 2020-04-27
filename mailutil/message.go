@@ -58,21 +58,6 @@ func (m *Message) Save(w io.Writer) error {
 	return nil
 }
 
-// header helpers
-
 func (m *Message) SingleFrom() (*Addr, bool) {
-	if froms, err := ParseAddressesFromHeader(m.Header, "From", 2); len(froms) == 1 && err == nil {
-		return froms[0], true
-	} else {
-		return nil, false
-	}
-}
-
-// wrapper for templates
-func (m *Message) SingleFromStr() string {
-	if from, ok := m.SingleFrom(); ok {
-		return from.RFC5322AddrSpec()
-	} else {
-		return ""
-	}
+	return SingleFrom(m.Header)
 }

@@ -153,20 +153,46 @@ func (list *List) StorageFolder() string {
 	return fmt.Sprintf("%s%d", spoolDir, list.Id)
 }
 
-func (list *List) Open(filename string) (*mailutil.Message, error) {
+// caller must close the returned file
+func (list *List) open(filename string) (*os.File, error) {
 
 	// sanitize filename
 	if strings.Contains(filename, "..") || strings.Contains(filename, "/") {
 		return nil, errors.New("invalid filename")
 	}
 
-	emlFile, err := os.Open(list.StorageFolder() + "/" + filename)
+	file, err := os.Open(list.StorageFolder() + "/" + filename)
 	if err != nil {
 		return nil, err
 	}
-	defer emlFile.Close()
 
-	return mailutil.ReadMessage(emlFile)
+	return file, nil
+}
+
+func (list *List) ReadMessage(filename string) (*mailutil.Message, error) {
+
+	file, err := list.open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	return mailutil.ReadMessage(file)
+}
+
+func (list *List) ReadHeader(filename string) (mail.Header, error) {
+
+	file, err := list.open(filename)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	if msg, err := mail.ReadMessage(file); err == nil {
+		return msg.Header, nil
+	} else {
+		return nil, err
+	}
 }
 
 // Saves the message into an eml file with a unique name within the storage folder. The filename is not returned.

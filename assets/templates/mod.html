@@ -13,17 +13,21 @@
 			{{ range .Messages }}
 				<div class="card mb-3">
 					<div class="card-body">
-						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ TryMimeDecode (.Header.Get "Subject") }}</a></h5>
+						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ with TryMimeDecode (.Header.Get "Subject") }}{{ . }}{{ else }}Unnamed email{{ end }}</a></h5>
 						<p class="card-text">
-							From: {{ .Header.Get "From" }}<br> <!-- an email header has a single "From" field which can contain multiple addresses -->
-							{{ with .Header.Get "Sender" }}
-								Sender: {{ . }}<br>
+							{{ with .Err }}
+								<em>Error: {{ . }}</em>
+							{{ else }}
+								From: {{ .Header.Get "From" }}<br> <!-- an email header has a single "From" field which can contain multiple addresses -->
+								{{ with .Header.Get "Sender" }}
+									Sender: {{ . }}<br>
+								{{ end }}
+								To: {{ .Header.Get "To" }}<br> <!-- an email header has a single "To" field which can contain multiple addresses -->
+								{{ with .Header.Get "Cc" }}
+									Cc: {{ . }}<br>
+								{{ end }}
+								Date: {{ .Header.Get "Date" }}<br>
 							{{ end }}
-							To: {{ .Header.Get "To" }}<br> <!-- an email header has a single "To" field which can contain multiple addresses -->
-							{{ with .Header.Get "Cc" }}
-								Cc: {{ . }}<br>
-							{{ end }}
-							Date: {{ .Header.Get "Date" }}<br>
 						</p>
 					</div>
 					<div class="card-footer">

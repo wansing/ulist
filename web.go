@@ -651,6 +651,7 @@ func knownsHandler(ctx *Context, list *listdb.List) error {
 
 type StoredMessage struct {
 	mail.Header
+	Err      error // User must see emails with unparseable header as well. Many of them are sorted out during the LMTP Data command, but we're robust here.
 	Filename string
 }
 
@@ -836,14 +837,8 @@ func modHandler(ctx *Context, list *listdb.List) error {
 	// load messages from eml files
 
 	for _, emlFilename := range emlFilenames {
-
 		header, err := list.ReadHeader(emlFilename)
-		if err != nil {
-			log.Printf("    web: error reading header %s: %v", emlFilename, err)
-			continue
-		}
-
-		data.Messages = append(data.Messages, StoredMessage{header, emlFilename})
+		data.Messages = append(data.Messages, StoredMessage{header, err, emlFilename})
 	}
 
 	return ctx.Execute(modTemplate, data)

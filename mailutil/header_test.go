@@ -12,9 +12,9 @@ import (
 func TestFold(t *testing.T) {
 
 	tests := []struct {
-		name     string
-		body     string
-		expected string
+		name   string
+		body   string
+		expect string
 	}{
 		// real-world example
 		{"List-Id", `"test" <test@example.com>`, `List-Id: "test" <test@example.com>` + "\r\n"},
@@ -57,8 +57,8 @@ func TestFold(t *testing.T) {
 		err := headerWritelnFold(writer, test.name, test.body)
 		got := writer.String()
 
-		if got != test.expected || err != nil {
-			t.Errorf("got %s %v, want %s", got, err, test.expected)
+		if got != test.expect || err != nil {
+			t.Errorf("got %s %v, want %s", got, err, test.expect)
 		}
 
 		for _, line := range strings.Split(got, "\r\n") {
@@ -72,9 +72,9 @@ func TestFold(t *testing.T) {
 func TestParseAddressesFromHeader(t *testing.T) {
 
 	tests := []struct {
-		header        mail.Header
-		expectedAddrs []Addr
-		expectedErrs  []string
+		header      mail.Header
+		expectAddrs []Addr
+		expectErrs  []string
 	}{
 		{
 			mail.Header{
@@ -99,13 +99,13 @@ func TestParseAddressesFromHeader(t *testing.T) {
 	for _, test := range tests {
 		result, _ := ParseAddressesFromHeader(test.header, "To", 100)
 		for i, r := range result {
-			if *r != test.expectedAddrs[i] {
-				t.Errorf("got %v, want %s", r, test.expectedAddrs[i])
+			if *r != test.expectAddrs[i] {
+				t.Errorf("got %v, want %s", r, test.expectAddrs[i])
 			}
 		}
 		/*for i, e := range errs {
-			if e.Error() != test.expectedErrs[i] {
-				t.Errorf("got %v, want %s", e, test.expectedErrs[i])
+			if e.Error() != test.expectErrs[i] {
+				t.Errorf("got %v, want %s", e, test.expectErrs[i])
 			}
 		}*/
 	}
@@ -137,5 +137,73 @@ To: "Ally" <alice@example.com>, claire@example.org
 
 	if got.String() != expect {
 		t.Errorf("got %s, want %s", got.String(), expect)
+	}
+}
+
+func TestIsSpam(t *testing.T) {
+
+	tests := []struct {
+		header mail.Header
+		expect bool
+	}{
+		{
+			mail.Header{
+				"From": []string{"alice@example.com"},
+				"To": []string{"list@example.com"},
+				"Subject": []string{"Hello"},
+			},
+			false,
+		},
+		{
+			mail.Header{
+				"From": []string{"alice@example.com"},
+				"To": []string{"list@example.com"},
+				"Subject": []string{"Hello"},
+				"X-Spam-Flag": []string{"yes"},
+			},
+			true,
+		},
+		{
+			mail.Header{
+				"From": []string{"alice@example.com"},
+				"To": []string{"list@example.com"},
+				"Subject": []string{"Hello"},
+				"X-Spam": []string{"true"},
+			},
+			true,
+		},
+	}
+
+	for _, test := range tests {
+		var got, _ = IsSpam(test.header)
+		if got != test.expect {
+			t.Errorf("got %v, want %v", got, test.expect)
+		}
+	}
+}
+
+func TestIsSpamKey(t *testing.T) {
+
+	tests := []struct {
+		key    string
+		expect bool
+	}{
+		{"From", false},
+		{"To", false},
+		{"Subject", false},
+		{"List-Id", false},
+		{"Foo", false},
+		{"Foo-X-Spam", false},
+		{"X-Spam-Foo", false},
+		{"X-Spam", true},
+		{"X-Spam-Flag", true},
+		{"X-Spam-Status", true},
+	}
+
+	for _, test := range tests {
+		var got = IsSpamKey(test.key)
+		if got != test.expect {
+			t.Errorf("got %v, want %v", got, test.expect)
+		}
 	}
 }

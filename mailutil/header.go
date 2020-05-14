@@ -5,12 +5,40 @@ import (
 	"fmt"
 	"io"
 	"net/mail"
+	"net/textproto"
 	"sort"
 	"strings"
 )
 
 // RFC5322 says CRLF. Postfix works with both \n and \r\n.
 const lineSeparator = "\r\n"
+
+var spamKeys = []string{
+	textproto.CanonicalMIMEHeaderKey("X-Spam"),
+	textproto.CanonicalMIMEHeaderKey("X-Spam-Flag"),
+	textproto.CanonicalMIMEHeaderKey("X-Spam-Status"),
+}
+
+// like https://github.com/rspamd/rspamd/blob/master/rules/regexp/upstream_spam_filters.lua#L50
+func IsSpam(header mail.Header) (bool, string) {
+	for _, key := range spamKeys {
+		var val = strings.ToLower(strings.TrimSpace(header.Get(key)))
+		if strings.HasPrefix(val, "true") || strings.HasPrefix(val, "yes") {
+			return true, fmt.Sprintf(`%s is "%s"`, key, val)
+		}
+	}
+	return false, ""
+}
+
+func IsSpamKey(headerKey string) bool {
+	headerKey = textproto.CanonicalMIMEHeaderKey(headerKey)
+	for _, key := range spamKeys {
+		if headerKey == key {
+			return true
+		}
+	}
+	return false
+}
 
 // ParseAddressesFromHeader parses email addresses from a header line. In contrast to ParseAddresses, parsing is strictly.
 func ParseAddressesFromHeader(header mail.Header, fieldName string, limit int) ([]*Addr, error) {

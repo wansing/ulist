@@ -101,7 +101,7 @@ func (list *List) createHMAC(addr *mailutil.Addr, timestamp int64) ([]byte, erro
 	return mac.Sum(nil), nil
 }
 
-// GetAction determines the maximum action of an email by the "From" addresses and the "X-Spam-Status" header. It also returns a human-readable reason for the decision.
+// GetAction determines the maximum action of an email by the "From" addresses and possible spam headers. It also returns a human-readable reason for the decision.
 //
 // The SMTP envelope sender is ignored, because it's actually something different and a case for the spam filtering system.
 // (Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html)
@@ -137,12 +137,12 @@ func (list *List) GetAction(header mail.Header, froms []*mailutil.Addr) (Action,
 		}
 	}
 
-	// Pass becomes Mod if X-Spam-Status header starts with "yes"
+	// Pass becomes Mod if the email has a positive spam header
 
 	if action == Pass {
-		if xssHeader := strings.ToLower(strings.TrimSpace(header.Get("X-Spam-Status"))); strings.HasPrefix(xssHeader, "yes") {
+		if isSpam, spamReason := mailutil.IsSpam(header); isSpam {
 			action = Mod
-			reason = `X-Spam-Status starts with "yes"`
+			reason = spamReason
 		}
 	}
 
@@ -388,11 +388,14 @@ func (list *List) insertFooter(header mail.Header, body io.Reader) (io.Reader, e
 // Forwards a message over the mailing list. This is the main job of this software.
 func (list *List) Forward(m *mailutil.Message) error {
 
-	// make a copy of the header
+	// don't modify the original header, create a copy instead
 
-	header := make(mail.Header) // mail.Header has no Set method
-	for k, vals := range m.Header {
-		header[k] = append(header[k], vals...)
+	var header = make(mail.Header) // mail.Header has no Set method
+	for key, vals := range m.Header {
+		if mailutil.IsSpamKey(key)  {
+			continue // An email with a spam header is always moderated. Now that it is forwarded, we can be sure that it is not spam.
+		}
+		header[key] = vals
 	}
 
 	// rewrite message

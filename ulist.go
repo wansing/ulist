@@ -268,15 +268,15 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 	// logging
 
-	if from := message.Header.Get("From"); from != "" {
+	if from := mailutil.TryMimeDecode(message.Header.Get("From")); from != "" {
 		s.logf("from: %s", from)
 	}
 
-	if to := message.Header.Get("To"); to != "" {
+	if to := mailutil.TryMimeDecode(message.Header.Get("To")); to != "" {
 		s.logf("to: %s", to)
 	}
 
-	if cc := message.Header.Get("Cc"); cc != "" {
+	if cc := mailutil.TryMimeDecode(message.Header.Get("Cc")); cc != "" {
 		s.logf("cc: %s", cc)
 	}
 

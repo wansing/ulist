@@ -286,8 +286,8 @@ func TestMultipleReceivers(t *testing.T) {
 	db.CreateList("createlist@example.com", "Created List", "alice@example.com, bob@example.net, carol@example.org", "testing", testAlerter{})
 
 	wantGDPREvent(t, `alice@example.com joined the list createlist@example.com, reason: testing
-bob@example.net joined the list createlist@example.com, reason: testing
-carol@example.org joined the list createlist@example.com, reason: testing`)
+	bob@example.net joined the list createlist@example.com, reason: testing
+	carol@example.org joined the list createlist@example.com, reason: testing`)
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"alice@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
@@ -627,8 +627,8 @@ func TestMultipleNotifieds(t *testing.T) {
 	<-messageChannel // welcome carol
 
 	wantGDPREvent(t, `alice@example.com joined the list multiple-notifieds@example.com, reason: testing
-bob@example.com joined the list multiple-notifieds@example.com, reason: testing
-carol@example.com joined the list multiple-notifieds@example.com, reason: testing`)
+	bob@example.com joined the list multiple-notifieds@example.com, reason: testing
+	carol@example.com joined the list multiple-notifieds@example.com, reason: testing`)
 
 	mustTransactOne("some_envelope@example.com", []string{"multiple-notifieds@example.com"},
 		`From: unknown@example.com
@@ -1088,8 +1088,8 @@ func TestMembers(t *testing.T) {
 	)
 
 	wantGDPREvent(t, `bob@example.com joined the list members@example.com, reason: testing
-carol@example.com joined the list members@example.com, reason: testing
-dave@example.com joined the list members@example.com, reason: testing`)
+	carol@example.com joined the list members@example.com, reason: testing
+	dave@example.com joined the list members@example.com, reason: testing`)
 
 	mustTransactOne("some_envelope@example.com", []string{"members@example.com"},
 		`From: dave@example.com

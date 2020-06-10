@@ -25,6 +25,7 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/julienschmidt/httprouter"
 	"github.com/shurcooL/httpfs/html/vfstemplate"
+	"github.com/wansing/auth/client"
 	"github.com/wansing/ulist/captcha"
 	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
@@ -370,9 +371,6 @@ func loginHandler(ctx *Context) error {
 		email := strings.ToLower(strings.TrimSpace(data.Mail))
 
 		success, err := authenticators.Authenticate(email, ctx.r.PostFormValue("password"))
-		if err != nil {
-			return err
-		}
 
 		if success {
 			ctx.setUser(email)
@@ -382,9 +380,14 @@ func loginHandler(ctx *Context) error {
 			} else {
 				ctx.Redirect("/my")
 			}
-			return nil
+			return nil // any err is ignored
 		} else {
+			log.Printf("    web: authentication failed from client %s", client.ExtractIP(ctx.r)) // fail2ban can match this pattern
 			ctx.Alertf("Wrong email address or password")
+		}
+
+		if err != nil {
+			return err
 		}
 	}
 

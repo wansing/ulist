@@ -85,6 +85,7 @@ See `docs/integration` for examples.
 
 ## TODO
 
+* fail2ban pattern
 * LDAP authenticator
 * more unit tests
 * GDPR: require opt-in after n days or member won't get mails any more

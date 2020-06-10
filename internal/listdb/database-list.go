@@ -149,6 +149,9 @@ func (list *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, 
 
 	var gdprEvent = &strings.Builder{}
 	for _, addr := range addrs {
+		if gdprEvent.Len() > 0 {
+			gdprEvent.WriteString("\t")
+		}
 		fmt.Fprintf(gdprEvent, "%s joined the list %s, reason: %s\n", addr, list, reason)
 	}
 	if err := gdprLogger.Printf("%s", gdprEvent); err != nil {
@@ -208,6 +211,9 @@ func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason
 
 	var gdprEvent = &strings.Builder{}
 	for _, addr := range addrs {
+		if gdprEvent.Len() > 0 {
+			gdprEvent.WriteString("\t")
+		}
 		fmt.Fprintf(gdprEvent, "%s left the list %s, reason: %s\n", addr, list, reason)
 	}
 	if err := gdprLogger.Printf("%s", gdprEvent); err != nil {

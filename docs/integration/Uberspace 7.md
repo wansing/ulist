@@ -13,6 +13,8 @@ chmod +x ~/bin/qmail-lmtp
 mkdir ~/ulist
 cd ~/ulist
 git clone https://github.com/wansing/ulist
+cd ulist
+./build.sh
 ```
 
 ## `~/.qmail` files
@@ -20,7 +22,7 @@ git clone https://github.com/wansing/ulist
 Uberspace 7 does not support email namespaces any more. If you use virtual mailboxes, you need individual `.qmail` files for each list. Else you can overwrite `~/.qmail-default`.
 
 ```
-|qmail-lmtp 8024 1 /home/example/ulist/lmtp.sock
+|/home/example/bin/qmail-lmtp 8024 1 /home/example/ulist/lmtp.sock
 ```
 
 * Parameters of `qmail-lmtp`
@@ -38,8 +40,17 @@ autostart=yes
 autorestart=yes
 ```
 
-## Set web backend
+Re-read the supervisord config and start ulist:
 
 ```
+supervisorctl reread
+supervisorctl update
+supervisorctl start ulist
+```
+
+## Add the web backend
+
+```
+uberspace web domain add lists.example.com
 uberspace web backend set lists.example.com --http --port 8080
 ```

@@ -295,6 +295,8 @@ Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: alice@example.com
 
+Hello alice@example.com,
+
 Welcome to the mailing list createlist@example.com.
 
 ----
@@ -306,6 +308,8 @@ Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: bob@example.net
 
+Hello bob@example.net,
+
 Welcome to the mailing list createlist@example.com.
 
 ----
@@ -316,6 +320,8 @@ From: "Created List" <createlist@example.com>
 Message-Id: <message-id@example.com>
 Subject: [Created List] Welcome
 To: carol@example.org
+
+Hello carol@example.org,
 
 Welcome to the mailing list createlist@example.com.
 
@@ -492,6 +498,8 @@ Message-Id: <message-id@example.com>
 Subject: [Public] Welcome
 To: bob@example.com
 
+Hello bob@example.com,
+
 Welcome to the mailing list public@example.com.
 
 ----
@@ -580,8 +588,8 @@ func TestRejectAll(t *testing.T) {
 	list.Update("List name", false, false, listdb.Reject, listdb.Reject, listdb.Reject, listdb.Reject)
 
 	list.AddKnown(mustParse("known@example.com"))
-	list.AddMember(false, mustParse("member@example.com"), true, false, false, false, "testing")
-	list.AddMember(false, mustParse("mod@example.com"), true, true, false, false, "testing")
+	list.AddMember(mustParse("member@example.com"), true, false, false, false, "testing")
+	list.AddMember(mustParse("mod@example.com"), true, true, false, false, "testing")
 
 	wantGDPREvent(t, "member@example.com joined the list reject-all@example.com, reason: testing")
 	wantGDPREvent(t, "mod@example.com joined the list reject-all@example.com, reason: testing")
@@ -594,6 +602,32 @@ To: reject-all@example.com
 `)
 		wantErr(t, err, "user not found")
 	}
+
+	wantMessage(t, "reject-all+bounces@example.com", []string{"member@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List name" <reject-all@example.com>
+Message-Id: <message-id@example.com>
+Subject: [List name] Welcome
+To: member@example.com
+
+Hello member@example.com,
+
+Welcome to the mailing list reject-all@example.com.
+
+----
+You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all%40example.com`)
+
+	wantMessage(t, "reject-all+bounces@example.com", []string{"mod@example.com"}, `Content-Type: text/plain; charset=utf-8
+From: "List name" <reject-all@example.com>
+Message-Id: <message-id@example.com>
+Subject: [List name] Welcome
+To: mod@example.com
+
+Hello mod@example.com,
+
+Welcome to the mailing list reject-all@example.com.
+
+----
+You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all%40example.com`)
 
 	wantChansEmpty(t)
 }

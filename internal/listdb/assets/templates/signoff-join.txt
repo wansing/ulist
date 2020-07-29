@@ -1,3 +1,5 @@
+Hello {{ .MailAddress }},
+
 Welcome to the mailing list {{ .ListAddress }}.
 
 ----

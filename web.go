@@ -1039,7 +1039,7 @@ func confirmJoinHandler(ctx *Context, list *listdb.List) error {
 	// join list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_join") == "yes" {
-		if err = list.AddMember(true, addr, true, false, false, false, "user confirmed in web ui"); err != nil {
+		if err = list.AddMember(addr, true, false, false, false, "user confirmed in web ui"); err != nil {
 			return err
 		}
 		ctx.Successf("You have joined the mailing list %s", list)
@@ -1086,7 +1086,7 @@ func confirmLeaveHandler(ctx *Context, list *listdb.List) error {
 	// leave list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_leave") == "yes" {
-		if err = list.RemoveMember(true, addr, "user confirmed in web ui"); err != nil {
+		if err = list.RemoveMember(addr, "user confirmed in web ui"); err != nil {
 			return err
 		}
 		ctx.Successf("You have left the mailing list %s", list)

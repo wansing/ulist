@@ -131,53 +131,114 @@ func (list *List) Knowns() ([]string, error) {
 	return knowns, nil
 }
 
-func (list *List) AddMember(sendWelcome bool, addr *mailutil.Addr, receive, moderate, notify, admin bool, reason string) error {
+func (list *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admin bool, reason string) error {
 	var err = &util.Err{}
-	list.AddMembers(sendWelcome, []*mailutil.Addr{addr}, receive, moderate, notify, admin, reason, err)
+	list.AddMembers(true, []*mailutil.Addr{addr}, receive, moderate, notify, admin, reason, err)
 	delete(sentJoinCheckbacks, addr.RFC5322AddrSpec())
 	return err.Last
 }
 
+func (list *List) signoffJoinMessage(member *mailutil.Addr) (*bytes.Buffer, error) {
+	var buf = &bytes.Buffer{}
+	var err = signoffJoinTemplate.Execute(buf, struct {
+		Footer      string
+		ListAddress string
+		MailAddress string
+	}{
+		Footer:      list.plainFooter(),
+		ListAddress: list.RFC5322AddrSpec(),
+		MailAddress: member.RFC5322AddrSpec(),
+	})
+	return buf, err
+}
+
 func (list *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, moderate, notify, admin bool, reason string, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, list.db.addMemberStmt, list.Id, addrs, receive, moderate, notify, admin)
-	if affectedRows == 0 {
+	tx, err := list.db.Begin()
+	if err != nil {
+		alerter.Alertf("error starting database transaction: %v", err)
 		return
-	} else {
-		alerter.Successf("%d members have been added to the mailing list %s", affectedRows, list.RFC5322AddrSpec())
 	}
 
+	var addSuccess int
+	var addFailure int
+	var addLastErr error
+	var tmplFailure int
+	var tmplLastErr error
+	var sendSuccess int
+	var sendFailure int
+	var sendLastErr error
+
 	var gdprEvent = &strings.Builder{}
+
 	for _, addr := range addrs {
+
+		if list.Equals(addr) {
+			alerter.Alertf("skipping %s because it's the list address", addr.RFC5322AddrSpec())
+			continue
+		}
+
+		_, err := list.db.addMemberStmt.Exec(list.Id, addr.RFC5322AddrSpec(), receive, moderate, notify, admin)
+		if err == nil {
+			addSuccess++
+		} else {
+			addFailure++
+			addLastErr = err
+			continue
+		}
+
 		if gdprEvent.Len() > 0 {
 			gdprEvent.WriteString("\t")
 		}
 		fmt.Fprintf(gdprEvent, "%s joined the list %s, reason: %s\n", addr, list, reason)
-	}
-	if err := gdprLogger.Printf("%s", gdprEvent); err != nil {
-		alerter.Alertf("error writing join events to GDPR logger: ", err)
-	}
 
-	if sendWelcome {
+		if sendWelcome {
 
-		var data = struct {
-			Footer      string
-			ListAddress string
-		}{
-			Footer:      list.plainFooter(),
-			ListAddress: list.RFC5322AddrSpec(),
-		}
-
-		var body = &bytes.Buffer{}
-		if err := signoffJoinTemplate.Execute(body, data); err != nil {
-			alerter.Alertf("error executing email template: %v", err)
-			return
-		}
-
-		for _, addr := range addrs {
-			if err := list.Notify(addr.RFC5322AddrSpec(), "Welcome", bytes.NewReader(body.Bytes())); err != nil { // NewReader is important, else the Buffer would be consumed
-				alerter.Alertf("error sending welcome to %s: %v", addr, err)
+			welcomeBody, err := list.signoffJoinMessage(addr)
+			if err != nil {
+				tmplFailure++
+				tmplLastErr = err
+				continue
 			}
+
+			err = list.Notify(addr.RFC5322AddrSpec(), "Welcome", welcomeBody) // reading welcomeBody consumes the buffer
+			if err == nil {
+				sendSuccess++
+			} else {
+				sendFailure++
+				sendLastErr = err
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		alerter.Alertf("error committing database transaction: %v", err)
+		return
+	}
+
+	if addSuccess > 0 {
+		alerter.Successf("%d members have been added to the mailing list %s", addSuccess, list.RFC5322AddrSpec())
+	}
+
+	if addFailure > 0 {
+		alerter.Alertf("could not add %d members to the mailing list %s, last error: %s", addFailure, addLastErr)
+	}
+
+	if tmplFailure > 0 {
+		alerter.Alertf("could not parse %d templates, last error: %s", tmplFailure, tmplLastErr)
+	}
+
+	if sendSuccess > 0 {
+		alerter.Successf("%d members have been notified", sendSuccess)
+	}
+
+	if sendFailure > 0 {
+		alerter.Alertf("could not notify %d members, last error: %s", sendFailure, sendLastErr)
+	}
+
+	if gdprEvent.Len() > 0 {
+		if err := gdprLogger.Printf("%s", gdprEvent); err != nil {
+			alerter.Alertf("error writing join events to GDPR logger: ", err)
 		}
 	}
 }
@@ -193,58 +254,145 @@ func (list *List) UpdateMember(rawAddress string, receive, moderate, notify, adm
 	return err
 }
 
-func (list *List) RemoveMember(sendGoodbye bool, addr *mailutil.Addr, reason string) error {
+func (list *List) RemoveMember(addr *mailutil.Addr, reason string) error {
 	var err = &util.Err{}
-	list.RemoveMembers(sendGoodbye, []*mailutil.Addr{addr}, reason, err)
+	list.RemoveMembers(true, []*mailutil.Addr{addr}, reason, err)
 	delete(sentLeaveCheckbacks, addr.RFC5322AddrSpec())
 	return err.Last
 }
 
+func (list *List) signoffLeaveMessage() ([]byte, error) {
+	var buf = &bytes.Buffer{}
+	var err = signoffLeaveTemplate.Execute(buf, list.RFC5322AddrSpec())
+	return buf.Bytes(), err
+}
+
 func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason string, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, list.db.removeMemberStmt, list.Id, addrs)
-	if affectedRows == 0 {
-		return
-	} else {
-		alerter.Successf("%d members have been removed from the mailing list %s", affectedRows, list.RFC5322AddrSpec())
+	var goodbyeBody []byte
+	var err error
+
+	if sendGoodbye {
+		goodbyeBody, err = list.signoffLeaveMessage()
+		if err != nil {
+			alerter.Alertf("error executing email template: %v", err)
+			return
+		}
 	}
 
+	tx, err := list.db.Begin()
+	if err != nil {
+		alerter.Alertf("error starting database transaction: %v", err)
+		return
+	}
+
+	var removeSuccess int
+	var removeFailure int
+	var removeLastErr error
+	var sendSuccess int
+	var sendFailure int
+	var sendLastErr error
+
 	var gdprEvent = &strings.Builder{}
+
 	for _, addr := range addrs {
+
+		_, err := list.db.removeMemberStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		if err == nil {
+			removeSuccess++
+		} else {
+			removeFailure++
+			removeLastErr = err
+			continue
+		}
+
 		if gdprEvent.Len() > 0 {
 			gdprEvent.WriteString("\t")
 		}
 		fmt.Fprintf(gdprEvent, "%s left the list %s, reason: %s\n", addr, list, reason)
-	}
-	if err := gdprLogger.Printf("%s", gdprEvent); err != nil {
-		alerter.Alertf("error writing leave events to GDPR logger: ", err)
-	}
 
-	if sendGoodbye {
-
-		var body = &bytes.Buffer{}
-		if err := signoffLeaveTemplate.Execute(body, list.RFC5322AddrSpec()); err != nil {
-			alerter.Alertf("error executing email template: %v", err)
-			return
-		}
-
-		for _, addr := range addrs {
-			if err := list.Notify(addr.RFC5322AddrSpec(), "Goodbye", bytes.NewReader(body.Bytes())); err != nil { // NewReader is important, else the Buffer would be consumed
-				alerter.Alertf("error sending goodbye to %s: %v", addr, err)
+		if sendGoodbye {
+			err = list.Notify(addr.RFC5322AddrSpec(), "Goodbye", bytes.NewReader(goodbyeBody))
+			if err == nil {
+				sendSuccess++
+			} else {
+				sendFailure++
+				sendLastErr = err
 			}
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		alerter.Alertf("error committing database transaction: %v", err)
+		return
+	}
+
+	if removeSuccess > 0 {
+		alerter.Successf("%d members have been removed from the mailing list %s", removeSuccess, list.RFC5322AddrSpec())
+	}
+
+	if removeFailure > 0 {
+		alerter.Alertf("could not remove add %d members from the mailing list %s, last error: %s", removeFailure, removeLastErr)
+	}
+
+	if sendSuccess > 0 {
+		alerter.Successf("%d members have been notified", sendSuccess)
+	}
+
+	if sendFailure > 0 {
+		alerter.Alertf("could not notify %d members, last error: %s", sendFailure, sendLastErr)
+	}
+
+	if err := gdprLogger.Printf("%s", gdprEvent); err != nil {
+		alerter.Alertf("error writing leave events to GDPR logger: ", err)
 	}
 }
 
 func (list *List) AddKnown(addr *mailutil.Addr) error {
-	return list.withListAndAddress(list.db.addKnownStmt, list.Id, addr)
+	var err = &util.Err{}
+	list.AddKnowns([]*mailutil.Addr{addr}, err)
+	return err.Last
 }
 
 func (list *List) AddKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, list.db.addKnownStmt, list.Id, addrs)
-	if affectedRows > 0 {
-		alerter.Successf("%d known addresses have been added to the mailing list %s", affectedRows, list.RFC5322AddrSpec())
+	tx, err := list.db.Begin()
+	if err != nil {
+		alerter.Alertf("error starting database transaction: %v", err)
+		return
+	}
+
+	var success int
+	var failure int
+	var lastErr error
+
+	for _, addr := range addrs {
+
+		if list.Equals(addr) {
+			alerter.Alertf("skipping %s because it's the list address", addr.RFC5322AddrSpec())
+			continue
+		}
+
+		_, err := list.db.addKnownStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		if err == nil {
+			success++
+		} else {
+			failure++
+			lastErr = err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		alerter.Alertf("error committing database transaction: %v", err)
+		return
+	}
+
+	if success > 0 {
+		alerter.Successf("%d known addresses have been added to the mailing list %s", success, list.RFC5322AddrSpec())
+	}
+
+	if failure > 0 {
+		alerter.Alertf("could not add %d known addresses to the mailing list %s, last error: %s", failure, lastErr)
 	}
 }
 
@@ -261,9 +409,43 @@ func (list *List) IsKnown(rawAddress string) (bool, error) {
 
 func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 
-	affectedRows := list.withListAndAddresses(alerter, list.db.removeKnownStmt, list.Id, addrs)
-	if affectedRows > 0 {
-		alerter.Successf("%d known addresses have been removed from the mailing list %s", affectedRows, list.RFC5322AddrSpec())
+	tx, err := list.db.Begin()
+	if err != nil {
+		alerter.Alertf("error starting database transaction: %v", err)
+		return
+	}
+
+	var success int
+	var failure int
+	var lastErr error
+
+	for _, addr := range addrs {
+
+		if list.Equals(addr) {
+			alerter.Alertf("skipping %s because it's the list address", addr.RFC5322AddrSpec())
+			continue
+		}
+
+		_, err := list.db.removeKnownStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		if err == nil {
+			success++
+		} else {
+			failure++
+			lastErr = err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		alerter.Alertf("error committing database transaction: %v", err)
+		return
+	}
+
+	if success > 0 {
+		alerter.Successf("%d known addresses have been removed from the mailing list %s", success, list.RFC5322AddrSpec())
+	}
+
+	if failure > 0 {
+		alerter.Alertf("could not remove %d known addresses from the mailing list %s, last error: %s", failure, lastErr)
 	}
 }
 
@@ -322,40 +504,4 @@ func (list *List) withListAndAddress(stmt *sql.Stmt, listId int, addr *mailutil.
 
 	_, err := stmt.Exec(append([]interface{}{listId, addr.RFC5322AddrSpec()}, args...)...)
 	return err
-}
-
-// Arguments of stmt must be (listId, address, args...).
-// A transaction is used because batch inserts in SQLite are very slow without.
-func (list *List) withListAndAddresses(alerter util.Alerter, stmt *sql.Stmt, listId int, addrs []*mailutil.Addr, args ...interface{}) (affectedRows int64) {
-
-	tx, err := list.db.Begin()
-	if err != nil {
-		alerter.Alertf("error starting database transaction: %v", err)
-		return
-	}
-
-	for _, na := range addrs {
-
-		if list.Equals(na) {
-			alerter.Alertf("skipped %s because it's the list address", na.RFC5322AddrSpec())
-			continue
-		}
-
-		result, err := stmt.Exec(append([]interface{}{listId, na.RFC5322AddrSpec()}, args...)...)
-		if err != nil {
-			alerter.Alertf("error executing database statement: %v", err)
-			continue
-		}
-
-		if ra, err := result.RowsAffected(); err == nil {
-			affectedRows += ra
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		alerter.Alertf("error committing database transaction: %v", err)
-		return
-	}
-
-	return
 }

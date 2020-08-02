@@ -45,28 +45,30 @@ func main() {
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
 	log.Printf("starting ulist %s", GitCommit)
 
+	// flags: `path` for sockets that we create, `socket` for existing sockets that we connect to
+
 	// database
-	dbDriver := flag.String("db-driver", "sqlite3", `database driver, can be "mysql" (untested), "postgres" (untested) or "sqlite3"`)
-	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "database data source name")
-	gdprLogfile := flag.String("gdprlog", "gdpr.log", "GDPR log file path")
+	dbDriver := flag.String("db-driver", "sqlite3", "connect to the ulist database using this `driver`, can be \"mysql\" (untested), \"postgres\" (untested) or \"sqlite3\"")
+	dbDSN := flag.String("db-dsn", "ulist.sqlite3", "connect to the ulist database using this data source name")
+	gdprLogfile := flag.String("gdprlog", "gdpr.log", "append GDPR events to this `file`")
 
 	// mail flow
-	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "path of LMTP socket for accepting incoming mail")
-	socketmapSock := flag.String("socketmap", "", "path of socketmap socket")
-	spoolDir := flag.String("spool", "spool", "spool directory for unmoderated messages")
+	lmtpSockAddr := flag.String("lmtp", "lmtp.sock", "create an LMTP server socket at this `path` and listen for incoming mail")
+	socketmapSock := flag.String("socketmap", "", "create a socketmap server socket at this `path`")
+	spoolDir := flag.String("spool", "spool", "store unmoderated messages in this `directory`")
 
 	// web interface
-	flag.StringVar(&WebListen, "http", "127.0.0.1:8080", "ip:port or socket path of web listener")
-	webUrl := flag.String("weburl", "http://127.0.0.1:8080", "url of the web interface")
+	flag.StringVar(&WebListen, "http", "127.0.0.1:8080", "make the web interface available at this ip:port or socket path")
+	webUrl := flag.String("weburl", "http://127.0.0.1:8080", "use this `url` in links to the web interface")
 
 	// authentication
-	flag.StringVar(&Superadmin, "superadmin", "", "`email address` of the user which can create, delete and modify all lists in the web interface")
-	flag.StringVar(&saslPlainAuth.Socket, "sasl", "", "socket path for SASL PLAIN authentication (first choice)")
-	flag.UintVar(&smtpsAuth.Port, "smtps", 0, "port number for SMTPS authentication on localhost (number-two choice)")
-	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "port number for SMTP STARTTLS authentication on localhost")
+	flag.StringVar(&Superadmin, "superadmin", "", "allow the user with this `email` address to create, delete and modify any list in the web interface")
+	flag.StringVar(&saslPlainAuth.Socket, "sasl", "", "connect to this `socket` for SASL PLAIN user authentication (first choice)")
+	flag.UintVar(&smtpsAuth.Port, "smtps", 0, "connect to localhost:`port` for SMTPS user authentication (number-two choice)")
+	flag.UintVar(&starttlsAuth.Port, "starttls", 0, "connect to localhost:`port` for SMTP STARTTLS user authentication")
 
 	// debug
-	flag.BoolVar(&DummyMode, "dummymode", false, "accept any credentials and don't send any emails")
+	flag.BoolVar(&DummyMode, "dummymode", false, "accept any user credentials and don't send any emails")
 
 	flag.Parse()
 

@@ -2,6 +2,10 @@
 
 A mailing list service that keeps it simple. An alternative to mailman in some use cases.
 
+<p align="center">
+	<img src="/docs/screencast-1.apng?raw=true" width="720">
+</p>
+
 ## Build
 
 Arch Linux users can install ulist from the [AUR](https://aur.archlinux.org/packages/ulist/).
@@ -30,28 +34,6 @@ See `docs/integration` for examples.
 * probably GDPR compliant
 * appends a footer with an unsubscribe link
 * [socketmap](http://www.postfix.org/socketmap_table.5.html) server for postfix
-
-## Screenshots
-
-<p align="center">
-	<img src="/docs/screenshots/all.png?raw=true" width="500">
-</p>
-
-<p align="center">
-	<img src="/docs/screenshots/members.png?raw=true" width="500">
-</p>
-
-<p align="center">
-	<img src="/docs/screenshots/members-add.png?raw=true" width="500">
-</p>
-
-<p align="center">
-	<img src="/docs/screenshots/member.png?raw=true" width="500">
-</p>
-
-<p align="center">
-	<img src="/docs/screenshots/settings.png?raw=true" width="500">
-</p>
 
 ## Design Choices
 

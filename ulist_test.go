@@ -41,7 +41,7 @@ func init() {
 	_ = os.Remove(testDbPath)
 
 	DummyMode = true
-	WebListen = "127.0.0.1:8080"
+	WebListen = "127.0.0.1:65535"
 	listdb.Mta = mailutil.ChanMTA(messageChannel)
 
 	var err error
@@ -488,7 +488,7 @@ If you didn't request this, please ignore this email.`)
 
 	// confirm join
 
-	(&http.Client{}).Post("http://127.0.0.1:8080"+confirmJoinHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_join": []string{"yes"}}.Encode()))
+	(&http.Client{}).Post("http://127.0.0.1:65535"+confirmJoinHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_join": []string{"yes"}}.Encode()))
 	// returns an error because it tries to follow the redirect to lists.example.com, but we can ignore that
 
 	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
@@ -557,7 +557,7 @@ If you didn't request this, please ignore this email.`)
 
 	// confirm leave
 
-	(&http.Client{}).Post("http://127.0.0.1:8080"+confirmLeaveHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_leave": []string{"yes"}}.Encode()))
+	(&http.Client{}).Post("http://127.0.0.1:65535"+confirmLeaveHref, "application/x-www-form-urlencoded", strings.NewReader(url.Values{"confirm_leave": []string{"yes"}}.Encode()))
 
 	wantMessage(t, "public+bounces@example.com", []string{"bob@example.com"},
 		`Content-Type: text/plain; charset=utf-8

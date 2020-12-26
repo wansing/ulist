@@ -520,6 +520,13 @@ func membersAddHandler(ctx *Context, list *listdb.List) error {
 			ctx.Alertf("Error parsing email addresses: %v", err)
 		}
 
+		var consentNote = ctx.r.PostFormValue("consent-note")
+		if consentNote != "" {
+			consentNote = fmt.Sprintf(", note: %s", consentNote)
+		}
+
+		var reason = fmt.Sprintf("added by list admin %s%s", ctx.User, consentNote)
+
 		switch ctx.r.PostFormValue("stage") {
 		case "checkback":
 			var sent = 0
@@ -534,9 +541,9 @@ func membersAddHandler(ctx *Context, list *listdb.List) error {
 				ctx.Successf("Sent %d checkback emails", sent)
 			}
 		case "signoff":
-			list.AddMembers(true, addrs, true, false, false, false, fmt.Sprintf("added by list admin %s", ctx.User), ctx)
+			list.AddMembers(true, addrs, true, false, false, false, reason, ctx)
 		case "silent":
-			list.AddMembers(false, addrs, true, false, false, false, fmt.Sprintf("added by list admin %s", ctx.User), ctx)
+			list.AddMembers(false, addrs, true, false, false, false, reason, ctx)
 		default:
 			return errors.New("unknown stage")
 		}

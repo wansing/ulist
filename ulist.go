@@ -193,7 +193,7 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 	s.logId = atomic.AddUint32(&lastLogId, 1)
 	s.logf("envelope-from: %s", envelopeFrom)
 
-	if envelopeFrom = strings.TrimSpace(envelopeFrom); envelopeFrom == "" {
+	if strings.TrimSpace(envelopeFrom) == "" {
 		s.isBounce = true
 	}
 

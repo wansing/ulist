@@ -31,14 +31,15 @@ import (
 // db should be initialized at this point
 func sockmapsrv(lmtpSock, socketmapSock string) {
 
-	// make lmtpSock absolute
-
-	if !filepath.IsAbs(lmtpSock) {
+	var absLMTPSock string
+	if filepath.IsAbs(lmtpSock) {
+		absLMTPSock = lmtpSock
+	} else {
 		wd, err := os.Getwd()
 		if err != nil {
 			log.Fatalf("error getting working directory: %v", err)
 		}
-		lmtpSock = filepath.Join(wd, lmtpSock)
+		absLMTPSock = filepath.Join(wd, lmtpSock)
 	}
 
 	// listen to socket
@@ -114,7 +115,7 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 
 				if exists, err := db.IsList(listAddr); err == nil {
 					if exists {
-						conn.Write(util.EncodeNetstring("OK lmtp:unix:" + lmtpSock))
+						conn.Write(util.EncodeNetstring("OK lmtp:unix:" + absLMTPSock))
 					} else {
 						conn.Write(util.EncodeNetstring("NOTFOUND "))
 					}

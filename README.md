@@ -83,3 +83,7 @@ See `docs/integration` for examples.
 ## Omitted features
 
 * Archive
+
+## Known issues
+
+* Email addresses like `alice@example.com <alice@example.com>` are not RFC 5322 compliant, use `alice <alice@example.com>` or `"alice@example.com" <alice@example.com>`

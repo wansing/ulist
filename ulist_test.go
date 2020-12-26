@@ -70,18 +70,17 @@ func wantErr(t *testing.T, got error, want string) {
 	}
 }
 
-// appends a line break to want
 func wantGDPREvent(t *testing.T, want string) {
-	want += "\n"
 	got := <-gdprChannel
+	got = strings.TrimSuffix(got, "\n")
 	if want != got {
 		t.Fatalf("got %s, want %s", got, want)
 	}
 }
 
-func wantMessage(t *testing.T, envelopeFrom string, envelopeTo []string, message string) (href string) {
+func wantMessage(t *testing.T, envelopeFrom string, envelopeTo []string, messageLF string) (href string) {
 
-	message = strings.ReplaceAll(message, "\n", "\r\n") // this file has LF line breaks, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) must have CRLF line breaks
+	message := strings.ReplaceAll(messageLF, "\n", "\r\n") // this file has LF line breaks, mail header (RFC 5322 2.2) and text/plain body (RFC 2046 4.1.1) must have CRLF line breaks
 
 	got := <-messageChannel
 

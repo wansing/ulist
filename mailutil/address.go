@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/mail"
 	"net/url"
+	"sort"
 	"strings"
 )
 
@@ -146,10 +147,23 @@ func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error
 	return
 }
 
-/*func AddrsToStrs(addrs []*Addr) []string {
-	var strs = []string{}
-	for _, a := range addrs {
-		strs = append(strs, a.RFC5322AddrSpec())
+func RFC5322AddrSpecs(addrs []*Addr) []string {
+	var specs = make([]string, len(addrs))
+	for i := range addrs {
+		specs[i] = addrs[i].RFC5322AddrSpec()
 	}
-	return strs
-}*/
+	sort.Strings(specs)
+
+	// make sorted slice unique
+	var nextIndex = 0
+	for i, spec := range specs {
+		if i > 0 && specs[i-1] == specs[i] {
+			continue
+		}
+		specs[nextIndex] = spec
+		nextIndex++
+	}
+	specs = specs[:nextIndex]
+
+	return specs
+}

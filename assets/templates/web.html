@@ -1,3 +1,24 @@
+{{ define "addrs-card" }}
+	{{ if gt (len .) 10 }}
+	<style>
+		label:hover { cursor: pointer; }
+		#collapsed-addrs { display: none; }
+		#collapse-addrs:checked ~ #collapsed-addrs { display: block; }
+	</style>
+	{{ end }}
+	<div class="card mb-4">
+		<label for="collapse-addrs" class="card-body mb-0">
+			{{ len . }} email addresses
+		</label>
+		<input type="checkbox" class="d-none" id="collapse-addrs">
+		<div class="card-footer" id="collapsed-addrs">
+			{{ range . }}
+				{{ . }}<br>
+			{{ end }}
+		</div>
+	</div>
+{{ end }}
+
 {{ define "web" }}
 	<!DOCTYPE html>
 	<html lang="en">

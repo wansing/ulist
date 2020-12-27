@@ -221,7 +221,7 @@ func (list *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, 
 	}
 
 	if addFailure > 0 {
-		alerter.Alertf("could not add %d members to the mailing list %s, last error: %s", addFailure, addLastErr)
+		alerter.Alertf("could not add %d members to the mailing list %s, last error: %s", addFailure, list.RFC5322AddrSpec(), addLastErr)
 	}
 
 	if tmplFailure > 0 {
@@ -332,7 +332,7 @@ func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason
 	}
 
 	if removeFailure > 0 {
-		alerter.Alertf("could not remove add %d members from the mailing list %s, last error: %s", removeFailure, removeLastErr)
+		alerter.Alertf("could not remove %d members from the mailing list %s, last error: %s", removeFailure, list.RFC5322AddrSpec(), removeLastErr)
 	}
 
 	if sendSuccess > 0 {
@@ -392,7 +392,7 @@ func (list *List) AddKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 	}
 
 	if failure > 0 {
-		alerter.Alertf("could not add %d known addresses to the mailing list %s, last error: %s", failure, lastErr)
+		alerter.Alertf("could not add %d known addresses to the mailing list %s, last error: %s", failure, list.RFC5322AddrSpec(), lastErr)
 	}
 }
 
@@ -445,7 +445,7 @@ func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 	}
 
 	if failure > 0 {
-		alerter.Alertf("could not remove %d known addresses from the mailing list %s, last error: %s", failure, lastErr)
+		alerter.Alertf("could not remove %d known addresses from the mailing list %s, last error: %s", failure, list.RFC5322AddrSpec(), lastErr)
 	}
 }
 

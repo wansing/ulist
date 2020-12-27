@@ -136,8 +136,8 @@ func (ctx *Context) Execute(t *template.Template, data interface{}) error {
 	return t.Execute(ctx.w, ctx)
 }
 
-func (ctx *Context) Redirect(target string) {
-	http.Redirect(ctx.w, ctx.r, target, http.StatusFound)
+func (ctx *Context) Redirect(format string, a ...interface{}) {
+	http.Redirect(ctx.w, ctx.r, fmt.Sprintf(format, a...), http.StatusFound)
 }
 
 func (ctx *Context) ServeFile(name string) {
@@ -181,7 +181,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 		}
 
 		if mustBeLoggedIn && !ctx.LoggedIn() {
-			ctx.Redirect("/login?redirect=" + url.QueryEscape(r.URL.String()))
+			ctx.Redirect("/login?redirect=%s", url.QueryEscape(r.URL.String()))
 			return
 		}
 
@@ -437,7 +437,7 @@ func settingsHandler(ctx *Context, list *listdb.List) error {
 		}
 
 		ctx.Successf("Your changes to the settings of %s have been saved.", list)
-		ctx.Redirect("/settings/" + list.EscapeAddress()) // reload in order to see the effect
+		ctx.Redirect("/settings/%s", list.EscapeAddress()) // reload in order to see the effect
 		return nil
 	}
 
@@ -480,7 +480,7 @@ func createHandler(ctx *Context) error {
 			return err
 		}
 		ctx.Successf("The mailing list %s has been created.", list)
-		ctx.Redirect("/members/" + list.EscapeAddress())
+		ctx.Redirect("/members/%s", list.EscapeAddress())
 		return nil
 	}
 
@@ -548,7 +548,7 @@ func membersAddHandler(ctx *Context, list *listdb.List) error {
 			return errors.New("unknown stage")
 		}
 
-		ctx.Redirect("/members/" + list.EscapeAddress() + "/add")
+		ctx.Redirect("/members/%s/add", list.EscapeAddress())
 		return nil
 	}
 
@@ -587,7 +587,7 @@ func membersRemoveHandler(ctx *Context, list *listdb.List) error {
 			return errors.New("unknown stage")
 		}
 
-		ctx.Redirect("/members/" + list.EscapeAddress() + "/remove")
+		ctx.Redirect("/members/%s/remove", list.EscapeAddress())
 		return nil
 	}
 
@@ -622,7 +622,7 @@ func memberHandler(ctx *Context, list *listdb.List) error {
 		}
 
 		ctx.Successf("The membership settings of %s in %s have been saved.", m.MemberAddress, list)
-		ctx.Redirect("/member/" + list.EscapeAddress() + "/" + m.EscapeMemberAddress())
+		ctx.Redirect("/member/%s/%s", list.EscapeAddress(), m.EscapeMemberAddress())
 		return nil
 	}
 
@@ -652,7 +652,7 @@ func knownsHandler(ctx *Context, list *listdb.List) error {
 			list.RemoveKnowns(addrs, ctx)
 		}
 
-		ctx.Redirect("/knowns/" + list.EscapeAddress())
+		ctx.Redirect("/knowns/%s", list.EscapeAddress())
 		return nil
 	}
 
@@ -759,7 +759,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 			ctx.Successf(successNotification)
 		}
 
-		ctx.Redirect("/mod/" + list.EscapeAddress())
+		ctx.Redirect("/mod/%s", list.EscapeAddress())
 		return nil
 	}
 

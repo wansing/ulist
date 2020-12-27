@@ -70,7 +70,9 @@ var createTemplate = tmpl("create")
 var deleteTemplate = tmpl("delete")
 var membersTemplate = tmpl("members")
 var membersAddTemplate = tmpl("members-add")
+var membersAddStagingTemplate = tmpl("members-add-staging")
 var membersRemoveTemplate = tmpl("members-remove")
+var membersRemoveStagingTemplate = tmpl("members-remove-staging")
 var knownsTemplate = tmpl("knowns")
 var errorTemplate = tmpl("error")
 var loginTemplate = tmpl("login")
@@ -245,7 +247,9 @@ func webui() {
 	mux.GETAndPOST("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
 	mux.GET("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
 	mux.GETAndPOST("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAddHandler))))
+	mux.POST("/members/:list/add/staging", middleware(true, loadList(requireAdminPermission(membersAddStagingPost))))
 	mux.GETAndPOST("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemoveHandler))))
+	mux.POST("/members/:list/remove/staging", middleware(true, loadList(requireAdminPermission(membersRemoveStagingPost))))
 	mux.GETAndPOST("/member/:list/:email", middleware(true, loadList(requireAdminPermission(memberHandler))))
 	mux.GETAndPOST("/settings/:list", middleware(true, loadList(requireAdminPermission(settingsHandler))))
 
@@ -511,87 +515,148 @@ func membersHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(membersTemplate, list)
 }
 
+type membersData struct {
+	List  *listdb.List
+	Addrs string
+}
+
+type membersStagingData struct {
+	List  *listdb.List
+	Addrs []string // just addr-spec because this it what is stored in the database, and because will be parsed again
+}
+
+func (data *membersStagingData) AddrsString() string {
+	return strings.Join(data.Addrs, ", ")
+}
+
 func membersAddHandler(ctx *Context, list *listdb.List) error {
 
-	if ctx.r.Method == http.MethodPost {
-
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
-		for _, err := range errs {
-			ctx.Alertf("Error parsing email addresses: %v", err)
-		}
-
-		var consentNote = ctx.r.PostFormValue("consent-note")
-		if consentNote != "" {
-			consentNote = fmt.Sprintf(", note: %s", consentNote)
-		}
-
-		var reason = fmt.Sprintf("added by list admin %s%s", ctx.User, consentNote)
-
-		switch ctx.r.PostFormValue("stage") {
-		case "checkback":
-			var sent = 0
-			for _, addr := range addrs {
-				if err := list.SendJoinCheckback(addr); err == nil {
-					sent++
-				} else {
-					ctx.Alertf("Error sending join checkback: %v", err)
-				}
-			}
-			if sent > 0 {
-				ctx.Successf("Sent %d checkback emails", sent)
-			}
-		case "signoff":
-			list.AddMembers(true, addrs, true, false, false, false, reason, ctx)
-		case "silent":
-			list.AddMembers(false, addrs, true, false, false, false, reason, ctx)
-		default:
-			return errors.New("unknown stage")
-		}
-
-		ctx.Redirect("/members/%s/add", list.EscapeAddress())
-		return nil
+	var data = &membersData{
+		List: list,
 	}
 
-	return ctx.Execute(membersAddTemplate, list)
+	if ctx.r.Method == http.MethodPost {
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+		if len(addrs) > 0 && len(errs) == 0 {
+			return ctx.Execute(membersAddStagingTemplate, &membersStagingData{
+				List:  list,
+				Addrs: mailutil.RFC5322AddrSpecs(addrs),
+			})
+		} else {
+			for _, err := range errs {
+				ctx.Alertf("Error parsing email addresses: %v", err)
+			}
+			data.Addrs = ctx.r.PostFormValue("addrs") // keep POST data
+		}
+	}
+
+	return ctx.Execute(membersAddTemplate, data)
+}
+
+func membersAddStagingPost(ctx *Context, list *listdb.List) error {
+
+	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+	for _, err := range errs {
+		// this should not happen
+		ctx.Alertf("Error parsing email addresses: %v", err)
+	}
+
+	var gdprNote = ctx.r.PostFormValue("gdpr-note")
+	if gdprNote != "" {
+		gdprNote = fmt.Sprintf(", note: %s", gdprNote)
+	}
+
+	var reason = fmt.Sprintf("added by list admin %s%s", ctx.User, gdprNote)
+
+	switch ctx.r.PostFormValue("stage") {
+	case "checkback":
+		var sent = 0
+		for _, addr := range addrs {
+			if err := list.SendJoinCheckback(addr); err == nil {
+				sent++
+			} else {
+				ctx.Alertf("Error sending join checkback: %v", err)
+			}
+		}
+		if sent > 0 {
+			ctx.Successf("Sent %d checkback emails", sent)
+		}
+	case "signoff":
+		list.AddMembers(true, addrs, true, false, false, false, reason, ctx)
+	case "silent":
+		list.AddMembers(false, addrs, true, false, false, false, reason, ctx)
+	default:
+		return errors.New("unknown stage")
+	}
+
+	ctx.Redirect("/members/%s/add", list.EscapeAddress())
+	return nil
 }
 
 func membersRemoveHandler(ctx *Context, list *listdb.List) error {
 
-	if ctx.r.Method == http.MethodPost {
-
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
-		for _, err := range errs {
-			ctx.Alertf("Error parsing email addresses: %v", err)
-		}
-
-		switch ctx.r.PostFormValue("stage") {
-		case "checkback":
-			var sentCounter = 0
-			for _, addr := range addrs {
-				if sent, err := list.SendLeaveCheckback(addr); err == nil {
-					if sent {
-						sentCounter++
-					}
-				} else {
-					ctx.Alertf("Error sending leave checkback: %v", err)
-				}
-			}
-			if sentCounter > 0 {
-				ctx.Successf("Sent %d checkback emails", sentCounter)
-			}
-		case "signoff":
-			list.RemoveMembers(true, addrs, fmt.Sprintf("removed by list admin %s", ctx.User), ctx)
-		case "silent":
-			list.RemoveMembers(false, addrs, fmt.Sprintf("removed by list admin %s", ctx.User), ctx)
-		default:
-			return errors.New("unknown stage")
-		}
-
-		ctx.Redirect("/members/%s/remove", list.EscapeAddress())
-		return nil
+	var data = &membersData{
+		List: list,
 	}
 
-	return ctx.Execute(membersRemoveTemplate, list)
+	if ctx.r.Method == http.MethodPost {
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+		if len(addrs) > 0 && len(errs) == 0 {
+			return ctx.Execute(membersRemoveStagingTemplate, &membersStagingData{
+				List:  list,
+				Addrs: mailutil.RFC5322AddrSpecs(addrs),
+			})
+		} else {
+			for _, err := range errs {
+				ctx.Alertf("Error parsing email addresses: %v", err)
+			}
+			data.Addrs = ctx.r.PostFormValue("addrs") // keep POST data
+		}
+	}
+
+	return ctx.Execute(membersRemoveTemplate, data)
+}
+
+func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
+
+	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+	for _, err := range errs {
+		// this should not happen
+		ctx.Alertf("Error parsing email addresses: %v", err)
+	}
+
+	var gdprNote = ctx.r.PostFormValue("gdpr-note")
+	if gdprNote != "" {
+		gdprNote = fmt.Sprintf(", note: %s", gdprNote)
+	}
+
+	var reason = fmt.Sprintf("removed by list admin %s%s", ctx.User, gdprNote)
+
+	switch ctx.r.PostFormValue("stage") {
+	case "checkback":
+		var sent = 0
+		for _, addr := range addrs {
+			if sent, err := list.SendLeaveCheckback(addr); err == nil {
+				if sent {
+					sent++
+				}
+			} else {
+				ctx.Alertf("Error sending leave checkback: %v", err)
+			}
+		}
+		if sent > 0 {
+			ctx.Successf("Sent %d checkback emails", sent)
+		}
+	case "signoff":
+		list.RemoveMembers(true, addrs, reason, ctx)
+	case "silent":
+		list.RemoveMembers(false, addrs, reason, ctx)
+	default:
+		return errors.New("unknown stage")
+	}
+
+	ctx.Redirect("/members/%s/remove", list.EscapeAddress())
+	return nil
 }
 
 func memberHandler(ctx *Context, list *listdb.List) error {

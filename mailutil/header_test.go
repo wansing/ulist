@@ -148,27 +148,27 @@ func TestIsSpam(t *testing.T) {
 	}{
 		{
 			mail.Header{
-				"From": []string{"alice@example.com"},
-				"To": []string{"list@example.com"},
+				"From":    []string{"alice@example.com"},
+				"To":      []string{"list@example.com"},
 				"Subject": []string{"Hello"},
 			},
 			false,
 		},
 		{
 			mail.Header{
-				"From": []string{"alice@example.com"},
-				"To": []string{"list@example.com"},
-				"Subject": []string{"Hello"},
+				"From":        []string{"alice@example.com"},
+				"To":          []string{"list@example.com"},
+				"Subject":     []string{"Hello"},
 				"X-Spam-Flag": []string{"yes"},
 			},
 			true,
 		},
 		{
 			mail.Header{
-				"From": []string{"alice@example.com"},
-				"To": []string{"list@example.com"},
+				"From":    []string{"alice@example.com"},
+				"To":      []string{"list@example.com"},
 				"Subject": []string{"Hello"},
-				"X-Spam": []string{"true"},
+				"X-Spam":  []string{"true"},
 			},
 			true,
 		},

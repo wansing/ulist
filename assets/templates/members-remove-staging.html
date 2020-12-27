@@ -1,0 +1,43 @@
+{{ define "content" }}
+	<!-- it's easier to copy the headline and nav than to nest templates -->
+	<h1>Members of {{ .List.RFC5322AddrSpec }}</h1>
+	<ul class="nav nav-tabs mt-3 mb-3">
+		<li class="nav-item">
+			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}">Members</a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}/add">Add</a>
+		</li>
+		<li class="nav-item">
+			<a class="nav-link active" href="/members/{{ .List.EscapeAddress }}/remove">Remove</a>
+		</li>
+	</ul>
+
+	<form action="/members/{{ .List.EscapeAddress }}/remove/staging" method="post">
+		<input type="hidden" name="addrs" value="{{ .AddrsString}}">
+		{{ template "addrs-card" .Addrs }}
+		<div class="form-group form-check">
+			<input class="form-check-input" type="radio" name="stage" id="checkback" value="checkback" onchange="document.getElementById('gdpr-note').style.display = 'none'">
+			<label class="form-check-label" for="checkback">
+				Send a check back email with a confirmation link. The link is valid for seven days and not revocable.
+			</label>
+		</div>
+		<div class="form-group form-check">
+			<input class="form-check-input" type="radio" name="stage" id="signoff" value="signoff" checked onchange="document.getElementById('gdpr-note').style.display = 'block'">
+			<label class="form-check-label" for="signoff">
+				Remove the members instantly and send a goodbye email.
+			</label>
+		</div>
+		<div class="form-group form-check">
+			<input class="form-check-input" type="radio" name="stage" id="silent" value="silent" onchange="document.getElementById('gdpr-note').style.display = 'block'">
+			<label class="form-check-label" for="silent">
+				Remove the members instantly. Do not send a goodbye email.
+			</label>
+		</div>
+		<div class="form-group" id="gdpr-note"><!-- initially: signoff is checked, gdpr-note is displayed -->
+			<input class="form-control" name="gdpr-note" placeholder="GDPR note (optional)">
+			<!-- is not preserved across errors at the moment, as we don't expect errors here -->
+		</div>
+		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove</button>
+	</form>
+{{ end }}

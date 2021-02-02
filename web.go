@@ -570,16 +570,16 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 
 	switch ctx.r.PostFormValue("stage") {
 	case "checkback":
-		var sent = 0
+		var sentCount = 0
 		for _, addr := range addrs {
 			if err := list.SendJoinCheckback(addr); err == nil {
-				sent++
+				sentCount++
 			} else {
 				ctx.Alertf("Error sending join checkback: %v", err)
 			}
 		}
-		if sent > 0 {
-			ctx.Successf("Sent %d checkback emails", sent)
+		if sentCount > 0 {
+			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
 		list.AddMembers(true, addrs, true, false, false, false, reason, ctx)
@@ -634,18 +634,18 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 
 	switch ctx.r.PostFormValue("stage") {
 	case "checkback":
-		var sent = 0
+		var sentCount = 0
 		for _, addr := range addrs {
 			if sent, err := list.SendLeaveCheckback(addr); err == nil {
 				if sent {
-					sent++
+					sentCount++
 				}
 			} else {
 				ctx.Alertf("Error sending leave checkback: %v", err)
 			}
 		}
-		if sent > 0 {
-			ctx.Successf("Sent %d checkback emails", sent)
+		if sentCount > 0 {
+			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
 		list.RemoveMembers(true, addrs, reason, ctx)

@@ -1,4 +1,4 @@
-package util
+package netstring
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func DecodeNetstring(netstr []byte) (string, error) {
+func Decode(netstr []byte) (string, error) {
 
 	fields := strings.SplitN(string(netstr), ":", 2)
 	if len(fields) != 2 {
@@ -34,6 +34,6 @@ func DecodeNetstring(netstr []byte) (string, error) {
 	return result, nil
 }
 
-func EncodeNetstring(str string) []byte {
+func Encode(str string) []byte {
 	return []byte(fmt.Sprintf("%d:%s,", len(str), str))
 }

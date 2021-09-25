@@ -9,6 +9,7 @@ import (
 	"net/mail"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,12 +20,11 @@ import (
 	"github.com/wansing/auth/client"
 	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/sockmap"
 	"github.com/wansing/ulist/util"
 )
 
 const WarnFormat = "\033[1;31m%s\033[0m"
-
-var GitCommit string // hash
 
 var db *listdb.Database
 
@@ -43,7 +43,6 @@ var WebListen string
 func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
-	log.Printf("starting ulist %s", GitCommit)
 
 	// flags: `path` for sockets that we create, `socket` for existing sockets that we connect to
 
@@ -109,11 +108,25 @@ func main() {
 		log.Printf(WarnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
-	// run web interface
+	// socketmap server
 
 	if *socketmapSock != "" {
-		go sockmapsrv(*lmtpSockAddr, *socketmapSock)
+
+		var absLMTPSock string
+		if filepath.IsAbs(*lmtpSockAddr) {
+			absLMTPSock = *lmtpSockAddr
+		} else {
+			wd, err := os.Getwd()
+			if err != nil {
+				log.Fatalf("error getting working directory: %v", err)
+			}
+			absLMTPSock = filepath.Join(wd, *lmtpSockAddr)
+		}
+
+		go sockmap.ListenAndServe(*socketmapSock, db.IsList, absLMTPSock)
 	}
+
+	// run web interface
 
 	go webui()
 
@@ -151,8 +164,9 @@ func main() {
 	// graceful shutdown
 
 	signal.Notify(sigintChannel, os.Interrupt, syscall.SIGTERM) // SIGINT (Interrupt) or SIGTERM
-	<-sigintChannel
+	log.Printf("running")
 
+	<-sigintChannel
 	log.Println("received shutdown signal")
 	s.Close()
 	waiting.Wait()

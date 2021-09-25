@@ -1,15 +1,15 @@
-package main
+package sockmap
 
 import (
 	"io"
 	"log"
 	"net"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/sockmap/netstring"
 	"github.com/wansing/ulist/util"
 )
 
@@ -28,34 +28,25 @@ import (
 //
 // The name of the socketmap (here: "name") is ignored.
 
-// db should be initialized at this point
-func sockmapsrv(lmtpSock, socketmapSock string) {
-
-	var absLMTPSock string
-	if filepath.IsAbs(lmtpSock) {
-		absLMTPSock = lmtpSock
-	} else {
-		wd, err := os.Getwd()
-		if err != nil {
-			log.Fatalf("error getting working directory: %v", err)
-		}
-		absLMTPSock = filepath.Join(wd, lmtpSock)
-	}
+// ListenAndServe listens on the unix socket sock and handles incoming socketmap requests.
+// For each email address for which exists returns true, reply is returned.
+// The reply argument will usually be the absolute path to your LMTP socket.
+func ListenAndServe(sock string, exists func(addr *mailutil.Addr) (bool, error), reply string) {
 
 	// listen to socket
 
-	_ = util.RemoveSocket(socketmapSock) // remove old socket
+	_ = util.RemoveSocket(sock) // remove old socket
 
-	listener, err := net.Listen("unix", socketmapSock)
+	listener, err := net.Listen("unix", sock)
 	if err != nil {
 		log.Printf("error creating socket: %v", err)
 		return
 	}
 	defer listener.Close() // removes the socket file
 
-	_ = os.Chmod(socketmapSock, os.ModePerm) // chmod 777, so people can connect to the listener
+	_ = os.Chmod(sock, os.ModePerm) // chmod 777, so people can connect to the listener
 
-	log.Printf("socketmap listener: %s", socketmapSock)
+	log.Printf("socketmap listener: %s", sock)
 
 	// accept connections
 
@@ -81,14 +72,14 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 						break // don't log anything
 					}
 					log.Printf("sockmap: error reading from connection: %v", err)
-					conn.Write(util.EncodeNetstring("TEMP error reading from connection"))
+					conn.Write(netstring.Encode("TEMP error reading from connection"))
 					break
 				}
 
-				data, err := util.DecodeNetstring(input)
+				data, err := netstring.Decode(input)
 				if err != nil {
 					log.Printf("sockmap: error decoding netstring: %v", err)
-					conn.Write(util.EncodeNetstring("PERM error decoding netstring"))
+					conn.Write(netstring.Encode("PERM error decoding netstring"))
 					continue
 				}
 
@@ -97,31 +88,31 @@ func sockmapsrv(lmtpSock, socketmapSock string) {
 					key = fields[1] // ignore 0-th field (name of the socketmap)
 				} else {
 					log.Printf("sockmap: malformed request: %s", data)
-					conn.Write(util.EncodeNetstring("PERM malformed request"))
+					conn.Write(netstring.Encode("PERM malformed request"))
 					continue
 				}
 
 				if key == "*" { // postfix tries asterisk first
-					conn.Write(util.EncodeNetstring("NOTFOUND "))
+					conn.Write(netstring.Encode("NOTFOUND "))
 					continue
 				}
 
 				listAddr, err := mailutil.ParseAddress(key)
 				if err != nil {
 					log.Printf("sockmap: request %s has malformed key %s: %v", data, key, err)
-					conn.Write(util.EncodeNetstring("NOTFOUND ")) // postmap considers the whole transaction failed on both TEMP and PERM errors, so we avoid them here
+					conn.Write(netstring.Encode("NOTFOUND ")) // postmap considers the whole transaction failed on both TEMP and PERM errors, so we avoid them here
 					continue
 				}
 
-				if exists, err := db.IsList(listAddr); err == nil {
-					if exists {
-						conn.Write(util.EncodeNetstring("OK lmtp:unix:" + absLMTPSock))
+				if ok, err := exists(listAddr); err == nil {
+					if ok {
+						conn.Write(netstring.Encode("OK lmtp:unix:" + reply))
 					} else {
-						conn.Write(util.EncodeNetstring("NOTFOUND "))
+						conn.Write(netstring.Encode("NOTFOUND "))
 					}
 				} else {
 					log.Printf("sockmap: database error: %v", err)
-					conn.Write(util.EncodeNetstring("TEMP database error"))
+					conn.Write(netstring.Encode("TEMP database error"))
 				}
 			}
 

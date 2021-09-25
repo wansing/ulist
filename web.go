@@ -24,11 +24,12 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/julienschmidt/httprouter"
-	"github.com/shurcooL/httpfs/html/vfstemplate"
 	"github.com/wansing/auth/client"
 	"github.com/wansing/ulist/captcha"
+	"github.com/wansing/ulist/html"
 	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/static"
 	"github.com/wansing/ulist/util"
 )
 
@@ -47,44 +48,6 @@ func init() {
 	sessionManager.IdleTimeout = 2 * time.Hour
 	sessionManager.Lifetime = 12 * time.Hour
 }
-
-func tmpl(filename string) *template.Template {
-	return template.Must(
-		vfstemplate.ParseFiles(
-			assets,
-			template.New("web").Funcs(
-				template.FuncMap{
-					"BatchLimit":    func() uint { return listdb.BatchLimit },
-					"CreateCaptcha": captcha.Create,
-					"TryMimeDecode": mailutil.TryMimeDecode,
-				},
-			),
-			"templates/web.html",
-			"templates/"+filename+".html",
-		),
-	)
-}
-
-var allTemplate = tmpl("all")
-var createTemplate = tmpl("create")
-var deleteTemplate = tmpl("delete")
-var membersTemplate = tmpl("members")
-var membersAddTemplate = tmpl("members-add")
-var membersAddStagingTemplate = tmpl("members-add-staging")
-var membersRemoveTemplate = tmpl("members-remove")
-var membersRemoveStagingTemplate = tmpl("members-remove-staging")
-var knownsTemplate = tmpl("knowns")
-var errorTemplate = tmpl("error")
-var loginTemplate = tmpl("login")
-var memberTemplate = tmpl("member")
-var modTemplate = tmpl("mod")
-var myTemplate = tmpl("my")
-var publicTemplate = tmpl("public")
-var settingsTemplate = tmpl("settings")
-var askJoinTemplate = tmpl("ask-join")
-var askLeaveTemplate = tmpl("ask-leave")
-var confirmJoinTemplate = tmpl("confirm-join")
-var confirmLeaveTemplate = tmpl("confirm-leave")
 
 type PageLink struct {
 	Page int
@@ -191,74 +154,60 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 			if err != ErrUnauthorized && err != ErrNoList {
 				log.Printf("    web: %v", err)
 			}
-			_ = ctx.Execute(errorTemplate, err)
+			_ = ctx.Execute(html.Error, err)
 		}
 	}
-}
-
-type Subdir struct {
-	path string
-	http.FileSystem
-}
-
-// implement http.FileSystem
-func (sd Subdir) Open(name string) (http.File, error) {
-	return sd.FileSystem.Open(sd.path + name)
-}
-
-type Mux struct {
-	*httprouter.Router
-}
-
-func (r *Mux) GETAndPOST(path string, handle httprouter.Handle) {
-	r.GET(path, handle)
-	r.POST(path, handle)
 }
 
 // Sets up the httprouter and starts the web ui listener.
 // db should be initialized at this point.
 func webui() {
 
-	mux := Mux{httprouter.New()}
+	router := httprouter.New()
 
-	mux.ServeFiles("/static/*filepath", Subdir{"http", assets})
+	router.ServeFiles("/static/*filepath", http.FS(static.Files))
+
+	getAndPost := func(path string, handle httprouter.Handle) {
+		router.GET(path, handle)
+		router.POST(path, handle)
+	}
 
 	// join and leave
 
-	mux.GET("/", middleware(false, publicListsHandler))
-	mux.GETAndPOST("/join/:list", middleware(false, loadList(askJoinHandler)))
-	mux.GETAndPOST("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoinHandler)))
-	mux.GETAndPOST("/leave/:list", middleware(false, askLeaveHandler))
-	mux.GETAndPOST("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeaveHandler)))
+	router.GET("/", middleware(false, publicListsHandler))
+	getAndPost("/join/:list", middleware(false, loadList(askJoinHandler)))
+	getAndPost("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoinHandler)))
+	getAndPost("/leave/:list", middleware(false, askLeaveHandler))
+	getAndPost("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeaveHandler)))
 
 	// logged-in users
 
-	mux.GETAndPOST("/login", middleware(false, loginHandler))
-	mux.GET("/logout", middleware(true, logoutHandler))
-	mux.GET("/my", middleware(true, myListsHandler))
+	getAndPost("/login", middleware(false, loginHandler))
+	router.GET("/logout", middleware(true, logoutHandler))
+	router.GET("/my", middleware(true, myListsHandler))
 
 	// superadmin
 
-	mux.GET("/all", middleware(true, allHandler))
-	mux.GETAndPOST("/create", middleware(true, createHandler))
+	router.GET("/all", middleware(true, allHandler))
+	getAndPost("/create", middleware(true, createHandler))
 
 	// admins
 
-	mux.GETAndPOST("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
-	mux.GET("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
-	mux.GETAndPOST("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAddHandler))))
-	mux.POST("/members/:list/add/staging", middleware(true, loadList(requireAdminPermission(membersAddStagingPost))))
-	mux.GETAndPOST("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemoveHandler))))
-	mux.POST("/members/:list/remove/staging", middleware(true, loadList(requireAdminPermission(membersRemoveStagingPost))))
-	mux.GETAndPOST("/member/:list/:email", middleware(true, loadList(requireAdminPermission(memberHandler))))
-	mux.GETAndPOST("/settings/:list", middleware(true, loadList(requireAdminPermission(settingsHandler))))
+	getAndPost("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
+	router.GET("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
+	getAndPost("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAddHandler))))
+	router.POST("/members/:list/add/staging", middleware(true, loadList(requireAdminPermission(membersAddStagingPost))))
+	getAndPost("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemoveHandler))))
+	router.POST("/members/:list/remove/staging", middleware(true, loadList(requireAdminPermission(membersRemoveStagingPost))))
+	getAndPost("/member/:list/:email", middleware(true, loadList(requireAdminPermission(memberHandler))))
+	getAndPost("/settings/:list", middleware(true, loadList(requireAdminPermission(settingsHandler))))
 
 	// moderators
 
-	mux.GETAndPOST("/knowns/:list", middleware(true, loadList(requireModPermission(knownsHandler))))
-	mux.GETAndPOST("/mod/:list", middleware(true, loadList(requireModPermission(modHandler))))
-	mux.GETAndPOST("/mod/:list/:page", middleware(true, loadList(requireModPermission(modHandler))))
-	mux.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(viewHandler))))
+	getAndPost("/knowns/:list", middleware(true, loadList(requireModPermission(knownsHandler))))
+	getAndPost("/mod/:list", middleware(true, loadList(requireModPermission(modHandler))))
+	getAndPost("/mod/:list/:page", middleware(true, loadList(requireModPermission(modHandler))))
+	router.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(viewHandler))))
 
 	var err error
 	var listener net.Listener
@@ -288,7 +237,7 @@ func webui() {
 	}
 
 	server := &http.Server{
-		Handler:      sessionManager.LoadAndSave(mux),
+		Handler:      sessionManager.LoadAndSave(router),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
@@ -346,7 +295,7 @@ func myListsHandler(ctx *Context) error {
 		return err
 	}
 
-	return ctx.Execute(myTemplate, memberships)
+	return ctx.Execute(html.My, memberships)
 }
 
 func loginHandler(ctx *Context) error {
@@ -395,7 +344,7 @@ func loginHandler(ctx *Context) error {
 		}
 	}
 
-	return ctx.Execute(loginTemplate, data)
+	return ctx.Execute(html.Login, data)
 }
 
 func logoutHandler(ctx *Context) error {
@@ -445,7 +394,7 @@ func settingsHandler(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(settingsTemplate, list)
+	return ctx.Execute(html.Settings, list)
 }
 
 func allHandler(ctx *Context) error {
@@ -459,7 +408,7 @@ func allHandler(ctx *Context) error {
 		return err
 	}
 
-	return ctx.Execute(allTemplate, allLists)
+	return ctx.Execute(html.All, allLists)
 }
 
 func createHandler(ctx *Context) error {
@@ -488,7 +437,7 @@ func createHandler(ctx *Context) error {
 		return nil
 	}
 
-	return ctx.Execute(createTemplate, data)
+	return ctx.Execute(html.Create, data)
 }
 
 func deleteHandler(ctx *Context, list *listdb.List) error {
@@ -508,11 +457,11 @@ func deleteHandler(ctx *Context, list *listdb.List) error {
 		}
 	}
 
-	return ctx.Execute(deleteTemplate, list)
+	return ctx.Execute(html.Delete, list)
 }
 
 func membersHandler(ctx *Context, list *listdb.List) error {
-	return ctx.Execute(membersTemplate, list)
+	return ctx.Execute(html.Members, list)
 }
 
 type membersData struct {
@@ -538,7 +487,7 @@ func membersAddHandler(ctx *Context, list *listdb.List) error {
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(membersAddStagingTemplate, &membersStagingData{
+			return ctx.Execute(html.MembersAddStaging, &membersStagingData{
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -550,7 +499,7 @@ func membersAddHandler(ctx *Context, list *listdb.List) error {
 		}
 	}
 
-	return ctx.Execute(membersAddTemplate, data)
+	return ctx.Execute(html.MembersAdd, data)
 }
 
 func membersAddStagingPost(ctx *Context, list *listdb.List) error {
@@ -602,7 +551,7 @@ func membersRemoveHandler(ctx *Context, list *listdb.List) error {
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(membersRemoveStagingTemplate, &membersStagingData{
+			return ctx.Execute(html.MembersRemoveStaging, &membersStagingData{
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -614,7 +563,7 @@ func membersRemoveHandler(ctx *Context, list *listdb.List) error {
 		}
 	}
 
-	return ctx.Execute(membersRemoveTemplate, data)
+	return ctx.Execute(html.MembersRemove, data)
 }
 
 func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
@@ -699,7 +648,7 @@ func memberHandler(ctx *Context, list *listdb.List) error {
 		Member: m,
 	}
 
-	return ctx.Execute(memberTemplate, data)
+	return ctx.Execute(html.Member, data)
 }
 
 func knownsHandler(ctx *Context, list *listdb.List) error {
@@ -721,7 +670,7 @@ func knownsHandler(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(knownsTemplate, list)
+	return ctx.Execute(html.Knowns, list)
 }
 
 type StoredMessage struct {
@@ -916,7 +865,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 		data.Messages = append(data.Messages, StoredMessage{header, err, emlFilename})
 	}
 
-	return ctx.Execute(modTemplate, data)
+	return ctx.Execute(html.Mod, data)
 }
 
 func viewHandler(ctx *Context, list *listdb.List) error {
@@ -973,7 +922,7 @@ func publicListsHandler(ctx *Context) error {
 		}
 	}
 
-	return ctx.Execute(publicTemplate, data)
+	return ctx.Execute(html.Public, data)
 }
 
 func askJoinHandler(ctx *Context, list *listdb.List) error {
@@ -1022,7 +971,7 @@ func askJoinHandler(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(askJoinTemplate, data)
+	return ctx.Execute(html.AskJoin, data)
 }
 
 func askLeaveHandler(ctx *Context) error {
@@ -1082,7 +1031,7 @@ func askLeaveHandler(ctx *Context) error {
 		return nil
 	}
 
-	return ctx.Execute(askLeaveTemplate, data)
+	return ctx.Execute(html.AskLeave, data)
 }
 
 func confirmJoinHandler(ctx *Context, list *listdb.List) error {
@@ -1129,7 +1078,7 @@ func confirmJoinHandler(ctx *Context, list *listdb.List) error {
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}
 
-	return ctx.Execute(confirmJoinTemplate, data)
+	return ctx.Execute(html.ConfirmJoin, data)
 }
 
 func confirmLeaveHandler(ctx *Context, list *listdb.List) error {
@@ -1176,5 +1125,5 @@ func confirmLeaveHandler(ctx *Context, list *listdb.List) error {
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}
 
-	return ctx.Execute(confirmLeaveTemplate, data)
+	return ctx.Execute(html.ConfirmLeave, data)
 }

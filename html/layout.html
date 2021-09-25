@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>ulist</title>
+	<link href="/static/bootstrap.min.css" rel="stylesheet" />
+	<style>
+	h1, h2 { margin-top: 1rem; }
+	</style>
+</head>
+<body>
+	<nav class="navbar navbar-expand-md bg-dark navbar-dark justify-content-md-center">
+		<ul class="navbar-nav">
+			<li class="nav-item">
+				<a class="nav-link" href="/">Public lists</a>
+			</li>
+			{{ if .LoggedIn }}
+				<li class="nav-item">
+					<a class="nav-link" href="/my">My lists</a>
+				</li>
+				{{ if .IsSuperAdmin }}
+					<li class="nav-item">
+						<a class="nav-link" href="/all">All lists</a>
+					</li>
+					<li class="nav-item">
+						<a class="nav-link" href="/create">Create list</a>
+					</li>
+				{{ end }}
+				<li class="nav-item">
+					<a class="nav-link" href="/logout">Logout ({{ .User }})</a>
+				</li>
+			{{ else }}
+				<li class="nav-item">
+					<a class="nav-link" href="/login">Login</a>
+				</li>
+			{{ end }}
+		</ul>
+	</nav>
+	<main role="main" class="container">
+		{{ range .Notifications }}
+			<div class="alert alert-{{ .Style }} mt-3">{{ .Message }}</div>
+		{{ end }}
+		{{ template "content" .Data }}
+	</main>
+</body>
+</html>
+
+{{ define "addrs-card" }}
+	{{ if gt (len .) 10 }}
+	<style>
+		label:hover { cursor: pointer; }
+		#collapsed-addrs { display: none; }
+		#collapse-addrs:checked ~ #collapsed-addrs { display: block; }
+	</style>
+	{{ end }}
+	<div class="card mb-4">
+		<label for="collapse-addrs" class="card-body mb-0">
+			{{ len . }} email addresses
+		</label>
+		<input type="checkbox" class="d-none" id="collapse-addrs">
+		<div class="card-footer" id="collapsed-addrs">
+			{{ range . }}
+				{{ . }}<br>
+			{{ end }}
+		</div>
+	</div>
+{{ end }}

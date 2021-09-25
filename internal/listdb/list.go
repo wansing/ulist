@@ -16,10 +16,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"text/template"
 	"time"
 
-	"github.com/shurcooL/httpfs/text/vfstemplate"
+	"github.com/wansing/ulist/internal/listdb/txt"
 	"github.com/wansing/ulist/mailutil"
 )
 
@@ -40,17 +39,6 @@ type List struct {
 
 var sentJoinCheckbacks = make(map[string]int64)  // RFC5322AddrSpec => unix time
 var sentLeaveCheckbacks = make(map[string]int64) // RFC5322AddrSpec => unix time
-
-func texttmpl(filename string) *template.Template {
-	return template.Must(vfstemplate.ParseFiles(assets, template.New(filename+".txt"), "templates/"+filename+".txt"))
-}
-
-// all these txt files should have CRLF line endings
-var checkbackJoinTemplate = texttmpl("checkback-join")
-var checkbackLeaveTemplate = texttmpl("checkback-leave")
-var notifyModsTemplate = texttmpl("notify-mods")
-var signoffJoinTemplate = texttmpl("signoff-join")
-var signoffLeaveTemplate = texttmpl("signoff-leave")
 
 // CreateHMAC creates an HMAC with a given user email address and the current time. The HMAC is returned as a base64 RawURLEncoding string.
 func (list *List) CreateHMAC(addr *mailutil.Addr) (int64, string, error) {
@@ -392,7 +380,7 @@ func (list *List) Forward(m *mailutil.Message) error {
 
 	var header = make(mail.Header) // mail.Header has no Set method
 	for key, vals := range m.Header {
-		if mailutil.IsSpamKey(key)  {
+		if mailutil.IsSpamKey(key) {
 			continue // An email with a spam header is always moderated. Now that it is forwarded, we can be sure that it is not spam.
 		}
 		header[key] = vals
@@ -517,7 +505,7 @@ func (list *List) SendJoinCheckback(recipient *mailutil.Addr) error {
 	}
 
 	body := &bytes.Buffer{}
-	if err = checkbackJoinTemplate.Execute(body, mailData); err != nil {
+	if err = txt.CheckbackJoin.Execute(body, mailData); err != nil {
 		return err
 	}
 
@@ -571,7 +559,7 @@ func (list *List) SendLeaveCheckback(user *mailutil.Addr) (bool, error) {
 	}
 
 	body := &bytes.Buffer{}
-	if err = checkbackLeaveTemplate.Execute(body, mailData); err != nil {
+	if err = txt.CheckbackLeave.Execute(body, mailData); err != nil {
 		return false, err
 	}
 
@@ -600,7 +588,7 @@ func (list *List) NotifyMods(mods []string) error {
 		ModHref: webUrl + "/mod/" + list.EscapeAddress(),
 	}
 
-	if err := notifyModsTemplate.Execute(body, data); err != nil {
+	if err := txt.NotifyMods.Execute(body, data); err != nil {
 		return err
 	}
 

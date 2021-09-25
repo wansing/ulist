@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/wansing/ulist/internal/listdb/txt"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/util"
 )
@@ -140,7 +141,7 @@ func (list *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admi
 
 func (list *List) signoffJoinMessage(member *mailutil.Addr) (*bytes.Buffer, error) {
 	var buf = &bytes.Buffer{}
-	var err = signoffJoinTemplate.Execute(buf, struct {
+	var err = txt.SignoffJoin.Execute(buf, struct {
 		Footer      string
 		ListAddress string
 		MailAddress string
@@ -263,7 +264,7 @@ func (list *List) RemoveMember(addr *mailutil.Addr, reason string) error {
 
 func (list *List) signoffLeaveMessage() ([]byte, error) {
 	var buf = &bytes.Buffer{}
-	var err = signoffLeaveTemplate.Execute(buf, list.RFC5322AddrSpec())
+	var err = txt.SignoffLeave.Execute(buf, list.RFC5322AddrSpec())
 	return buf.Bytes(), err
 }
 

@@ -174,40 +174,40 @@ func webui() {
 
 	// join and leave
 
-	router.GET("/", middleware(false, publicListsHandler))
-	getAndPost("/join/:list", middleware(false, loadList(askJoinHandler)))
-	getAndPost("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoinHandler)))
-	getAndPost("/leave/:list", middleware(false, askLeaveHandler))
-	getAndPost("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeaveHandler)))
+	router.GET("/", middleware(false, publicLists))
+	getAndPost("/join/:list", middleware(false, loadList(askJoin)))
+	getAndPost("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoin)))
+	getAndPost("/leave/:list", middleware(false, askLeave))
+	getAndPost("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeave)))
 
 	// logged-in users
 
-	getAndPost("/login", middleware(false, loginHandler))
-	router.GET("/logout", middleware(true, logoutHandler))
-	router.GET("/my", middleware(true, myListsHandler))
+	getAndPost("/login", middleware(false, login))
+	router.GET("/logout", middleware(true, logout))
+	router.GET("/my", middleware(true, myLists))
 
 	// superadmin
 
-	router.GET("/all", middleware(true, allHandler))
-	getAndPost("/create", middleware(true, createHandler))
+	router.GET("/all", middleware(true, all))
+	getAndPost("/create", middleware(true, create))
 
 	// admins
 
-	getAndPost("/delete/:list", middleware(true, loadList(requireAdminPermission(deleteHandler))))
-	router.GET("/members/:list", middleware(true, loadList(requireAdminPermission(membersHandler))))
-	getAndPost("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAddHandler))))
+	getAndPost("/delete/:list", middleware(true, loadList(requireAdminPermission(delete))))
+	router.GET("/members/:list", middleware(true, loadList(requireAdminPermission(members))))
+	getAndPost("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAdd))))
 	router.POST("/members/:list/add/staging", middleware(true, loadList(requireAdminPermission(membersAddStagingPost))))
-	getAndPost("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemoveHandler))))
+	getAndPost("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemove))))
 	router.POST("/members/:list/remove/staging", middleware(true, loadList(requireAdminPermission(membersRemoveStagingPost))))
-	getAndPost("/member/:list/:email", middleware(true, loadList(requireAdminPermission(memberHandler))))
-	getAndPost("/settings/:list", middleware(true, loadList(requireAdminPermission(settingsHandler))))
+	getAndPost("/member/:list/:email", middleware(true, loadList(requireAdminPermission(member))))
+	getAndPost("/settings/:list", middleware(true, loadList(requireAdminPermission(settings))))
 
 	// moderators
 
-	getAndPost("/knowns/:list", middleware(true, loadList(requireModPermission(knownsHandler))))
-	getAndPost("/mod/:list", middleware(true, loadList(requireModPermission(modHandler))))
-	getAndPost("/mod/:list/:page", middleware(true, loadList(requireModPermission(modHandler))))
-	router.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(viewHandler))))
+	getAndPost("/knowns/:list", middleware(true, loadList(requireModPermission(knowns))))
+	getAndPost("/mod/:list", middleware(true, loadList(requireModPermission(mod))))
+	getAndPost("/mod/:list/:page", middleware(true, loadList(requireModPermission(mod))))
+	router.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(view))))
 
 	var err error
 	var listener net.Listener
@@ -288,7 +288,7 @@ func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *
 
 // handler functions
 
-func myListsHandler(ctx *Context) error {
+func myLists(ctx *Context) error {
 
 	memberships, err := db.Memberships(ctx.User)
 	if err != nil {
@@ -298,7 +298,7 @@ func myListsHandler(ctx *Context) error {
 	return ctx.Execute(html.My, memberships)
 }
 
-func loginHandler(ctx *Context) error {
+func login(ctx *Context) error {
 
 	if ctx.LoggedIn() {
 		ctx.Redirect("/my")
@@ -347,13 +347,13 @@ func loginHandler(ctx *Context) error {
 	return ctx.Execute(html.Login, data)
 }
 
-func logoutHandler(ctx *Context) error {
+func logout(ctx *Context) error {
 	ctx.Logout()
 	ctx.Redirect("/")
 	return nil
 }
 
-func settingsHandler(ctx *Context, list *listdb.List) error {
+func settings(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
@@ -397,7 +397,7 @@ func settingsHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Settings, list)
 }
 
-func allHandler(ctx *Context) error {
+func all(ctx *Context) error {
 
 	if !ctx.IsSuperAdmin() {
 		return errors.New("Unauthorized")
@@ -411,7 +411,7 @@ func allHandler(ctx *Context) error {
 	return ctx.Execute(html.All, allLists)
 }
 
-func createHandler(ctx *Context) error {
+func create(ctx *Context) error {
 
 	if !ctx.IsSuperAdmin() {
 		return errors.New("Unauthorized")
@@ -440,7 +440,7 @@ func createHandler(ctx *Context) error {
 	return ctx.Execute(html.Create, data)
 }
 
-func deleteHandler(ctx *Context, list *listdb.List) error {
+func delete(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost && ctx.r.PostFormValue("delete") == "delete" {
 
@@ -460,7 +460,7 @@ func deleteHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Delete, list)
 }
 
-func membersHandler(ctx *Context, list *listdb.List) error {
+func members(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Members, list)
 }
 
@@ -478,7 +478,7 @@ func (data *membersStagingData) AddrsString() string {
 	return strings.Join(data.Addrs, ", ")
 }
 
-func membersAddHandler(ctx *Context, list *listdb.List) error {
+func membersAdd(ctx *Context, list *listdb.List) error {
 
 	var data = &membersData{
 		List: list,
@@ -542,7 +542,7 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 	return nil
 }
 
-func membersRemoveHandler(ctx *Context, list *listdb.List) error {
+func membersRemove(ctx *Context, list *listdb.List) error {
 
 	var data = &membersData{
 		List: list,
@@ -608,7 +608,7 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 	return nil
 }
 
-func memberHandler(ctx *Context, list *listdb.List) error {
+func member(ctx *Context, list *listdb.List) error {
 
 	member, err := mailutil.ParseAddress(ctx.ps.ByName("email"))
 	if err != nil {
@@ -651,7 +651,7 @@ func memberHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Member, data)
 }
 
-func knownsHandler(ctx *Context, list *listdb.List) error {
+func knowns(ctx *Context, list *listdb.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
@@ -688,7 +688,7 @@ func (stored *StoredMessage) SingleFromStr() string {
 	}
 }
 
-func modHandler(ctx *Context, list *listdb.List) error {
+func mod(ctx *Context, list *listdb.List) error {
 
 	var err error
 
@@ -868,7 +868,7 @@ func modHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Mod, data)
 }
 
-func viewHandler(ctx *Context, list *listdb.List) error {
+func view(ctx *Context, list *listdb.List) error {
 
 	emlFilename := ctx.ps.ByName("emlfilename")
 	if strings.Contains(emlFilename, "..") || strings.Contains(emlFilename, "/") {
@@ -897,7 +897,7 @@ func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timest
 	return
 }
 
-func publicListsHandler(ctx *Context) error {
+func publicLists(ctx *Context) error {
 
 	data := struct {
 		PublicLists []listdb.ListInfo
@@ -925,7 +925,7 @@ func publicListsHandler(ctx *Context) error {
 	return ctx.Execute(html.Public, data)
 }
 
-func askJoinHandler(ctx *Context, list *listdb.List) error {
+func askJoin(ctx *Context, list *listdb.List) error {
 
 	// public lists only
 	if !list.PublicSignup {
@@ -974,7 +974,7 @@ func askJoinHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.AskJoin, data)
 }
 
-func askLeaveHandler(ctx *Context) error {
+func askLeave(ctx *Context) error {
 
 	// We must not reveal whether the list exists!
 
@@ -1034,7 +1034,7 @@ func askLeaveHandler(ctx *Context) error {
 	return ctx.Execute(html.AskLeave, data)
 }
 
-func confirmJoinHandler(ctx *Context, list *listdb.List) error {
+func confirmJoin(ctx *Context, list *listdb.List) error {
 
 	// get address, validate HMAC
 
@@ -1081,7 +1081,7 @@ func confirmJoinHandler(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.ConfirmJoin, data)
 }
 
-func confirmLeaveHandler(ctx *Context, list *listdb.List) error {
+func confirmLeave(ctx *Context, list *listdb.List) error {
 
 	// get address, validate HMAC
 

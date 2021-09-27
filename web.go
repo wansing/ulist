@@ -14,7 +14,6 @@ import (
 	"math"
 	"net"
 	"net/http"
-	"net/mail"
 	"net/url"
 	"os"
 	"sort"
@@ -47,11 +46,6 @@ func init() {
 	sessionManager.Cookie.Secure = false                  // else running on localhost:8080 fails
 	sessionManager.IdleTimeout = 2 * time.Hour
 	sessionManager.Lifetime = 12 * time.Hour
-}
-
-type PageLink struct {
-	Page int
-	Url  string
 }
 
 type Notification struct {
@@ -311,10 +305,7 @@ func login(ctx *Context) error {
 		return nil
 	}
 
-	data := struct {
-		CanLogin bool
-		Mail     string
-	}{
+	data := html.LoginData{
 		CanLogin: authenticators.Available() || DummyMode,
 		Mail:     ctx.r.PostFormValue("email"),
 	}
@@ -417,11 +408,7 @@ func create(ctx *Context) error {
 		return errors.New("Unauthorized")
 	}
 
-	data := struct {
-		Address   string
-		Name      string
-		AdminMods string
-	}{}
+	data := html.CreateData{}
 
 	data.Address = ctx.r.PostFormValue("address")
 	data.Name = ctx.r.PostFormValue("name")
@@ -464,30 +451,16 @@ func members(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Members, list)
 }
 
-type membersData struct {
-	List  *listdb.List
-	Addrs string
-}
-
-type membersStagingData struct {
-	List  *listdb.List
-	Addrs []string // just addr-spec because this it what is stored in the database, and because will be parsed again
-}
-
-func (data *membersStagingData) AddrsString() string {
-	return strings.Join(data.Addrs, ", ")
-}
-
 func membersAdd(ctx *Context, list *listdb.List) error {
 
-	var data = &membersData{
+	var data = &html.MembersData{
 		List: list,
 	}
 
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(html.MembersAddStaging, &membersStagingData{
+			return ctx.Execute(html.MembersAddStaging, &html.MembersStagingData{
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -544,14 +517,14 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 
 func membersRemove(ctx *Context, list *listdb.List) error {
 
-	var data = &membersData{
+	var data = &html.MembersData{
 		List: list,
 	}
 
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(html.MembersRemoveStaging, &membersStagingData{
+			return ctx.Execute(html.MembersRemoveStaging, &html.MembersStagingData{
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -640,10 +613,7 @@ func member(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	data := struct {
-		List   *listdb.List
-		Member listdb.Membership
-	}{
+	data := html.MemberData{
 		List:   list,
 		Member: m,
 	}
@@ -671,21 +641,6 @@ func knowns(ctx *Context, list *listdb.List) error {
 	}
 
 	return ctx.Execute(html.Knowns, list)
-}
-
-type StoredMessage struct {
-	mail.Header
-	Err      error // User must see emails with unparseable header as well. Many of them are sorted out during the LMTP Data command, but we're robust here.
-	Filename string
-}
-
-// for template
-func (stored *StoredMessage) SingleFromStr() string {
-	if from, ok := mailutil.SingleFrom(stored.Header); ok {
-		return from.RFC5322AddrSpec()
-	} else {
-		return ""
-	}
 }
 
 func mod(ctx *Context, list *listdb.List) error {
@@ -813,12 +768,7 @@ func mod(ctx *Context, list *listdb.List) error {
 
 	// template data
 
-	data := struct {
-		List      *listdb.List
-		Page      int
-		PageLinks []PageLink
-		Messages  []StoredMessage
-	}{
+	data := html.ModData{
 		List: list,
 		Page: page,
 	}
@@ -841,7 +791,7 @@ func mod(ctx *Context, list *listdb.List) error {
 		if i > 0 && pages[i-1] == pages[i] {
 			continue // skip duplicates
 		}
-		data.PageLinks = append(data.PageLinks, PageLink{p, fmt.Sprintf("/mod/%s/%d", list.EscapeAddress(), p)})
+		data.PageLinks = append(data.PageLinks, html.PageLink{p, fmt.Sprintf("/mod/%s/%d", list.EscapeAddress(), p)})
 	}
 
 	// sort and slice the eml filenames
@@ -862,7 +812,7 @@ func mod(ctx *Context, list *listdb.List) error {
 
 	for _, emlFilename := range emlFilenames {
 		header, err := list.ReadHeader(emlFilename)
-		data.Messages = append(data.Messages, StoredMessage{header, err, emlFilename})
+		data.Messages = append(data.Messages, html.StoredMessage{header, err, emlFilename})
 	}
 
 	return ctx.Execute(html.Mod, data)
@@ -899,10 +849,7 @@ func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timest
 
 func publicLists(ctx *Context) error {
 
-	data := struct {
-		PublicLists []listdb.ListInfo
-		MyLists     map[string]interface{}
-	}{
+	data := html.PublicData{
 		MyLists: make(map[string]interface{}),
 	}
 
@@ -942,10 +889,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	data := struct {
-		Email       string
-		ListAddress string
-	}{
+	data := html.JoinAskData{
 		Email:       ctx.r.PostFormValue("email"),
 		ListAddress: list.RFC5322AddrSpec(),
 	}
@@ -971,7 +915,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(html.AskJoin, data)
+	return ctx.Execute(html.JoinAsk, data)
 }
 
 func askLeave(ctx *Context) error {
@@ -995,12 +939,10 @@ func askLeave(ctx *Context) error {
 		return nil
 	}
 
-	data := struct {
-		Email       string
-		ListAddress string
-	}{
-		Email:       ctx.r.PostFormValue("email"),
-		ListAddress: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
+	data := html.LeaveAskData{
+		Email:           ctx.r.PostFormValue("email"),
+		RFC5322AddrSpec: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
+		EscapeAddress:   url.QueryEscape(ctx.ps.ByName("list")),
 	}
 
 	if ctx.r.Method == http.MethodPost {
@@ -1031,7 +973,7 @@ func askLeave(ctx *Context) error {
 		return nil
 	}
 
-	return ctx.Execute(html.AskLeave, data)
+	return ctx.Execute(html.LeaveAsk, data)
 }
 
 func confirmJoin(ctx *Context, list *listdb.List) error {
@@ -1070,15 +1012,12 @@ func confirmJoin(ctx *Context, list *listdb.List) error {
 
 	// else load template with button
 
-	data := struct {
-		ListAddress   string
-		MemberAddress string
-	}{
+	data := html.JoinConfirmData{
 		ListAddress:   list.RFC5322AddrSpec(),
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}
 
-	return ctx.Execute(html.ConfirmJoin, data)
+	return ctx.Execute(html.JoinConfirm, data)
 }
 
 func confirmLeave(ctx *Context, list *listdb.List) error {
@@ -1117,13 +1056,10 @@ func confirmLeave(ctx *Context, list *listdb.List) error {
 
 	// else load template with button
 
-	data := struct {
-		ListAddress   string
-		MemberAddress string
-	}{
+	data := html.LeaveConfirmData{
 		ListAddress:   list.RFC5322AddrSpec(),
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}
 
-	return ctx.Execute(html.ConfirmLeave, data)
+	return ctx.Execute(html.LeaveConfirm, data)
 }

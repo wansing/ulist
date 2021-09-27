@@ -8,9 +8,11 @@ A mailing list service that keeps it simple. An alternative to mailman in some u
 
 ## Build
 
-Arch Linux users can install ulist from the [AUR](https://aur.archlinux.org/packages/ulist/).
+```
+go build
+```
 
-See `build.sh`.
+Arch Linux users can install ulist from the [AUR](https://aur.archlinux.org/packages/ulist/).
 
 ## Integration
 

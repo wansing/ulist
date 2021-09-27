@@ -494,18 +494,14 @@ func (list *List) SendJoinCheckback(recipient *mailutil.Addr) error {
 		return err
 	}
 
-	mailData := struct {
-		ListAddress string
-		MailAddress string
-		Url         string
-	}{
+	data := txt.CheckbackJoinData{
 		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: recipient.RFC5322AddrSpec(),
 		Url:         url,
 	}
 
 	body := &bytes.Buffer{}
-	if err = txt.CheckbackJoin.Execute(body, mailData); err != nil {
+	if err = txt.CheckbackJoin.Execute(body, data); err != nil {
 		return err
 	}
 
@@ -548,18 +544,14 @@ func (list *List) SendLeaveCheckback(user *mailutil.Addr) (bool, error) {
 		return false, err
 	}
 
-	mailData := struct {
-		ListAddress string
-		MailAddress string
-		Url         string
-	}{
+	data := txt.CheckbackLeaveData{
 		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: user.RFC5322AddrSpec(),
 		Url:         url,
 	}
 
 	body := &bytes.Buffer{}
-	if err = txt.CheckbackLeave.Execute(body, mailData); err != nil {
+	if err = txt.CheckbackLeave.Execute(body, data); err != nil {
 		return false, err
 	}
 
@@ -578,11 +570,7 @@ func (list *List) NotifyMods(mods []string) error {
 	// render template
 
 	body := &bytes.Buffer{}
-	data := struct {
-		Footer  string
-		List    *ListInfo // pointer because it has pointer receivers, else template execution will fail
-		ModHref string
-	}{
+	data := txt.NotifyModsData{
 		Footer:  list.plainFooter(),
 		List:    &list.ListInfo,
 		ModHref: webUrl + "/mod/" + list.EscapeAddress(),

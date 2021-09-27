@@ -508,7 +508,7 @@ You can leave the mailing list "Public" here: https://lists.example.com/leave/pu
 
 	// test membership
 
-	if got, err := list.GetMember(mustParse("bob@example.com")); err == nil {
+	if got, err := list.GetMembership(mustParse("bob@example.com")); err == nil {
 		want := listdb.Membership{
 			ListInfo: listdb.ListInfo{
 				mailutil.Addr{
@@ -517,14 +517,15 @@ You can leave the mailing list "Public" here: https://lists.example.com/leave/pu
 					Domain:  "example.com",
 				},
 			},
+			Member:        true,
 			MemberAddress: "bob@example.com",
 			Receive:       true,
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
 		}
-		if *got != want {
-			t.Fatalf("got %v, want %v", *got, want)
+		if got != want {
+			t.Fatalf("got %v, want %v", got, want)
 		}
 	} else {
 		t.Fatal(err)
@@ -573,8 +574,8 @@ Goodbye!`)
 
 	// test membership
 
-	if membership, err := list.GetMember(mustParse("bob@example.com")); membership != nil || err != nil {
-		t.Fatalf("got %v, %v, want nil, nil", membership, err)
+	if membership, err := list.GetMembership(mustParse("bob@example.com")); membership.Member != false || err != nil {
+		t.Fatalf("got %v, %v, want false, nil", membership.Member, err)
 	}
 
 	wantChansEmpty(t)

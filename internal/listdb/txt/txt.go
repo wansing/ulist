@@ -20,3 +20,27 @@ var (
 	SignoffJoin    = parse("signoff-join.txt")
 	SignoffLeave   = parse("signoff-leave.txt")
 )
+
+type CheckbackJoinData struct {
+	ListAddress string
+	MailAddress string
+	Url         string
+}
+
+type CheckbackLeaveData struct {
+	ListAddress string
+	MailAddress string
+	Url         string
+}
+
+type NotifyModsData struct {
+	Footer  string
+	List    interface{} // *ListInfo TODO move into other package // pointer because it has pointer receivers, else template execution will fail
+	ModHref string
+}
+
+type SignoffJoinData struct {
+	Footer      string
+	ListAddress string
+	MailAddress string
+}

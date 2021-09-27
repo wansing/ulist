@@ -138,11 +138,7 @@ func (list *List) AddMember(addr *mailutil.Addr, receive, moderate, notify, admi
 
 func (list *List) signoffJoinMessage(member *mailutil.Addr) (*bytes.Buffer, error) {
 	var buf = &bytes.Buffer{}
-	var err = txt.SignoffJoin.Execute(buf, struct {
-		Footer      string
-		ListAddress string
-		MailAddress string
-	}{
+	var err = txt.SignoffJoin.Execute(buf, txt.SignoffJoinData{
 		Footer:      list.plainFooter(),
 		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: member.RFC5322AddrSpec(),

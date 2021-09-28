@@ -29,11 +29,11 @@ func (list *List) GetStatus(address *mailutil.Addr) ([]Status, error) {
 
 	var s = []Status{}
 
-	membership, err := list.GetMember(address)
+	membership, err := list.GetMembership(address)
 	if err != nil {
 		return nil, err
 	}
-	if membership != nil {
+	if membership.Member {
 		if membership.Moderate {
 			s = append(s, Moderator)
 		} else {

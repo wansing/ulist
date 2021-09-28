@@ -268,7 +268,7 @@ func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
 
 func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
 	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMember(ctx.User); ctx.IsSuperAdmin() || (m != nil && m.Admin) {
+		if m, _ := list.GetMembership(ctx.User); ctx.IsSuperAdmin() || m.Admin {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -278,7 +278,7 @@ func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context,
 
 func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
 	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMember(ctx.User); ctx.IsSuperAdmin() || (m != nil && m.Moderate) {
+		if m, _ := list.GetMembership(ctx.User); ctx.IsSuperAdmin() || m.Moderate {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -615,11 +615,11 @@ func member(ctx *Context, list *listdb.List) error {
 		return err
 	}
 
-	m, err := list.GetMember(member)
+	m, err := list.GetMembership(member)
 	if err != nil {
 		return err
 	}
-	if m == nil {
+	if !m.Member {
 		return errors.New("this person is not a member of the list")
 	}
 
@@ -642,7 +642,7 @@ func member(ctx *Context, list *listdb.List) error {
 
 	data := struct {
 		List   *listdb.List
-		Member *listdb.Membership
+		Member listdb.Membership
 	}{
 		List:   list,
 		Member: m,
@@ -1049,11 +1049,11 @@ func confirmJoin(ctx *Context, list *listdb.List) error {
 
 	// non-members only
 
-	m, err := list.GetMember(addr)
+	m, err := list.GetMembership(addr)
 	if err != nil {
 		return err
 	}
-	if m != nil {
+	if m.Member {
 		return errors.New("You are already a member of this list.")
 	}
 
@@ -1096,11 +1096,11 @@ func confirmLeave(ctx *Context, list *listdb.List) error {
 
 	// members only
 
-	m, err := list.GetMember(addr)
+	m, err := list.GetMembership(addr)
 	if err != nil {
 		return err
 	}
-	if m == nil {
+	if !m.Member {
 		return errors.New("You are not a member of this list.")
 	}
 

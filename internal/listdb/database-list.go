@@ -55,24 +55,21 @@ func (list *List) Admins() ([]string, error) {
 	return list.membersWhere(list.db.getAdminsStmt)
 }
 
-// *Membership can be nil, error is never sql.ErrNoRows
-func (list *List) GetMember(addr *mailutil.Addr) (*Membership, error) {
-	var receive, moderate, notify, admin bool
-	var err = list.db.getMemberStmt.QueryRow(list.Id, addr.RFC5322AddrSpec()).Scan(&receive, &moderate, &notify, &admin)
+// GetMembership returns whether addr is a member of the list and what permissions she has.
+func (list *List) GetMembership(addr *mailutil.Addr) (Membership, error) {
+	m := Membership{
+		ListInfo: list.ListInfo,
+	}
+	err := list.db.getMemberStmt.QueryRow(list.Id, addr.RFC5322AddrSpec()).Scan(&m.Receive, &m.Moderate, &m.Notify, &m.Admin)
 	switch err {
 	case nil:
-		return &Membership{
-			MemberAddress: addr.RFC5322AddrSpec(),
-			ListInfo:      list.ListInfo,
-			Receive:       receive,
-			Moderate:      moderate,
-			Notify:        notify,
-			Admin:         admin,
-		}, nil
+		m.Member = true
+		m.MemberAddress = addr.RFC5322AddrSpec()
+		return m, nil
 	case sql.ErrNoRows:
-		return nil, nil
+		return m, nil
 	default:
-		return nil, err
+		return m, err
 	}
 }
 
@@ -81,8 +78,8 @@ func (list *List) IsMember(addr *mailutil.Addr) (bool, error) {
 	if list == nil || addr == nil {
 		return false, nil
 	}
-	membership, err := list.GetMember(addr)
-	return membership != nil, err
+	membership, err := list.GetMembership(addr)
+	return membership.Member, err
 }
 
 func (list *List) Members() ([]Membership, error) {

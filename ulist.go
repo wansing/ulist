@@ -406,20 +406,20 @@ func (s *LMTPSession) data(r io.Reader) error {
 
 			personalFrom := froms[0]
 
-			m, err := list.GetMember(personalFrom)
+			m, err := list.GetMembership(personalFrom)
 			if err != nil {
 				return SMTPErrorf(451, "getting membership from database: %v", err)
 			}
 
 			// public signup check is crucial, as SendJoinCheckback sends a confirmation link which allows the receiver to join
-			if list.PublicSignup && m == nil && command == "join" {
+			if list.PublicSignup && !m.Member && command == "join" {
 				if err = list.SendJoinCheckback(personalFrom); err != nil {
 					return SMTPErrorf(451, "subscribing: %v", err)
 				}
 				continue // next list
 			}
 
-			if m != nil && command == "leave" {
+			if m.Member && command == "leave" {
 				if _, err = list.SendLeaveCheckback(personalFrom); err != nil {
 					return SMTPErrorf(451, "unsubscribing: %v", err)
 				}

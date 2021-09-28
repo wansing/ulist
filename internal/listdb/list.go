@@ -479,8 +479,8 @@ func (list *List) SendJoinCheckback(recipient *mailutil.Addr) error {
 		}
 	}
 
-	if m, err := list.GetMember(recipient); err == nil {
-		if m != nil { // already a member
+	if m, err := list.GetMembership(recipient); err == nil {
+		if m.Member { // already a member
 			return nil // Let's return nil (after rate limiting!), so we don't reveal the subscription. Timing might still leak information.
 		}
 	} else {
@@ -533,8 +533,8 @@ func (list *List) SendLeaveCheckback(user *mailutil.Addr) (bool, error) {
 		}
 	}
 
-	if m, err := list.GetMember(user); err == nil {
-		if m == nil { // not a member
+	if m, err := list.GetMembership(user); err == nil {
+		if !m.Member { // not a member
 			return false, nil // err is nil and does not reveal about the membership
 		}
 	} else {

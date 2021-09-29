@@ -6,6 +6,7 @@
 	<link href="/static/bootstrap.min.css" rel="stylesheet" />
 	<style>
 	h1, h2 { margin-top: 1rem; }
+	.nav-item .active { font-weight: bold; }
 	</style>
 </head>
 <body>
@@ -65,3 +66,30 @@
 		</div>
 	</div>
 {{ end }}
+
+{{define "list-tabs"}}
+	<h1>{{ .Auth.ListInfo.RFC5322AddrSpec }}</h1>
+	<ul class="nav nav-tabs my-3">
+		{{if .Auth.Moderate}}
+			<li class="nav-item">
+				<a class="nav-link {{if ActiveTab "mod" .}}active{{end}}" href="/mod/{{.Auth.ListInfo.RFC5322AddrSpec}}">Moderation requests</a>
+			</li>
+			<li class="nav-item">
+				<a class="nav-link {{if ActiveTab "knowns" .}}active{{end}}" href="/knowns/{{.Auth.ListInfo.RFC5322AddrSpec}}">Known senders</a>
+			</li>
+		{{end}}
+		{{if .Auth.Admin}}
+			<li class="nav-item">
+				<a class="nav-link {{if ActiveTab "members" .}}active{{end}}" href="/members/{{.Auth.ListInfo.RFC5322AddrSpec}}">Members</a>
+			</li>
+			<li class="nav-item">
+				<a class="nav-link {{if ActiveTab "settings" .}}active{{end}}" href="/settings/{{.Auth.ListInfo.RFC5322AddrSpec}}">Settings</a>
+			</li>
+		{{end}}
+		{{if .Auth.Member}}
+			<li class="nav-item">
+				<a class="nav-link {{if ActiveTab "leave" .}}active{{end}}" href="/my/{{.Auth.ListInfo.RFC5322AddrSpec}}">Leave</a>
+			</li>
+		{{end}}
+	</ul>
+{{end}}

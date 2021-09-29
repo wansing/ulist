@@ -1,59 +1,16 @@
 {{ define "content" }}
 	<h1>My mailing lists</h1>
 	{{ with . }}
-		<table class="table">
-			<thead>
-				<tr>
-					<th>Address</th>
-					<th>Name</th>
-					<th><!-- settings --></th>
-					<th><!-- members --></th>
-					<th><!-- known senders --></th>
-					<th><!-- moderation requests --></th>
-					<th><!-- leave --></th>
-				</tr>
-			</thead>
-			<tbody>
-				{{ $domain := "" }}
-				{{ range . }}
-					{{ if ne $domain .Domain }}
-						<tr>
-							<th colspan="7">{{ .Domain }}</th>
-						</tr>
-					{{ end }}
-					{{ $domain = .Domain }}
-					<tr>
-						<td>{{ .RFC5322AddrSpec }}</td>
-						<td>{{ .Display }}</td>
-						<!-- Administration -->
-						<td>
-							{{ if .Admin }}
-								<a href="/settings/{{ .ListInfo.EscapeAddress }}">Settings</a>
-							{{ end }}
-						</td>
-						<td>
-							{{ if .Admin }}
-								<a href="/members/{{ .ListInfo.EscapeAddress }}">Members</a></td>
-							{{ end }}
-						</td>
-						<!-- Moderation -->
-						<td>
-							{{ if .Moderate }}
-								<a href="/knowns/{{ .ListInfo.EscapeAddress }}">Known senders</a>
-							{{ end }}
-						</td>
-						<td>
-							{{ if .Moderate }}
-								<a href="/mod/{{ .ListInfo.EscapeAddress }}">Moderation requests</a>
-							{{ end }}
-						</td>
-						<td>
-							<a href="/leave/{{ .ListInfo.EscapeAddress }}">Leave</a>
-						</td>
-					</tr>
+		<div class="list-group">
+			{{ $domain := "" }}
+			{{ range . }}
+				{{ if ne $domain .Domain }}
+					<div class="list-group-item"><strong>{{.Domain}}</strong></div>
 				{{ end }}
-			</tbody>
-		</table>
+				{{ $domain = .Domain }}
+				<a href="/list/{{.EscapeAddress}}" class="list-group-item list-group-item-action">{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</a>
+			{{ end }}
+		</div>
 	{{ else }}
 		<p>No lists.</p>
 	{{ end }}

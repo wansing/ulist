@@ -1,9 +1,9 @@
 {{ define "content" }}
+	{{template "list-tabs" .}}
 	<!-- it's easier to copy the headline and nav than to nest templates -->
-	<h1>Members of {{ .List.RFC5322AddrSpec }}</h1>
-	<ul class="nav nav-tabs mt-3 mb-3">
+	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}">Members</a>
+			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}">List</a>
 		</li>
 		<li class="nav-item">
 			<a class="nav-link active" href="/members/{{ .List.EscapeAddress }}/add">Add</a>

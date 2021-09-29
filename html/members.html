@@ -1,20 +1,20 @@
 {{ define "content" }}
+	{{template "list-tabs" .}}
 	<!-- it's easier to copy the headline and nav than to nest templates -->
-	<h1>Members of {{ .RFC5322AddrSpec }}</h1>
-	<ul class="nav nav-tabs mt-3 mb-3">
+	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{ $.EscapeAddress }}">Members</a>
+			<a class="nav-link active" href="/members/{{ .List.EscapeAddress }}">List</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ $.EscapeAddress }}/add">Add</a>
+			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}/add">Add</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ $.EscapeAddress }}/remove">Remove</a>
+			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}/remove">Remove</a>
 		</li>
 	</ul>
 
-	<p>The list has {{ len .Members}} members.</p>
-	{{ with .Members }}
+	<p>The list has {{ len .List.Members}} members.</p>
+	{{ with .List.Members }}
 		<table class="table">
 			<thead>
 				<tr>
@@ -34,7 +34,7 @@
 					<td>{{ if .Moderate }}&#10004;{{ end }}</td>
 					<td>{{ if .Notify   }}&#10004;{{ end }}</td>
 					<td>{{ if .Admin    }}&#10004;{{ end }}</td>
-					<td><a href="/member/{{ $.EscapeAddress }}/{{ .EscapeMemberAddress }}">Edit</a></td>
+					<td><a href="/member/{{ $.List.EscapeAddress }}/{{ .EscapeMemberAddress }}">Edit</a></td>
 				</tr>
 				{{ end }}
 			</tbody>

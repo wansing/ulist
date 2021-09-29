@@ -1,4 +1,5 @@
 {{ define "content" }}
+	{{template "list-tabs" .}}
 	<style>
 		.ifchecked {
 			display: none;
@@ -7,7 +8,6 @@
 			display: flex;
 		}
 	</style>
-	<h1 class="mb-3">Moderate {{ .List.RFC5322AddrSpec }}</h1>
 	{{ if .Messages }}
 		<form action="" method="post">
 			{{ range .Messages }}

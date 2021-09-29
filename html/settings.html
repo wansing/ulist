@@ -1,56 +1,57 @@
 {{ define "content" }}
-	<h1>Settings of {{ .RFC5322AddrSpec }}</h1>
-	<form action="" method="post">
-		<div class="form-group">
-			<label>List name</label>
-			<input class="form-control" name="name" value="{{ .Display }}" placeholder="List name">
-		</div>
-		<div class="form-group form-check">
-			<input class="form-check-input" type="checkbox" id="public_signup" name="public_signup" {{ if .PublicSignup }}checked{{ end }}>
-			<label class="form-check-label" for="public_signup">
-				Public signup
-			</label>
-		</div>
-		<div class="form-group form-check">
-			<input class="form-check-input" type="checkbox" id="hide_from" name="hide_from" {{ if .HideFrom }}checked{{ end }}>
-			<label class="form-check-label" for="hide_from">
-				Hide sender address
-			</label>
-		</div>
-		<h2>Actions</h2>
-		<div class="form-group">
-			<label>Mails from moderators</label>
-			<select class="form-control" name="action_mod">
-				<option value="mod"{{ if .ActionMod.EqualsMod }} selected{{ end }}>Moderate</option>
-				<option value="pass"{{ if .ActionMod.EqualsPass }} selected{{ end }}>Pass</option>
-				<option value="reject"{{ if .ActionMod.EqualsReject }} selected{{ end }}>Reject</option>
-			</select>
-		</div>
-		<div class="form-group">
-			<label>Mails from members</label>
-			<select class="form-control" name="action_member">
-				<option value="mod"{{ if .ActionMember.EqualsMod }} selected{{ end }}>Moderate</option>
-				<option value="pass"{{ if .ActionMember.EqualsPass }} selected{{ end }}>Pass</option>
-				<option value="reject"{{ if .ActionMember.EqualsReject }} selected{{ end }}>Reject</option>
-			</select>
-		</div>
-		<div class="form-group">
-			<label>Mails from known senders</label>
-			<select class="form-control" name="action_known">
-				<option value="mod"{{ if .ActionKnown.EqualsMod }} selected{{ end }}>Moderate</option>
-				<option value="pass"{{ if .ActionKnown.EqualsPass }} selected{{ end }}>Pass</option>
-				<option value="reject"{{ if .ActionKnown.EqualsReject }} selected{{ end }}>Reject</option>
-			</select>
-		</div>
-		<div class="form-group">
-			<label>Mails from unknown addresses</label>
-			<select class="form-control" name="action_unknown">
-				<option value="mod"{{ if .ActionUnknown.EqualsMod }} selected{{ end }}>Moderate</option>
-				<option value="pass"{{ if .ActionUnknown.EqualsPass }} selected{{ end }}>Pass</option>
-				<option value="reject"{{ if .ActionUnknown.EqualsReject }} selected{{ end }}>Reject</option>
-			</select>
-		</div>
-		<button name="save" value="1" type="submit" class="btn btn-primary">Save</button>
-		<p class="mt-3">Click <a href="/delete/{{ .ListInfo.EscapeAddress }}">here</a> if you like to delete this mailing list.</p>
-	</form>
+	{{template "list-tabs" .}}
+	{{with .List}}
+		<form method="post">
+			<div class="form-group">
+				<label>List name</label>
+				<input class="form-control" name="name" value="{{ .Display }}" placeholder="List name">
+			</div>
+			<div class="form-group form-check">
+				<input class="form-check-input" type="checkbox" id="public_signup" name="public_signup" {{ if .PublicSignup }}checked{{ end }}>
+				<label class="form-check-label" for="public_signup">
+					Public signup
+				</label>
+			</div>
+			<div class="form-group form-check">
+				<input class="form-check-input" type="checkbox" id="hide_from" name="hide_from" {{ if .HideFrom }}checked{{ end }}>
+				<label class="form-check-label" for="hide_from">
+					Hide sender address
+				</label>
+			</div>
+			<div class="form-group">
+				<label>Mails from moderators</label>
+				<select class="form-control" name="action_mod">
+					<option value="mod"{{ if .ActionMod.EqualsMod }} selected{{ end }}>Moderate</option>
+					<option value="pass"{{ if .ActionMod.EqualsPass }} selected{{ end }}>Pass</option>
+					<option value="reject"{{ if .ActionMod.EqualsReject }} selected{{ end }}>Reject</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Mails from members</label>
+				<select class="form-control" name="action_member">
+					<option value="mod"{{ if .ActionMember.EqualsMod }} selected{{ end }}>Moderate</option>
+					<option value="pass"{{ if .ActionMember.EqualsPass }} selected{{ end }}>Pass</option>
+					<option value="reject"{{ if .ActionMember.EqualsReject }} selected{{ end }}>Reject</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Mails from known senders</label>
+				<select class="form-control" name="action_known">
+					<option value="mod"{{ if .ActionKnown.EqualsMod }} selected{{ end }}>Moderate</option>
+					<option value="pass"{{ if .ActionKnown.EqualsPass }} selected{{ end }}>Pass</option>
+					<option value="reject"{{ if .ActionKnown.EqualsReject }} selected{{ end }}>Reject</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label>Mails from unknown addresses</label>
+				<select class="form-control" name="action_unknown">
+					<option value="mod"{{ if .ActionUnknown.EqualsMod }} selected{{ end }}>Moderate</option>
+					<option value="pass"{{ if .ActionUnknown.EqualsPass }} selected{{ end }}>Pass</option>
+					<option value="reject"{{ if .ActionUnknown.EqualsReject }} selected{{ end }}>Reject</option>
+				</select>
+			</div>
+			<button name="save" value="1" type="submit" class="btn btn-primary">Save</button>
+			<p class="mt-3">Click <a href="/delete/{{ .ListInfo.EscapeAddress }}">here</a> if you like to delete this mailing list.</p>
+		</form>
+	{{end}}
 {{ end }}

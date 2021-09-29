@@ -73,6 +73,15 @@ func (list *List) GetMembership(addr *mailutil.Addr) (Membership, error) {
 	}
 }
 
+func (list *List) GetMembershipOfAuthUser(addr *mailutil.Addr, isSuperAdmin bool) (Membership, error) {
+	m, err := list.GetMembership(addr)
+	if isSuperAdmin {
+		m.Moderate = true
+		m.Admin = true
+	}
+	return m, err
+}
+
 // list and addr can be nil
 func (list *List) IsMember(addr *mailutil.Addr) (bool, error) {
 	if list == nil || addr == nil {

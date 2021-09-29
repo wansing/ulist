@@ -1,0 +1,12 @@
+{{ define "content" }}
+	{{template "list-tabs" .}}
+	<form method="post">
+		<div class="form-check mb-3">
+			<input class="form-check-input" type="checkbox" name="confirm-leave" value="1" id="confirm-leave">
+			<label class="form-check-label" for="confirm-leave">
+				Remove me ({{.Email}}) from list {{.ListAddress}}.
+			</label>
+		</div>
+		<button type="submit" class="btn btn-primary">Leave</button>
+	</form>
+{{ end }}

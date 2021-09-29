@@ -32,7 +32,7 @@ func (a *Addr) Equals(other *Addr) bool {
 // addr-spec = local-part "@" domain
 //
 // Because the local-part might be quoted, we let golang do the work
-func (a *Addr) RFC5322AddrSpec() string {
+func (a Addr) RFC5322AddrSpec() string {
 	s := (&mail.Address{Address: a.Local + "@" + a.Domain}).String()
 	return s[1 : len(s)-1] // strip first and last char, which is '<' and '>'
 }

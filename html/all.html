@@ -2,47 +2,16 @@
 {{ define "content" }}
 	<h1>All mailing lists</h1>
 	{{ with . }}
-		<table class="table">
-			<thead>
-				<tr>
-					<th>Address</th>
-					<th>Name</th>
-					<th></th>
-					<th></th>
-					<th></th>
-					<th></th>
-				</tr>
-			</thead>
-			<tbody>
-				{{ $domain := "" }}
-				{{ range . }}
-					{{ if ne $domain .Domain }}
-						<tr>
-							<th colspan="6">{{ .Domain }}</th>
-						</tr>
-					{{ end }}
-					{{ $domain = .Domain }}
-					<tr>
-						<td>{{ .RFC5322AddrSpec }}</td>
-						<td>{{ .Display }}</td>
-						<!-- Administration -->
-						<td>
-							<a href="/settings/{{ .EscapeAddress }}">Settings</a>
-						</td>
-						<td>
-							<a href="/members/{{ .EscapeAddress }}">Members</a></td>
-						</td>
-						<!-- Moderation -->
-						<td>
-							<a href="/knowns/{{ .EscapeAddress }}">Known senders</a>
-						</td>
-						<td>
-							<a href="/mod/{{ .EscapeAddress }}">Moderation requests</a>
-						</td>
-					</tr>
+		<div class="list-group">
+			{{ $domain := "" }}
+			{{ range . }}
+				{{ if ne $domain .Domain }}
+					<div class="list-group-item"><strong>{{.Domain}}</strong></div>
 				{{ end }}
-			</tbody>
-		</table>
+				{{ $domain = .Domain }}
+				<a href="/list/{{.EscapeAddress}}" class="list-group-item list-group-item-action">{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</a>
+			{{ end }}
+		</div>
 	{{ else }}
 		<p>No lists.</p>
 	{{ end }}

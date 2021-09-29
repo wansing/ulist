@@ -17,6 +17,26 @@ var files embed.FS
 func parse(fn string) *template.Template {
 	return template.Must(template.New("layout.html").Funcs(
 		template.FuncMap{
+			"ActiveTab": func(tab string, data interface{}) bool {
+				switch data.(type) {
+				case KnownsData:
+					return tab == "knowns"
+				case LeaveData:
+					return tab == "leave"
+				case MembersData:
+					return tab == "members"
+				case *MembersAddRemoveData:
+					return tab == "members"
+				case *MembersAddRemoveStagingData:
+					return tab == "members"
+				case ModData:
+					return tab == "mod"
+				case SettingsData:
+					return tab == "settings"
+				default:
+					return false
+				}
+			},
 			"BatchLimit":    func() uint { return listdb.BatchLimit },
 			"CreateCaptcha": captcha.Create,
 			"TryMimeDecode": mailutil.TryMimeDecode,
@@ -33,6 +53,7 @@ var (
 	JoinConfirm          = parse("join-confirm.html")
 	Knowns               = parse("knowns.html")
 	Login                = parse("login.html")
+	Leave                = parse("leave.html")
 	LeaveAsk             = parse("leave-ask.html")
 	LeaveConfirm         = parse("leave-confirm.html")
 	Member               = parse("member.html")
@@ -63,6 +84,18 @@ type JoinConfirmData struct {
 	MemberAddress string
 }
 
+type KnownsData struct {
+	Auth listdb.Membership
+	List *listdb.List
+}
+
+type LeaveData struct {
+	Auth          listdb.Membership
+	Email         string
+	ListAddress   string
+	EscapeAddress string
+}
+
 type LeaveAskData struct {
 	Email string
 	// use user input only, don't reveal whether the list exists
@@ -86,20 +119,28 @@ type MemberData struct {
 }
 
 type MembersData struct {
+	Auth listdb.Membership
+	List *listdb.List
+}
+
+type MembersAddRemoveData struct {
+	Auth  listdb.Membership
 	List  *listdb.List
 	Addrs string
 }
 
-type MembersStagingData struct {
+type MembersAddRemoveStagingData struct {
+	Auth  listdb.Membership
 	List  *listdb.List
 	Addrs []string // just addr-spec because this it what is stored in the database, and because will be parsed again
 }
 
-func (data *MembersStagingData) AddrsString() string {
+func (data *MembersAddRemoveStagingData) AddrsString() string {
 	return strings.Join(data.Addrs, ", ")
 }
 
 type ModData struct {
+	Auth      listdb.Membership
 	List      *listdb.List
 	Page      int
 	PageLinks []PageLink
@@ -116,13 +157,17 @@ type PublicData struct {
 	MyLists     map[string]interface{}
 }
 
+type SettingsData struct {
+	Auth listdb.Membership
+	List *listdb.List
+}
+
 type StoredMessage struct {
 	mail.Header
 	Err      error // User must see emails with unparseable header as well. Many of them are sorted out during the LMTP Data command, but we're robust here.
 	Filename string
 }
 
-// for template
 func (stored *StoredMessage) SingleFromStr() string {
 	if from, ok := mailutil.SingleFrom(stored.Header); ok {
 		return from.RFC5322AddrSpec()

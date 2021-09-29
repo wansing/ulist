@@ -1,7 +1,7 @@
 {{ define "content" }}
-	<h1>Leave {{ .ListAddress }}</h1>
-	<p>If you enter your email address here, you will receive a confirmation link.</p>
-	<form action="" method="post">
+	<h1>{{ .RFC5322AddrSpec }}</h1>
+	<form method="post">
+		<p>If you enter your email address here, you will receive a confirmation link.</p>
 		<div class="form-group">
 			<label>Email address</label>
 			<input name="email" type="email" class="form-control" placeholder="Email address" value="{{ .Email }}">

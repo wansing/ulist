@@ -166,9 +166,9 @@ func webui() {
 		router.POST(path, handle)
 	}
 
-	// join and leave
+	// unauthenticated join and leave
 
-	router.GET("/", middleware(false, publicLists))
+	router.GET("/", middleware(false, public))
 	getAndPost("/join/:list", middleware(false, loadList(askJoin)))
 	getAndPost("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoin)))
 	getAndPost("/leave/:list", middleware(false, askLeave))
@@ -179,6 +179,9 @@ func webui() {
 	getAndPost("/login", middleware(false, login))
 	router.GET("/logout", middleware(true, logout))
 	router.GET("/my", middleware(true, myLists))
+	getAndPost("/my/:list", middleware(true, leave))
+
+	router.GET("/list/:list", middleware(true, loadList(list)))
 
 	// superadmin
 
@@ -262,7 +265,7 @@ func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
 
 func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
 	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMembership(ctx.User); ctx.IsSuperAdmin() || m.Admin {
+		if m, _ := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin()); m.Admin {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -272,7 +275,7 @@ func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context,
 
 func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
 	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMembership(ctx.User); ctx.IsSuperAdmin() || m.Moderate {
+		if m, _ := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin()); m.Moderate {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -290,6 +293,27 @@ func myLists(ctx *Context) error {
 	}
 
 	return ctx.Execute(html.My, memberships)
+}
+
+func list(ctx *Context, list *listdb.List) error {
+
+	membership, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+	switch {
+	case membership.Moderate:
+		ctx.Redirect("/mod/%s", list.EscapeAddress())
+		return nil
+	case membership.Admin:
+		ctx.Redirect("/members/%s", list.EscapeAddress())
+		return nil
+	case membership.Member:
+		ctx.Redirect("/leave/%s", list.EscapeAddress())
+		return nil
+	default:
+		return ErrNoList
+	}
 }
 
 func login(ctx *Context) error {
@@ -385,7 +409,15 @@ func settings(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(html.Settings, list)
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	return ctx.Execute(html.Settings, html.SettingsData{
+		Auth: auth,
+		List: list,
+	})
 }
 
 func all(ctx *Context) error {
@@ -448,19 +480,35 @@ func delete(ctx *Context, list *listdb.List) error {
 }
 
 func members(ctx *Context, list *listdb.List) error {
-	return ctx.Execute(html.Members, list)
+
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	return ctx.Execute(html.Members, html.MembersData{
+		Auth: auth,
+		List: list,
+	})
 }
 
 func membersAdd(ctx *Context, list *listdb.List) error {
 
-	var data = &html.MembersData{
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	var data = &html.MembersAddRemoveData{
+		Auth: auth,
 		List: list,
 	}
 
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(html.MembersAddStaging, &html.MembersStagingData{
+			return ctx.Execute(html.MembersAddStaging, &html.MembersAddRemoveStagingData{
+				Auth:  auth,
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -517,14 +565,21 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 
 func membersRemove(ctx *Context, list *listdb.List) error {
 
-	var data = &html.MembersData{
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	var data = &html.MembersAddRemoveData{
+		Auth: auth,
 		List: list,
 	}
 
 	if ctx.r.Method == http.MethodPost {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
-			return ctx.Execute(html.MembersRemoveStaging, &html.MembersStagingData{
+			return ctx.Execute(html.MembersRemoveStaging, &html.MembersAddRemoveStagingData{
+				Auth:  auth,
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
 			})
@@ -640,7 +695,15 @@ func knowns(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	return ctx.Execute(html.Knowns, list)
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	return ctx.Execute(html.Knowns, html.KnownsData{
+		Auth: auth,
+		List: list,
+	})
 }
 
 func mod(ctx *Context, list *listdb.List) error {
@@ -768,7 +831,13 @@ func mod(ctx *Context, list *listdb.List) error {
 
 	// template data
 
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
 	data := html.ModData{
+		Auth: auth,
 		List: list,
 		Page: page,
 	}
@@ -847,7 +916,7 @@ func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timest
 	return
 }
 
-func publicLists(ctx *Context) error {
+func public(ctx *Context) error {
 
 	data := html.PublicData{
 		MyLists: make(map[string]interface{}),
@@ -916,6 +985,50 @@ func askJoin(ctx *Context, list *listdb.List) error {
 	}
 
 	return ctx.Execute(html.JoinAsk, data)
+}
+
+func leave(ctx *Context) error {
+
+	// We must not reveal whether the list exists!
+
+	listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+	if err != nil {
+		return err
+	}
+
+	list, _ := db.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+
+	if isMember, _ := list.IsMember(ctx.User); !isMember {
+		return fmt.Errorf("no list or you are not a member: %s", listAddr)
+	}
+
+	if ctx.r.Method == http.MethodPost {
+
+		if ctx.r.PostFormValue("confirm-leave") == "" {
+			ctx.Alertf("Please confirm if you want to leave the list.")
+			ctx.Redirect("/my/%s", list.RFC5322AddrSpec())
+			return nil
+		}
+
+		if err := list.RemoveMember(ctx.User, "authenticated user left list via web ui"); err != nil {
+			return err
+		}
+		ctx.Successf("You left the list %s", list.RFC5322AddrSpec())
+		ctx.Redirect("/")
+		return nil
+	}
+
+	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	if err != nil {
+		return err
+	}
+
+	return ctx.Execute(html.Leave, html.LeaveData{
+		Auth:          auth,
+		Email:         ctx.User.RFC5322AddrSpec(),
+		ListAddress:   ctx.ps.ByName("list"),
+		EscapeAddress: url.QueryEscape(ctx.ps.ByName("list")),
+	})
 }
 
 func askLeave(ctx *Context) error {

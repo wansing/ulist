@@ -299,7 +299,7 @@ Hello alice@example.com,
 Welcome to the mailing list createlist@example.com.
 
 ----
-You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist@example.com`)
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"bob@example.net"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
@@ -312,7 +312,7 @@ Hello bob@example.net,
 Welcome to the mailing list createlist@example.com.
 
 ----
-You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist@example.com`)
 
 	wantMessage(t, "createlist+bounces@example.com", []string{"carol@example.org"}, `Content-Type: text/plain; charset=utf-8
 From: "Created List" <createlist@example.com>
@@ -325,7 +325,7 @@ Hello carol@example.org,
 Welcome to the mailing list createlist@example.com.
 
 ----
-You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist@example.com`)
 
 	mustTransactOne("some_envelope@example.com", []string{"createlist@example.com"},
 		`From: bob@example.net
@@ -346,7 +346,7 @@ To: createlist@example.com
 Hello World
 
 ----
-You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist%40example.com`)
+You can leave the mailing list "Created List" here: https://lists.example.com/leave/createlist@example.com`)
 
 	wantChansEmpty(t)
 }
@@ -383,7 +383,7 @@ To: multiple-a@example.com, multiple-b@example.net
 Hello World
 
 ----
-You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a%40example.com`)
+You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a@example.com`)
 
 	wantMessage(t, "multiple-b+bounces@example.net", []string{"alice@example.com"}, `From: "alice via B" <multiple-b@example.net>
 List-Id: "B" <multiple-b@example.net>
@@ -397,7 +397,7 @@ To: multiple-a@example.com, multiple-b@example.net
 Hello World
 
 ----
-You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b%40example.net`)
+You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b@example.net`)
 
 	// one SMTP transaction, two emails
 
@@ -432,7 +432,7 @@ To: multiple-a@example.com
 Hello
 
 ----
-You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a%40example.com`)
+You can leave the mailing list "A" here: https://lists.example.com/leave/multiple-a@example.com`)
 
 	wantMessage(t, "multiple-b+bounces@example.net", []string{"alice@example.com"}, `From: "alice via B" <multiple-b@example.net>
 List-Id: "B" <multiple-b@example.net>
@@ -446,7 +446,7 @@ To: multiple-b@example.net
 Hello
 
 ----
-You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b%40example.net`)
+You can leave the mailing list "B" here: https://lists.example.com/leave/multiple-b@example.net`)
 
 	wantChansEmpty(t)
 }
@@ -481,7 +481,7 @@ You receive this mail because you (or someone else) asked to join your email add
 
 To confirm, please visit this address:
 
-https://lists.example.com/join/public%40example.com/timestamp/hmac/bob%40example.com
+https://lists.example.com/join/public@example.com/timestamp/hmac/bob@example.com
 
 If you didn't request this, please ignore this email.`)
 
@@ -502,7 +502,7 @@ Hello bob@example.com,
 Welcome to the mailing list public@example.com.
 
 ----
-You can leave the mailing list "Public" here: https://lists.example.com/leave/public%40example.com`)
+You can leave the mailing list "Public" here: https://lists.example.com/leave/public@example.com`)
 
 	wantGDPREvent(t, "bob@example.com joined the list public@example.com, reason: user confirmed in web ui")
 
@@ -551,7 +551,7 @@ You receive this mail because you (or someone else) asked to remove your email a
 
 To confirm, please visit this address:
 
-https://lists.example.com/leave/public%40example.com/timestamp/hmac/bob%40example.com
+https://lists.example.com/leave/public@example.com/timestamp/hmac/bob@example.com
 
 If you didn't request this, please ignore this email.`)
 
@@ -614,7 +614,7 @@ Hello member@example.com,
 Welcome to the mailing list reject-all@example.com.
 
 ----
-You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all%40example.com`)
+You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all@example.com`)
 
 	wantMessage(t, "reject-all+bounces@example.com", []string{"mod@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List name" <reject-all@example.com>
@@ -627,7 +627,7 @@ Hello mod@example.com,
 Welcome to the mailing list reject-all@example.com.
 
 ----
-You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all%40example.com`)
+You can leave the mailing list "List name" here: https://lists.example.com/leave/reject-all@example.com`)
 
 	wantChansEmpty(t)
 }
@@ -679,10 +679,10 @@ To: alice@example.com
 
 A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds@example.com
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds@example.com`)
 
 	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"bob@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <multiple-notifieds@example.com>
@@ -692,10 +692,10 @@ To: bob@example.com
 
 A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds@example.com
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds@example.com`)
 
 	wantMessage(t, "multiple-notifieds+bounces@example.com", []string{"carol@example.com"}, `Content-Type: text/plain; charset=utf-8
 From: "List" <multiple-notifieds@example.com>
@@ -705,10 +705,10 @@ To: carol@example.com
 
 A message at "List" <multiple-notifieds@example.com> is waiting for moderation.
 
-You can moderate it here: https://lists.example.com/mod/multiple-notifieds%40example.com
+You can moderate it here: https://lists.example.com/mod/multiple-notifieds@example.com
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/multiple-notifieds@example.com`)
 
 	wantChansEmpty(t)
 }
@@ -736,10 +736,10 @@ To: alice@example.com
 
 A message at "List" <x-spam-status@example.com> is waiting for moderation.
 
-You can moderate it here: https://lists.example.com/mod/x-spam-status%40example.com
+You can moderate it here: https://lists.example.com/mod/x-spam-status@example.com
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/x-spam-status%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/x-spam-status@example.com`)
 
 	wantChansEmpty(t)
 }
@@ -850,7 +850,7 @@ To: foo@example.com
 Hello
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/cc-bcc%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/cc-bcc@example.com`)
 
 	wantChansEmpty(t)
 }
@@ -882,7 +882,7 @@ To: "List Ü" <list_ue@example.com>
 Hi
 
 ----
-You can leave the mailing list "List Ü" here: https://lists.example.com/leave/list_ue%40example.com`) // the "To" header stays unencoded, as we're minimally invasive here
+You can leave the mailing list "List Ü" here: https://lists.example.com/leave/list_ue@example.com`) // the "To" header stays unencoded, as we're minimally invasive here
 
 	wantChansEmpty(t)
 }
@@ -956,12 +956,12 @@ Content-Type: multipart/alternative; boundary=boundary-1
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 
-You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-alternative-message%40example.com
+You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-alternative-message@example.com
 --boundary-1
 Content-Disposition: inline
 Content-Type: text/html; charset=us-ascii
 
-<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-alternative-message%40example.com">here</a>.</span>
+<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-alternative-message@example.com">here</a>.</span>
 --boundary-1--
 
 --boundary-0--
@@ -1025,12 +1025,12 @@ Content-Type: multipart/alternative; boundary=boundary-0
 Content-Disposition: inline
 Content-Type: text/plain; charset=us-ascii
 
-You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-mixed-message%40example.com
+You can leave the mailing list "List" here: https://lists.example.com/leave/multipart-mixed-message@example.com
 --boundary-0
 Content-Disposition: inline
 Content-Type: text/html; charset=us-ascii
 
-<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-mixed-message%40example.com">here</a>.</span>
+<span style="font-size: 9pt;">You can leave the mailing list "List" <a href="https://lists.example.com/leave/multipart-mixed-message@example.com">here</a>.</span>
 --boundary-0--
 
 --original-boundary
@@ -1075,7 +1075,7 @@ To: knowns@example.com
 Hello
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/knowns%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/knowns@example.com`)
 
 	wantKnowns := []string{
 		"bob@example.com",
@@ -1145,7 +1145,7 @@ To: members@example.com
 Hello
 
 ----
-You can leave the mailing list "List" here: https://lists.example.com/leave/members%40example.com`)
+You can leave the mailing list "List" here: https://lists.example.com/leave/members@example.com`)
 
 	members, err := list.Members()
 	if err != nil {

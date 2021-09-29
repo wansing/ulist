@@ -16,7 +16,7 @@
 						<td>{{ .Display }}</td>
 						<td>
 							{{ if not (index $.MyLists .RFC5322AddrSpec) }}
-								<a href="/join/{{ .EscapeAddress }}">Join</a>
+								<a href="/join/{{ PathEscape .RFC5322AddrSpec }}">Join</a>
 							{{ end }}
 						</td>
 					</tr>

@@ -9,7 +9,7 @@
 					<div class="list-group-item"><strong>{{.Domain}}</strong></div>
 				{{ end }}
 				{{ $domain = .Domain }}
-				<a href="/list/{{.EscapeAddress}}" class="list-group-item list-group-item-action">{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</a>
+				<a href="/list/{{PathEscape .RFC5322AddrSpec}}" class="list-group-item list-group-item-action">{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</a>
 			{{ end }}
 		</div>
 	{{ else }}

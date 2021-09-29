@@ -2,7 +2,6 @@ package listdb
 
 import (
 	"database/sql"
-	"net/url"
 
 	"github.com/wansing/ulist/mailutil"
 )
@@ -15,10 +14,6 @@ type Membership struct {
 	Moderate      bool
 	Notify        bool
 	Admin         bool
-}
-
-func (m *Membership) EscapeMemberAddress() string {
-	return url.QueryEscape(m.MemberAddress)
 }
 
 func (db *Database) Memberships(member *mailutil.Addr) ([]Membership, error) {

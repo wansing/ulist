@@ -303,13 +303,13 @@ func list(ctx *Context, list *listdb.List) error {
 	}
 	switch {
 	case membership.Moderate:
-		ctx.Redirect("/mod/%s", list.EscapeAddress())
+		ctx.Redirect("/mod/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	case membership.Admin:
-		ctx.Redirect("/members/%s", list.EscapeAddress())
+		ctx.Redirect("/members/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	case membership.Member:
-		ctx.Redirect("/leave/%s", list.EscapeAddress())
+		ctx.Redirect("/leave/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	default:
 		return ErrNoList
@@ -405,7 +405,7 @@ func settings(ctx *Context, list *listdb.List) error {
 		}
 
 		ctx.Successf("Your changes to the settings of %s have been saved.", list)
-		ctx.Redirect("/settings/%s", list.EscapeAddress()) // reload in order to see the effect
+		ctx.Redirect("/settings/%s", url.PathEscape(list.RFC5322AddrSpec())) // reload in order to see the effect
 		return nil
 	}
 
@@ -452,7 +452,7 @@ func create(ctx *Context) error {
 			return err
 		}
 		ctx.Successf("The mailing list %s has been created.", list)
-		ctx.Redirect("/members/%s", list.EscapeAddress())
+		ctx.Redirect("/members/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	}
 
@@ -559,7 +559,7 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 		return errors.New("unknown stage")
 	}
 
-	ctx.Redirect("/members/%s/add", list.EscapeAddress())
+	ctx.Redirect("/members/%s/add", url.PathEscape(list.RFC5322AddrSpec()))
 	return nil
 }
 
@@ -632,7 +632,7 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 		return errors.New("unknown stage")
 	}
 
-	ctx.Redirect("/members/%s/remove", list.EscapeAddress())
+	ctx.Redirect("/members/%s/remove", url.PathEscape(list.RFC5322AddrSpec()))
 	return nil
 }
 
@@ -664,7 +664,7 @@ func member(ctx *Context, list *listdb.List) error {
 		}
 
 		ctx.Successf("The membership settings of %s in %s have been saved.", m.MemberAddress, list)
-		ctx.Redirect("/member/%s/%s", list.EscapeAddress(), m.EscapeMemberAddress())
+		ctx.Redirect("/member/%s/%s", url.PathEscape(list.RFC5322AddrSpec()), url.PathEscape(m.MemberAddress))
 		return nil
 	}
 
@@ -691,7 +691,7 @@ func knowns(ctx *Context, list *listdb.List) error {
 			list.RemoveKnowns(addrs, ctx)
 		}
 
-		ctx.Redirect("/knowns/%s", list.EscapeAddress())
+		ctx.Redirect("/knowns/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	}
 
@@ -791,7 +791,7 @@ func mod(ctx *Context, list *listdb.List) error {
 			ctx.Successf(successNotification)
 		}
 
-		ctx.Redirect("/mod/%s", list.EscapeAddress())
+		ctx.Redirect("/mod/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	}
 
@@ -860,7 +860,7 @@ func mod(ctx *Context, list *listdb.List) error {
 		if i > 0 && pages[i-1] == pages[i] {
 			continue // skip duplicates
 		}
-		data.PageLinks = append(data.PageLinks, html.PageLink{p, fmt.Sprintf("/mod/%s/%d", list.EscapeAddress(), p)})
+		data.PageLinks = append(data.PageLinks, html.PageLink{p, fmt.Sprintf("/mod/%s/%d", url.PathEscape(list.RFC5322AddrSpec()), p)})
 	}
 
 	// sort and slice the eml filenames
@@ -1024,10 +1024,9 @@ func leave(ctx *Context) error {
 	}
 
 	return ctx.Execute(html.Leave, html.LeaveData{
-		Auth:          auth,
-		Email:         ctx.User.RFC5322AddrSpec(),
-		ListAddress:   ctx.ps.ByName("list"),
-		EscapeAddress: url.QueryEscape(ctx.ps.ByName("list")),
+		Auth:        auth,
+		Email:       ctx.User.RFC5322AddrSpec(),
+		ListAddress: ctx.ps.ByName("list"),
 	})
 }
 
@@ -1053,9 +1052,8 @@ func askLeave(ctx *Context) error {
 	}
 
 	data := html.LeaveAskData{
-		Email:           ctx.r.PostFormValue("email"),
-		RFC5322AddrSpec: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
-		EscapeAddress:   url.QueryEscape(ctx.ps.ByName("list")),
+		ListAddress: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
+		Email:       ctx.r.PostFormValue("email"),
 	}
 
 	if ctx.r.Method == http.MethodPost {

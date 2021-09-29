@@ -3,17 +3,17 @@
 	<!-- it's easier to copy the headline and nav than to nest templates -->
 	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}">List</a>
+			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}">List</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ .List.EscapeAddress }}/add">Add</a>
+			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/add">Add</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{ .List.EscapeAddress }}/remove">Remove</a>
+			<a class="nav-link active" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/remove">Remove</a>
 		</li>
 	</ul>
 
-	<form action="/members/{{ .List.EscapeAddress }}/remove/staging" method="post">
+	<form action="/members/{{ PathEscape .List.RFC5322AddrSpec }}/remove/staging" method="post">
 		<input type="hidden" name="addrs" value="{{ .AddrsString}}">
 		{{ template "addrs-card" .Addrs }}
 		<div class="form-group form-check">

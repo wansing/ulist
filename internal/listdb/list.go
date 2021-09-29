@@ -13,6 +13,7 @@ import (
 	"mime/multipart"
 	"net/mail"
 	"net/textproto"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -206,7 +207,7 @@ func (list *List) Save(m *mailutil.Message) error {
 }
 
 func (list *List) askLeaveUrl() string {
-	return fmt.Sprintf("%s/leave/%s", webUrl, list.EscapeAddress())
+	return fmt.Sprintf("%s/leave/%s", webUrl, url.PathEscape(list.RFC5322AddrSpec()))
 }
 
 func (list *List) CheckbackJoinUrl(recipient *mailutil.Addr) (string, error) {
@@ -214,7 +215,7 @@ func (list *List) CheckbackJoinUrl(recipient *mailutil.Addr) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/join/%s/%d/%s/%s", webUrl, list.EscapeAddress(), timestamp, hmac, recipient.EscapeAddress()), nil
+	return fmt.Sprintf("%s/join/%s/%d/%s/%s", webUrl, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec())), nil
 }
 
 func (list *List) CheckbackLeaveUrl(recipient *mailutil.Addr) (string, error) {
@@ -222,7 +223,7 @@ func (list *List) CheckbackLeaveUrl(recipient *mailutil.Addr) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s/leave/%s/%d/%s/%s", webUrl, list.EscapeAddress(), timestamp, hmac, recipient.EscapeAddress()), nil
+	return fmt.Sprintf("%s/leave/%s/%d/%s/%s", webUrl, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec())), nil
 }
 
 func (list *List) plainFooter() string {
@@ -573,7 +574,7 @@ func (list *List) NotifyMods(mods []string) error {
 	data := txt.NotifyModsData{
 		Footer:  list.plainFooter(),
 		List:    &list.ListInfo,
-		ModHref: webUrl + "/mod/" + list.EscapeAddress(),
+		ModHref: fmt.Sprintf("%s/mod/%s", webUrl, url.PathEscape(list.RFC5322AddrSpec())),
 	}
 
 	if err := txt.NotifyMods.Execute(body, data); err != nil {

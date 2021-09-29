@@ -4,6 +4,7 @@ import (
 	"embed"
 	"html/template"
 	"net/mail"
+	"net/url"
 	"strings"
 
 	"github.com/wansing/ulist/captcha"
@@ -39,6 +40,7 @@ func parse(fn string) *template.Template {
 			},
 			"BatchLimit":    func() uint { return listdb.BatchLimit },
 			"CreateCaptcha": captcha.Create,
+			"PathEscape":    url.PathEscape,
 			"TryMimeDecode": mailutil.TryMimeDecode,
 		},
 	).ParseFS(files, "layout.html", fn))
@@ -90,17 +92,15 @@ type KnownsData struct {
 }
 
 type LeaveData struct {
-	Auth          listdb.Membership
-	Email         string
-	ListAddress   string
-	EscapeAddress string
+	Auth        listdb.Membership
+	Email       string
+	ListAddress string
 }
 
 type LeaveAskData struct {
 	Email string
 	// use user input only, don't reveal whether the list exists
-	RFC5322AddrSpec string
-	EscapeAddress   string
+	ListAddress string
 }
 
 type LeaveConfirmData struct {

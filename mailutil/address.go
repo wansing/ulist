@@ -76,11 +76,6 @@ func (a *Addr) DisplayOrLocal() string {
 	return strings.SplitN(result, "@", 2)[0]
 }
 
-// for URLs
-func (a *Addr) EscapeAddress() string {
-	return url.QueryEscape(a.RFC5322AddrSpec())
-}
-
 func (a *Addr) String() string {
 	return a.RFC5322AddrSpec()
 }

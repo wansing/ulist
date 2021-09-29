@@ -13,7 +13,7 @@
 			{{ range .Messages }}
 				<div class="card mb-3">
 					<div class="card-body">
-						<h5 class="card-title"><a href="/view/{{ $.List.EscapeAddress }}/{{ .Filename }}">{{ with TryMimeDecode (.Header.Get "Subject") }}{{ . }}{{ else }}Unnamed email{{ end }}</a></h5>
+						<h5 class="card-title"><a href="/view/{{ PathEscape $.List.RFC5322AddrSpec }}/{{ .Filename }}">{{ with TryMimeDecode (.Header.Get "Subject") }}{{ . }}{{ else }}Unnamed email{{ end }}</a></h5>
 						<p class="card-text">
 							{{ with .Err }}
 								<em>Error: {{ . }}</em>

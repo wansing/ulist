@@ -885,7 +885,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 		if err != nil {
 			return err
 		}
-		ctx.Redirect(checkbackUrl)
+		http.Redirect(ctx.w, ctx.r, checkbackUrl, http.StatusFound) // no ctx.Redirect because checkbackUrl contains % and ctx.Redirect does Sprintf
 		return nil
 	}
 
@@ -935,7 +935,7 @@ func askLeave(ctx *Context) error {
 		if err != nil {
 			return err
 		}
-		ctx.Redirect(checkbackUrl)
+		http.Redirect(ctx.w, ctx.r, checkbackUrl, http.StatusFound) // no ctx.Redirect because checkbackUrl contains % and ctx.Redirect does Sprintf
 		return nil
 	}
 

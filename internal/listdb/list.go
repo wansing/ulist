@@ -28,7 +28,6 @@ var ErrLink = errors.New("link is invalid or expired") // HMAC related, don't le
 type List struct {
 	db *Database
 	ListInfo
-	Id            int
 	HMACKey       []byte // [32]byte would require check when reading from database
 	PublicSignup  bool   // default: false
 	HideFrom      bool   // default: false
@@ -139,7 +138,7 @@ func (list *List) GetAction(header mail.Header, froms []*mailutil.Addr) (Action,
 }
 
 func (list *List) StorageFolder() string {
-	return fmt.Sprintf("%s%d", spoolDir, list.Id)
+	return fmt.Sprintf("%s%d", spoolDir, list.ID)
 }
 
 // caller must close the returned file

@@ -15,12 +15,12 @@ func TestBounceAddress(t *testing.T) {
 		input    ListInfo
 		expected string
 	}{
-		{ListInfo{mailutil.Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
-		{ListInfo{mailutil.Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
-		{ListInfo{mailutil.Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
-		{ListInfo{mailutil.Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{mailutil.Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{mailutil.Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
+		{ListInfo{1, mailutil.Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
+		{ListInfo{2, mailutil.Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
+		{ListInfo{3, mailutil.Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
+		{ListInfo{4, mailutil.Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{5, mailutil.Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{6, mailutil.Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
 	}
 
 	for _, test := range tests {
@@ -34,6 +34,7 @@ func TestBounceAddress(t *testing.T) {
 func TestNewMessageId(t *testing.T) {
 
 	var li = &ListInfo{
+		1,
 		mailutil.Addr{
 			Local:  "list",
 			Domain: "example.com",

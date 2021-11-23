@@ -23,7 +23,7 @@ func (db *Database) GetList(listAddress *mailutil.Addr) (*List, error) {
 	list.db = db
 	list.Local = listAddress.Local
 	list.Domain = listAddress.Domain
-	var err = db.getListStmt.QueryRow(listAddress.Local, listAddress.Domain).Scan(&list.Id, &list.Display, &list.HMACKey, &list.PublicSignup, &list.HideFrom, &list.ActionMod, &list.ActionMember, &list.ActionUnknown, &list.ActionKnown)
+	var err = db.getListStmt.QueryRow(listAddress.Local, listAddress.Domain).Scan(&list.ID, &list.Display, &list.HMACKey, &list.PublicSignup, &list.HideFrom, &list.ActionMod, &list.ActionMember, &list.ActionUnknown, &list.ActionKnown)
 	switch err {
 	case nil:
 		return list, nil
@@ -36,7 +36,7 @@ func (db *Database) GetList(listAddress *mailutil.Addr) (*List, error) {
 
 func (list *List) Update(display string, publicSignup, hideFrom bool, actionMod, actionMember, actionKnown, actionUnknown Action) error {
 
-	_, err := list.db.updateListStmt.Exec(display, publicSignup, hideFrom, actionMod, actionMember, actionKnown, actionUnknown, list.Id)
+	_, err := list.db.updateListStmt.Exec(display, publicSignup, hideFrom, actionMod, actionMember, actionKnown, actionUnknown, list.ID)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func (list *List) GetMembership(addr *mailutil.Addr) (Membership, error) {
 	m := Membership{
 		ListInfo: list.ListInfo,
 	}
-	err := list.db.getMemberStmt.QueryRow(list.Id, addr.RFC5322AddrSpec()).Scan(&m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+	err := list.db.getMemberStmt.QueryRow(list.ID, addr.RFC5322AddrSpec()).Scan(&m.Receive, &m.Moderate, &m.Notify, &m.Admin)
 	switch err {
 	case nil:
 		m.Member = true
@@ -93,7 +93,7 @@ func (list *List) IsMember(addr *mailutil.Addr) (bool, error) {
 
 func (list *List) Members() ([]Membership, error) {
 
-	rows, err := list.db.getMembersStmt.Query(list.Id)
+	rows, err := list.db.getMembersStmt.Query(list.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (list *List) Receivers() ([]string, error) {
 
 func (list *List) Knowns() ([]string, error) {
 
-	rows, err := list.db.getKnownsStmt.Query(list.Id)
+	rows, err := list.db.getKnownsStmt.Query(list.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -181,7 +181,7 @@ func (list *List) AddMembers(sendWelcome bool, addrs []*mailutil.Addr, receive, 
 			continue
 		}
 
-		_, err := list.db.addMemberStmt.Exec(list.Id, addr.RFC5322AddrSpec(), receive, moderate, notify, admin)
+		_, err := list.db.addMemberStmt.Exec(list.ID, addr.RFC5322AddrSpec(), receive, moderate, notify, admin)
 		if err == nil {
 			addSuccess++
 		} else {
@@ -253,7 +253,7 @@ func (list *List) UpdateMember(rawAddress string, receive, moderate, notify, adm
 		return err
 	}
 
-	_, err = list.db.updateMemberStmt.Exec(receive, moderate, notify, admin, list.Id, addr.RFC5322AddrSpec())
+	_, err = list.db.updateMemberStmt.Exec(receive, moderate, notify, admin, list.ID, addr.RFC5322AddrSpec())
 	return err
 }
 
@@ -300,7 +300,7 @@ func (list *List) RemoveMembers(sendGoodbye bool, addrs []*mailutil.Addr, reason
 
 	for _, addr := range addrs {
 
-		_, err := list.db.removeMemberStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		_, err := list.db.removeMemberStmt.Exec(list.ID, addr.RFC5322AddrSpec())
 		if err == nil {
 			removeSuccess++
 		} else {
@@ -376,7 +376,7 @@ func (list *List) AddKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 			continue
 		}
 
-		_, err := list.db.addKnownStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		_, err := list.db.addKnownStmt.Exec(list.ID, addr.RFC5322AddrSpec())
 		if err == nil {
 			success++
 		} else {
@@ -407,7 +407,7 @@ func (list *List) IsKnown(rawAddress string) (bool, error) {
 	}
 
 	var known bool
-	return known, list.db.isKnownStmt.QueryRow(list.Id, address.RFC5322AddrSpec()).Scan(&known)
+	return known, list.db.isKnownStmt.QueryRow(list.ID, address.RFC5322AddrSpec()).Scan(&known)
 }
 
 func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
@@ -429,7 +429,7 @@ func (list *List) RemoveKnowns(addrs []*mailutil.Addr, alerter util.Alerter) {
 			continue
 		}
 
-		_, err := list.db.removeKnownStmt.Exec(list.Id, addr.RFC5322AddrSpec())
+		_, err := list.db.removeKnownStmt.Exec(list.ID, addr.RFC5322AddrSpec())
 		if err == nil {
 			success++
 		} else {
@@ -459,19 +459,19 @@ func (list *List) Delete() error {
 		return err
 	}
 
-	_, err = tx.Stmt(list.db.removeListStmt).Exec(list.Id)
+	_, err = tx.Stmt(list.db.removeListStmt).Exec(list.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 
-	_, err = tx.Stmt(list.db.removeListKnownsStmt).Exec(list.Id)
+	_, err = tx.Stmt(list.db.removeListKnownsStmt).Exec(list.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 
-	_, err = tx.Stmt(list.db.removeListMembersStmt).Exec(list.Id)
+	_, err = tx.Stmt(list.db.removeListMembersStmt).Exec(list.ID)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -482,7 +482,7 @@ func (list *List) Delete() error {
 
 func (list *List) membersWhere(stmt *sql.Stmt) ([]string, error) {
 
-	rows, err := stmt.Query(list.Id)
+	rows, err := stmt.Query(list.ID)
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}

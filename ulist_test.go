@@ -50,7 +50,7 @@ func init() {
 		log.Fatalf("error creating database: %v", err)
 	}
 
-	go webui()
+	go webui("/tmp")
 }
 
 func mustParse(email string) *mailutil.Addr {
@@ -247,6 +247,7 @@ func TestGetList(t *testing.T) {
 	// compare listdb.ListInfo
 
 	want := listdb.ListInfo{
+		ID: 1,
 		Addr: mailutil.Addr{
 			Display: "Created List",
 			Local:   "get-list",
@@ -511,6 +512,7 @@ You can leave the mailing list "Public" here: https://lists.example.com/leave/pu
 	if got, err := list.GetMembership(mustParse("bob@example.com")); err == nil {
 		want := listdb.Membership{
 			ListInfo: listdb.ListInfo{
+				5,
 				mailutil.Addr{
 					Display: "Public",
 					Local:   "public",
@@ -1153,6 +1155,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 	}
 
 	wantListInfo := listdb.ListInfo{
+		18,
 		mailutil.Addr{
 			Display: "List",
 			Local:   "members",

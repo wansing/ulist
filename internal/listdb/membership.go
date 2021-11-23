@@ -27,7 +27,7 @@ func (db *Database) Memberships(member *mailutil.Addr) ([]Membership, error) {
 	memberships := []Membership{}
 	for rows.Next() {
 		var m Membership
-		rows.Scan(&m.Display, &m.Local, &m.Domain, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+		rows.Scan(&m.ID, &m.Display, &m.Local, &m.Domain, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
 		memberships = append(memberships, m)
 	}
 

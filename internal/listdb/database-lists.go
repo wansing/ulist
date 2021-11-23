@@ -11,7 +11,7 @@ import (
 
 func (db *Database) listsWhere(condition string) ([]ListInfo, error) {
 
-	rows, err := db.Query("SELECT display, local, domain FROM list WHERE " + condition + " ORDER BY domain, local")
+	rows, err := db.Query("SELECT id, display, local, domain FROM list WHERE " + condition + " ORDER BY domain, local")
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
@@ -20,7 +20,7 @@ func (db *Database) listsWhere(condition string) ([]ListInfo, error) {
 	lists := []ListInfo{}
 	for rows.Next() {
 		var l ListInfo
-		rows.Scan(&l.Display, &l.Local, &l.Domain)
+		rows.Scan(&l.ID, &l.Display, &l.Local, &l.Domain)
 		lists = append(lists, l)
 	}
 

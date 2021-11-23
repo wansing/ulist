@@ -16,6 +16,7 @@ func init() {
 }
 
 type ListInfo struct {
+	ID int
 	mailutil.Addr
 }
 

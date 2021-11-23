@@ -1,6 +1,6 @@
 {{ define "content" }}
 	<h1>My mailing lists</h1>
-	{{ with . }}
+	{{ with .Memberships }}
 		<div class="list-group">
 			{{ $domain := "" }}
 			{{ range . }}
@@ -8,7 +8,14 @@
 					<div class="list-group-item"><strong>{{.Domain}}</strong></div>
 				{{ end }}
 				{{ $domain = .Domain }}
-				<a href="/list/{{PathEscape .RFC5322AddrSpec}}" class="list-group-item list-group-item-action">{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</a>
+				<a href="/list/{{PathEscape .RFC5322AddrSpec}}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
+					<span>{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</span>
+					{{if .Moderate}}
+						{{with $.ModCounter.Count .ID}}
+							<span class="badge badge-primary badge-pill">{{.}}</span>
+						{{end}}
+					{{end}}
+				</a>
 			{{ end }}
 		</div>
 	{{ else }}

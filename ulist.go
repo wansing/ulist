@@ -128,7 +128,7 @@ func main() {
 
 	// run web interface
 
-	go webui()
+	go webui(*spoolDir)
 
 	// listen via LMTP (blocking)
 

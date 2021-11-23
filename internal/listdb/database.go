@@ -134,7 +134,7 @@ func Open(backend, connStr string, gdpr util.Logger, spool, web string) (*Databa
 	db.updateMemberStmt = db.MustPrepare("UPDATE member SET receive = ?, moderate = ?, notify = ?, admin = ? WHERE list = ? AND address = ?")
 
 	// user
-	db.getMembershipsStmt = db.MustPrepare("SELECT l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.domain, l.local")
+	db.getMembershipsStmt = db.MustPrepare("SELECT l.id, l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin FROM list l, member m WHERE l.id = m.list AND m.address = ? ORDER BY l.domain, l.local")
 
 	return db, nil
 }

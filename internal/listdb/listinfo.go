@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"mime"
 	"net/mail"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -44,4 +46,8 @@ func (li *ListInfo) PrefixSubject(subject string) string {
 		subject = prefix + " " + subject
 	}
 	return mime.QEncoding.Encode("utf-8", subject)
+}
+
+func (li *ListInfo) StorageFolder() string {
+	return filepath.Join(spoolDir, strconv.Itoa(li.ID))
 }

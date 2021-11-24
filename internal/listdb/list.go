@@ -137,10 +137,6 @@ func (list *List) GetAction(header mail.Header, froms []*mailutil.Addr) (Action,
 	return action, reason, nil
 }
 
-func (list *List) StorageFolder() string {
-	return fmt.Sprintf("%s%d", spoolDir, list.ID)
-}
-
 // caller must close the returned file
 func (list *List) open(filename string) (*os.File, error) {
 

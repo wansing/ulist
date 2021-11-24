@@ -39,8 +39,6 @@ const modPerPage = 10
 
 var sessionManager *scs.SessionManager
 
-var modCounter ModCounter
-
 func init() {
 	sessionManager = scs.New()
 	sessionManager.Cookie.Persist = false                 // Don't store cookie across browser sessions. Required for GDPR cookie consent exemption criterion B. https://ec.europa.eu/justice/article-29/documentation/opinion-recommendation/files/2012/wp194_en.pdf
@@ -157,9 +155,7 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 
 // Sets up the httprouter and starts the web ui listener.
 // db should be initialized at this point.
-func webui(spoolDir string) {
-
-	modCounter = FsModCounter{spoolDir}
+func webui() {
 
 	router := httprouter.New()
 
@@ -296,13 +292,7 @@ func myLists(ctx *Context) error {
 		return err
 	}
 
-	return ctx.Execute(html.My, struct {
-		Memberships []listdb.Membership
-		ModCounter  ModCounter
-	}{
-		memberships,
-		modCounter,
-	})
+	return ctx.Execute(html.My, memberships)
 }
 
 func list(ctx *Context, list *listdb.List) error {
@@ -441,13 +431,7 @@ func all(ctx *Context) error {
 		return err
 	}
 
-	return ctx.Execute(html.All, struct {
-		Lists      []listdb.ListInfo
-		ModCounter ModCounter
-	}{
-		allLists,
-		modCounter,
-	})
+	return ctx.Execute(html.All, allLists)
 }
 
 func create(ctx *Context) error {

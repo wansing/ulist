@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/mail"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/wansing/ulist/captcha"
@@ -38,7 +39,14 @@ func parse(fn string) *template.Template {
 					return false
 				}
 			},
-			"BatchLimit":    func() uint { return listdb.BatchLimit },
+			"BatchLimit": func() uint { return listdb.BatchLimit },
+			"CountMod": func(list interface{ StorageFolder() string }) int {
+				entries, err := os.ReadDir(list.StorageFolder())
+				if err != nil {
+					return 0 // folder probably not created yet
+				}
+				return len(entries)
+			},
 			"CreateCaptcha": captcha.Create,
 			"PathEscape":    url.PathEscape,
 			"TryMimeDecode": mailutil.TryMimeDecode,

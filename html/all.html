@@ -1,7 +1,7 @@
 <!-- partly copied from my.html -->
 {{ define "content" }}
 	<h1>All mailing lists</h1>
-	{{ with .Lists }}
+	{{ with . }}
 		<div class="list-group">
 			{{ $domain := "" }}
 			{{ range . }}
@@ -11,7 +11,7 @@
 				{{ $domain = .Domain }}
 				<a href="/list/{{PathEscape .RFC5322AddrSpec}}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
 					<span>{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</span>
-					{{with $.ModCounter.Count .ID}}
+					{{with CountMod .}}
 						<span class="badge badge-primary badge-pill">{{.}}</span>
 					{{end}}
 				</a>

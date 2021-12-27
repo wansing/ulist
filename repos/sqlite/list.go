@@ -36,14 +36,6 @@ type ListDB struct {
 	updateMemberStmt      *sql.Stmt
 }
 
-func (db *ListDB) MustPrepare(query string) *sql.Stmt {
-	if stmt, err := db.sqlDB.Prepare(query); err != nil {
-		panic(err)
-	} else {
-		return stmt
-	}
-}
-
 func OpenListDB(connStr string) (*ListDB, error) {
 	sqlDB, err := sql.Open("sqlite3", connStr)
 	if err != nil {
@@ -92,32 +84,92 @@ func OpenListDB(connStr string) (*ListDB, error) {
 	}
 
 	// known
-	db.addKnownStmt = db.MustPrepare("replace into known (list, address) values (?, ?)")
-	db.getKnownsStmt = db.MustPrepare("select address from known where list = ? order by address")
-	db.isKnownStmt = db.MustPrepare("select count(1) from known where list = ? and address = ?") // "select count(1)" never returns sql.ErrNoRows
-	db.removeKnownStmt = db.MustPrepare("delete from known where list = ? and address = ?")
+	db.addKnownStmt, err = db.sqlDB.Prepare("replace into known (list, address) values (?, ?)")
+	if err != nil {
+		return nil, err
+	}
+	db.getKnownsStmt, err = db.sqlDB.Prepare("select address from known where list = ? order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.isKnownStmt, err = db.sqlDB.Prepare("select count(1) from known where list = ? and address = ?") // "select count(1)" never returns sql.ErrNoRows
+	if err != nil {
+		return nil, err
+	}
+	db.removeKnownStmt, err = db.sqlDB.Prepare("delete from known where list = ? and address = ?")
+	if err != nil {
+		return nil, err
+	}
 
 	// list
-	db.createListStmt = db.MustPrepare("insert into list (display, local, domain, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) values (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)")
-	db.getListStmt = db.MustPrepare("select id, display, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known from list where local = ? and domain = ?")
-	db.getAdminsStmt = db.MustPrepare("select address from member where list = ? and admin = 1 order by address")
-	db.getMembersStmt = db.MustPrepare("select address, receive, moderate, notify, admin from member where list = ? order by address")
-	db.getNotifiedsStmt = db.MustPrepare("select address from member where list = ? and notify = 1 order by address")
-	db.getReceiversStmt = db.MustPrepare("select address from member where list = ? and receive = 1 order by address")
-	db.isListStmt = db.MustPrepare("select count(1) from list where local = ? and domain = ?") // "select count(1)" never returns sql.ErrNoRows
-	db.removeListStmt = db.MustPrepare("delete from list where id = ?")
-	db.removeListKnownsStmt = db.MustPrepare("delete from known where list = ?")
-	db.removeListMembersStmt = db.MustPrepare("delete from member where list = ?")
-	db.updateListStmt = db.MustPrepare("update list SET display = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? where list.id = ?")
+	db.createListStmt, err = db.sqlDB.Prepare("insert into list (display, local, domain, hmac_key, public_signup, hide_from, action_mod, action_member, action_known, action_unknown) values (?, ?, ?, ?, 0, 0, ?, ?, ?, ?)")
+	if err != nil {
+		return nil, err
+	}
+	db.getListStmt, err = db.sqlDB.Prepare("select id, display, hmac_key, public_signup, hide_from, action_mod, action_member, action_unknown, action_known from list where local = ? and domain = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.getAdminsStmt, err = db.sqlDB.Prepare("select address from member where list = ? and admin = 1 order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.getMembersStmt, err = db.sqlDB.Prepare("select address, receive, moderate, notify, admin from member where list = ? order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.getNotifiedsStmt, err = db.sqlDB.Prepare("select address from member where list = ? and notify = 1 order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.getReceiversStmt, err = db.sqlDB.Prepare("select address from member where list = ? and receive = 1 order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.isListStmt, err = db.sqlDB.Prepare("select count(1) from list where local = ? and domain = ?") // "select count(1)" never returns sql.ErrNoRows
+	if err != nil {
+		return nil, err
+	}
+	db.removeListStmt, err = db.sqlDB.Prepare("delete from list where id = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.removeListKnownsStmt, err = db.sqlDB.Prepare("delete from known where list = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.removeListMembersStmt, err = db.sqlDB.Prepare("delete from member where list = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.updateListStmt, err = db.sqlDB.Prepare("update list SET display = ?, public_signup = ?, hide_from = ?, action_mod = ?, action_member = ?, action_known = ?, action_unknown = ? where list.id = ?")
+	if err != nil {
+		return nil, err
+	}
 
 	// member
-	db.addMemberStmt = db.MustPrepare("replace into member (list, address, receive, moderate, notify, admin) values (?, ?, ?, ?, ?, ?)")
-	db.getMemberStmt = db.MustPrepare("select receive, moderate, notify, admin from member where list = ? and address = ?")
-	db.removeMemberStmt = db.MustPrepare("delete from member where list = ? and address = ?")
-	db.updateMemberStmt = db.MustPrepare("update member SET receive = ?, moderate = ?, notify = ?, admin = ? where list = ? and address = ?")
+	db.addMemberStmt, err = db.sqlDB.Prepare("replace into member (list, address, receive, moderate, notify, admin) values (?, ?, ?, ?, ?, ?)")
+	if err != nil {
+		return nil, err
+	}
+	db.getMemberStmt, err = db.sqlDB.Prepare("select receive, moderate, notify, admin from member where list = ? and address = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.removeMemberStmt, err = db.sqlDB.Prepare("delete from member where list = ? and address = ?")
+	if err != nil {
+		return nil, err
+	}
+	db.updateMemberStmt, err = db.sqlDB.Prepare("update member SET receive = ?, moderate = ?, notify = ?, admin = ? where list = ? and address = ?")
+	if err != nil {
+		return nil, err
+	}
 
 	// user
-	db.getMembershipsStmt = db.MustPrepare("select l.id, l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin from list l, member m where l.id = m.list and m.address = ? order by l.domain, l.local")
+	db.getMembershipsStmt, err = db.sqlDB.Prepare("select l.id, l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin from list l, member m where l.id = m.list and m.address = ? order by l.domain, l.local")
+	if err != nil {
+		return nil, err
+	}
 
 	return db, nil
 }

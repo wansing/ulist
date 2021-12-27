@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -27,33 +28,37 @@ func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
 
-	// mail flow
-	lmtpSock := flag.String("lmtp", "lmtp.sock", "create an LMTP server socket at this `path` and listen for incoming mail")
-	socketmapSock := flag.String("socketmap", "", "create a socketmap server socket at this `path`")
+	dummyMode := os.Getenv("dummymode") == "true"
+	lmtpSock := os.Getenv("lmtp")
+	smtpsAuthPort, _ := strconv.Atoi(os.Getenv("smtps"))
+	socketmapSock := os.Getenv("socketmap")
+	starttlsAuthPort, _ := strconv.Atoi(os.Getenv("starttls"))
+	superadmin := os.Getenv("superadmin")
+	webListen := os.Getenv("http")
+	webURL := os.Getenv("weburl")
 
-	// web interface
-	webListen := flag.String("http", "127.0.0.1:8080", "make the web interface available at this ip:port or socket path")
-	webUrl := flag.String("weburl", "http://127.0.0.1:8080", "use this `url` in links to the web interface")
+	if lmtpSock == "" {
+		lmtpSock = "lmtp.sock"
+	}
+	if webListen == "" {
+		webListen = "127.0.0.1:8080"
+	}
+	if webURL == "" {
+		webURL = "http://127.0.0.1:8080"
+	}
 
-	// authentication
-	superadmin := flag.String("superadmin", "", "allow the user with this `email` address to create, delete and modify every list through the web interface")
-	smtpsAuthPort := flag.Uint("smtps", 0, "connect to localhost:`port` for SMTPS user authentication (first choice)")
-	starttlsAuthPort := flag.Uint("starttls", 0, "connect to localhost:`port` for SMTP STARTTLS user authentication")
-
-	// debug
-	dummyMode := flag.Bool("dummymode", false, "accept any user credentials and don't send any emails")
-
+	flag.BoolVar(&dummyMode, "dummymode", dummyMode, "accept any user credentials and don't send any emails")
+	flag.StringVar(&lmtpSock, "lmtp", lmtpSock, "create an LMTP server socket at this `path` and listen for incoming mail")
+	flag.IntVar(&smtpsAuthPort, "smtps", smtpsAuthPort, "connect to localhost:`port` for SMTPS user authentication (first choice)")
+	flag.StringVar(&socketmapSock, "socketmap", socketmapSock, "create a socketmap server socket at this `path`")
+	flag.IntVar(&starttlsAuthPort, "starttls", starttlsAuthPort, "connect to localhost:`port` for SMTP STARTTLS user authentication")
+	flag.StringVar(&superadmin, "superadmin", superadmin, "allow the user with this `email` address to create, delete and modify every list through the web interface")
+	flag.StringVar(&webListen, "http", webListen, "make the web interface available at this ip:port or socket path")
+	flag.StringVar(&webURL, "weburl", webURL, "use this `url` in links to the web interface")
 	flag.Parse()
 
-	// MTA
-
-	var mta mailutil.MTA = mailutil.Sendmail{}
-
-	// dummymode changes
-
-	if *dummyMode {
-		mta = mailutil.DummyMTA{}
-		*superadmin = "test@example.com"
+	if dummyMode {
+		superadmin = "test@example.com"
 		log.Printf(WarnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
@@ -65,12 +70,12 @@ func main() {
 	}
 	runtimeDir = filepath.Join("/", runtimeDir) // make absolute
 
-	if !filepath.IsAbs(*lmtpSock) {
-		*lmtpSock = filepath.Join(runtimeDir, *lmtpSock)
+	if !filepath.IsAbs(lmtpSock) {
+		lmtpSock = filepath.Join(runtimeDir, lmtpSock)
 	}
 
-	if *socketmapSock != "" && !filepath.IsAbs(*socketmapSock) {
-		*socketmapSock = filepath.Join(runtimeDir, *socketmapSock)
+	if socketmapSock != "" && !filepath.IsAbs(socketmapSock) {
+		socketmapSock = filepath.Join(runtimeDir, socketmapSock)
 	}
 
 	// spool dir
@@ -79,7 +84,7 @@ func main() {
 	if stateDir == "" {
 		stateDir = "/var/lib/ulist"
 	}
-	if *dummyMode {
+	if dummyMode {
 		stateDir = "/tmp/ulist"
 	}
 
@@ -115,14 +120,19 @@ func main() {
 
 	// create Ulist
 
+	var mta mailutil.MTA = mailutil.Sendmail{}
+	if dummyMode {
+		mta = mailutil.DummyMTA{}
+	}
+
 	ul := &ulist.Ulist{
-		DummyMode:  *dummyMode,
+		DummyMode:  dummyMode,
 		GDPRLogger: gdprLogger,
 		Lists:      listDB,
 		MTA:        mta,
-		Superadmin: *superadmin,
+		Superadmin: superadmin,
 		SpoolDir:   spoolDir,
-		WebURL:     *webUrl,
+		WebURL:     webURL,
 	}
 
 	// servers
@@ -132,12 +142,12 @@ func main() {
 
 	// socketmap server
 
-	sockmapSrv := sockmap.NewServer(ul.Lists.IsList, *lmtpSock)
+	sockmapSrv := sockmap.NewServer(ul.Lists.IsList, lmtpSock)
 
-	if *socketmapSock != "" {
-		l, err := net.Listen("unix", *socketmapSock)
+	if socketmapSock != "" {
+		l, err := net.Listen("unix", socketmapSock)
 		if err != nil {
-			log.Fatalf("error creating socketmap socket %s: %v", *socketmapSock, err)
+			log.Fatalf("error creating socketmap socket %s: %v", socketmapSock, err)
 		}
 		go func() {
 			if err := sockmapSrv.Serve(l); err != nil {
@@ -146,7 +156,7 @@ func main() {
 			}
 		}()
 
-		log.Printf("socketmap listener: %s", *socketmapSock)
+		log.Printf("socketmap listener: %s", socketmapSock)
 	}
 
 	// web server
@@ -155,8 +165,12 @@ func main() {
 		Ulist: ul,
 		UserRepos: []web.UserRepo{ // SQL database first. Note that if both smtps and starttls ports are given and refer to the same email server, the email server might be queried twice.
 			userDB,
-			auth.SMTPS{Port: *smtpsAuthPort},
-			auth.STARTTLS{Port: *starttlsAuthPort},
+			auth.SMTPS{
+				Port: uint(smtpsAuthPort),
+			},
+			auth.STARTTLS{
+				Port: uint(starttlsAuthPort),
+			},
 		},
 	}
 
@@ -165,11 +179,11 @@ func main() {
 	}
 
 	webNetwork := "unix"
-	if strings.Contains(*webListen, ":") {
+	if strings.Contains(webListen, ":") {
 		webNetwork = "tcp"
 	}
 
-	webListener, err := net.Listen(webNetwork, *webListen)
+	webListener, err := net.Listen(webNetwork, webListen)
 	if err != nil {
 		log.Fatalln(err)
 	}
@@ -183,11 +197,11 @@ func main() {
 		}
 	}()
 
-	log.Printf("web listener: %s://%s ", webNetwork, *webListen)
+	log.Printf("web listener: %s://%s ", webNetwork, webListen)
 
 	// LMTP server
 
-	lmtpSrv := ulist.NewLMTPServer(*lmtpSock, ul)
+	lmtpSrv := ulist.NewLMTPServer(lmtpSock, ul)
 
 	go func() {
 		if err := lmtpSrv.ListenAndServe(); err != nil {
@@ -196,7 +210,7 @@ func main() {
 		}
 	}()
 
-	log.Printf("LMTP listener: %s", *lmtpSock)
+	log.Printf("LMTP listener: %s", lmtpSock)
 
 	// graceful shutdown
 

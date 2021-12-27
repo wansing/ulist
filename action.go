@@ -1,4 +1,4 @@
-package listdb
+package ulist
 
 import (
 	"database/sql/driver"

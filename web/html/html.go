@@ -8,8 +8,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/captcha"
-	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
 )
 
@@ -39,9 +39,9 @@ func parse(fn string) *template.Template {
 					return false
 				}
 			},
-			"BatchLimit": func() uint { return listdb.BatchLimit },
-			"CountMod": func(list interface{ StorageFolder() string }) int {
-				entries, err := os.ReadDir(list.StorageFolder())
+			"BatchLimit": func() uint { return ulist.WebBatchLimit },
+			"CountMod": func(storageFolder string) int {
+				entries, err := os.ReadDir(storageFolder)
 				if err != nil {
 					return 0 // folder probably not created yet
 				}
@@ -78,6 +78,11 @@ var (
 	Settings             = parse("settings.html")
 )
 
+type AllData struct {
+	Lists           []ulist.ListInfo
+	StorageFolderer interface{ StorageFolder(ulist.ListInfo) string }
+}
+
 type CreateData struct {
 	Address   string
 	Name      string
@@ -95,12 +100,12 @@ type JoinConfirmData struct {
 }
 
 type KnownsData struct {
-	Auth listdb.Membership
-	List *listdb.List
+	Auth   ulist.Membership
+	Knowns []string
 }
 
 type LeaveData struct {
-	Auth        listdb.Membership
+	Auth        ulist.Membership
 	Email       string
 	ListAddress string
 }
@@ -122,24 +127,25 @@ type LoginData struct {
 }
 
 type MemberData struct {
-	List   *listdb.List
-	Member listdb.Membership
+	List   *ulist.List
+	Member ulist.Membership
 }
 
 type MembersData struct {
-	Auth listdb.Membership
-	List *listdb.List
+	Auth    ulist.Membership
+	List    *ulist.List
+	Members []ulist.Membership
 }
 
 type MembersAddRemoveData struct {
-	Auth  listdb.Membership
-	List  *listdb.List
+	Auth  ulist.Membership
+	List  *ulist.List
 	Addrs string
 }
 
 type MembersAddRemoveStagingData struct {
-	Auth  listdb.Membership
-	List  *listdb.List
+	Auth  ulist.Membership
+	List  *ulist.List
 	Addrs []string // just addr-spec because this it what is stored in the database, and because will be parsed again
 }
 
@@ -148,11 +154,16 @@ func (data *MembersAddRemoveStagingData) AddrsString() string {
 }
 
 type ModData struct {
-	Auth      listdb.Membership
-	List      *listdb.List
+	Auth      ulist.Membership
+	List      *ulist.List
 	Page      int
 	PageLinks []PageLink
 	Messages  []StoredMessage
+}
+
+type MyData struct {
+	Lists           []ulist.Membership
+	StorageFolderer interface{ StorageFolder(ulist.ListInfo) string }
 }
 
 type PageLink struct {
@@ -161,13 +172,13 @@ type PageLink struct {
 }
 
 type PublicData struct {
-	PublicLists []listdb.ListInfo
+	PublicLists []ulist.ListInfo
 	MyLists     map[string]interface{}
 }
 
 type SettingsData struct {
-	Auth listdb.Membership
-	List *listdb.List
+	Auth ulist.Membership
+	List *ulist.List
 }
 
 type StoredMessage struct {

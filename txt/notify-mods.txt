@@ -1,0 +1,6 @@
+A message at {{ .ListNameAddr }} is waiting for moderation.
+
+You can moderate it here: {{ .ModHref }}
+
+----
+{{ .Footer }}

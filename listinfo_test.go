@@ -1,10 +1,8 @@
-package listdb
+package ulist
 
 import (
 	"regexp"
 	"testing"
-
-	"github.com/wansing/ulist/mailutil"
 )
 
 var messageIdPattern = regexp.MustCompile("[0-9a-z-_]{32}") // RFC5322 Message-Id compliant
@@ -15,12 +13,12 @@ func TestBounceAddress(t *testing.T) {
 		input    ListInfo
 		expected string
 	}{
-		{ListInfo{1, mailutil.Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
-		{ListInfo{2, mailutil.Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
-		{ListInfo{3, mailutil.Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
-		{ListInfo{4, mailutil.Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{5, mailutil.Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{6, mailutil.Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
+		{ListInfo{1, Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
+		{ListInfo{2, Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
+		{ListInfo{3, Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
+		{ListInfo{4, Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{5, Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{6, Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
 	}
 
 	for _, test := range tests {
@@ -35,7 +33,7 @@ func TestNewMessageId(t *testing.T) {
 
 	var li = &ListInfo{
 		1,
-		mailutil.Addr{
+		Addr{
 			Local:  "list",
 			Domain: "example.com",
 		},

@@ -1,6 +1,7 @@
 package sockmap
 
 import (
+	"net"
 	"os/exec"
 	"testing"
 
@@ -23,16 +24,27 @@ postmap-a@example.com	lmtp:unix:/tmp/lmtp.sock
 postmap-b@example.com	lmtp:unix:/tmp/lmtp.sock
 `
 
-	go ListenAndServe(sock, func(addr *mailutil.Addr) (bool, error) {
-		switch addr.RFC5322AddrSpec() {
-		case "postmap-a@example.com":
-			return true, nil
-		case "postmap-b@example.com":
-			return true, nil
-		default:
-			return false, nil
-		}
-	}, "/tmp/lmtp.sock")
+	srv := NewServer(
+		func(addr *mailutil.Addr) (bool, error) {
+			switch addr.RFC5322AddrSpec() {
+			case "postmap-a@example.com":
+				return true, nil
+			case "postmap-b@example.com":
+				return true, nil
+			default:
+				return false, nil
+			}
+		},
+		"/tmp/lmtp.sock",
+	)
+	defer srv.Close()
+
+	l, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	go srv.Serve(l)
 
 	// postmap -q - socketmap:unix:socketmap.sock:name < addresses.txt
 

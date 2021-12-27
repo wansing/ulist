@@ -34,9 +34,9 @@ type CheckbackLeaveData struct {
 }
 
 type NotifyModsData struct {
-	Footer  string
-	List    interface{} // *ListInfo TODO move into other package // pointer because it has pointer receivers, else template execution will fail
-	ModHref string
+	Footer       string
+	ListNameAddr string
+	ModHref      string
 }
 
 type SignoffJoinData struct {

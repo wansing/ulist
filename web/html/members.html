@@ -13,8 +13,8 @@
 		</li>
 	</ul>
 
-	<p>The list has {{ len .List.Members}} members.</p>
-	{{ with .List.Members }}
+	{{ with .Members }}
+		<p>The list has {{ len .}} members.</p>
 		<table class="table">
 			<thead>
 				<tr>

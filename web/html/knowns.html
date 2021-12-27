@@ -8,7 +8,7 @@
 		<button name="add" value="1" type="submit" class="btn btn-primary">Add known senders</button>
 		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove known senders</button>
 	</form>
-	{{ with .List.Knowns }}
+	{{ with .Knowns }}
 		<h2>Known From addresses</h2>
 		<ul>
 			{{ range . }}

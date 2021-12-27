@@ -12,7 +12,7 @@ import (
 // Decodes the Name (not used at the moment).
 // mail.ParseAddress and mail.ParseAddressList yield errors on encoded input, so we should this
 var RobustAddressParser = mail.AddressParser{
-	TryMimeDecoder,
+	WordDecoder: TryMimeDecoder,
 }
 
 var ErrInvalidAddress = errors.New("invalid email address")
@@ -25,7 +25,7 @@ type Addr struct {
 
 // compares Local and Domain case-insensitively
 func (a *Addr) Equals(other *Addr) bool {
-	return strings.ToLower(a.Local) == strings.ToLower(other.Local) && strings.ToLower(a.Domain) == strings.ToLower(other.Domain)
+	return strings.EqualFold(a.Local, other.Local) && strings.EqualFold(a.Domain, other.Domain)
 }
 
 // RFC 5322
@@ -81,12 +81,10 @@ func (a *Addr) String() string {
 }
 
 func NewAddr(address *mail.Address) (*Addr, error) {
-
 	atPos := strings.LastIndex(address.Address, "@") // local-part may contain "@", so we split at the last one
 	if atPos == -1 {
 		return nil, ErrInvalidAddress
 	}
-
 	a := &Addr{}
 	a.Display = address.Name
 	a.Local = strings.ToLower(address.Address[0:atPos])
@@ -99,31 +97,25 @@ func NewAddr(address *mail.Address) (*Addr, error) {
 //
 // It is recommended to canonicalize or parse all input data (from form post data, url parameters, SMTP commands, header fields).
 func ParseAddress(rfc5322Address string) (*Addr, error) {
-
 	parsed, err := RobustAddressParser.Parse(rfc5322Address)
 	if err != nil {
 		return nil, ErrInvalidAddress
 	}
-
 	return NewAddr(parsed)
 }
 
 // ParseAddresses expects one RFC 5322 address-list per line. It does lax parsing and is intended for user input.
 func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error) {
-
 	for _, line := range strings.Split(rawAddresses, "\n") {
-
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-
 		parsedAddresses, err := RobustAddressParser.ParseList(line)
 		if err != nil {
 			errs = append(errs, fmt.Errorf(`error parsing line "%s": %s`, line, err))
 			continue
 		}
-
 		for _, p := range parsedAddresses {
 			address, err := NewAddr(p)
 			if err != nil {
@@ -132,13 +124,11 @@ func ParseAddresses(rawAddresses string, limit int) (addrs []*Addr, errs []error
 			}
 			addrs = append(addrs, address)
 		}
-
 		if len(addrs) > limit {
 			errs = append(errs, fmt.Errorf("please enter not more than %d addresses", limit))
 			return
 		}
 	}
-
 	return
 }
 

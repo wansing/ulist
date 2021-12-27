@@ -1,3 +1,4 @@
-ulist
-ulist.sock
-ulist.sqlite3
+/ulist
+*.log
+*.sock
+*.sqlite3

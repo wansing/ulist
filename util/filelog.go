@@ -7,10 +7,6 @@ import (
 	"sync"
 )
 
-type Logger interface {
-	Printf(format string, v ...interface{}) error
-}
-
 type ChanLogger chan string
 
 func (c ChanLogger) Printf(format string, v ...interface{}) error {

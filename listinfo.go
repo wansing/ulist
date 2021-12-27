@@ -1,12 +1,10 @@
-package listdb
+package ulist
 
 import (
 	"encoding/base64"
 	"math/rand"
 	"mime"
 	"net/mail"
-	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +17,7 @@ func init() {
 
 type ListInfo struct {
 	ID int
-	mailutil.Addr
+	Addr
 }
 
 func (li *ListInfo) BounceAddress() string {
@@ -46,8 +44,4 @@ func (li *ListInfo) PrefixSubject(subject string) string {
 		subject = prefix + " " + subject
 	}
 	return mime.QEncoding.Encode("utf-8", subject)
-}
-
-func (li *ListInfo) StorageFolder() string {
-	return filepath.Join(spoolDir, strconv.Itoa(li.ID))
 }

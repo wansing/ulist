@@ -1,4 +1,4 @@
-package main
+package web
 
 // In handlers, use Alertf if the user may retry or redact their input, or if there may be multiple results (alert or success messages).
 // Else just return an error, and the middleware will show an error template.
@@ -12,7 +12,6 @@ import (
 	"io"
 	"log"
 	"math"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -23,16 +22,16 @@ import (
 
 	"github.com/alexedwards/scs/v2"
 	"github.com/julienschmidt/httprouter"
-	"github.com/wansing/auth/client"
+	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/captcha"
-	"github.com/wansing/ulist/html"
-	"github.com/wansing/ulist/internal/listdb"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/static"
-	"github.com/wansing/ulist/util"
+	"github.com/wansing/ulist/web/html"
 )
 
+var ErrAlreadyMember = errors.New("you are already a member of this list")
 var ErrNoList = errors.New("no list or list error") // generic error so we don't reveal whether a non-public list exists
+var ErrNoMember = errors.New("you are not a member of this list")
 var ErrUnauthorized = errors.New("unauthorized")
 
 const modPerPage = 10
@@ -62,6 +61,7 @@ type Context struct {
 	r             *http.Request
 	ps            httprouter.Params
 	User          *mailutil.Addr
+	IsSuperadmin  bool
 	Notifications []Notification
 	Data          interface{} // for template
 }
@@ -112,31 +112,32 @@ func (ctx *Context) LoggedIn() bool {
 	return ctx.User != nil
 }
 
-func (ctx *Context) IsSuperAdmin() bool {
-	if !ctx.LoggedIn() {
-		return false
-	}
-	if Superadmin == "" {
-		return false
-	}
-	return ctx.User.RFC5322AddrSpec() == Superadmin
-}
-
 func (ctx *Context) Logout() {
 	_ = sessionManager.Destroy(ctx.r.Context())
 }
 
+type Web struct {
+	*ulist.Ulist
+	UserRepos []UserRepo // repos are queried in the given order
+}
+
+type UserRepo interface {
+	Authenticate(userid, password string) (success bool, err error) // should not be called if Available() returns false
+	Available() bool
+}
+
 // if f returns err, it must not execute a template or redirect
-func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.ResponseWriter, *http.Request, httprouter.Params) {
+func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.ResponseWriter, *http.Request, httprouter.Params) {
 	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
 
 		user, _ := mailutil.ParseAddress(sessionManager.GetString(r.Context(), "user"))
 
 		ctx := &Context{
-			w:    w,
-			r:    r,
-			ps:   ps,
-			User: user,
+			w:            w,
+			r:            r,
+			ps:           ps,
+			User:         user,
+			IsSuperadmin: web.IsSuperadmin(user),
 		}
 
 		if mustBeLoggedIn && !ctx.LoggedIn() {
@@ -153,12 +154,48 @@ func middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.Respo
 	}
 }
 
-// Sets up the httprouter and starts the web ui listener.
-// db should be initialized at this point.
-func webui() {
+func (w Web) GetMembershipOfAuthUser(list *ulist.List, addr *ulist.Addr) (ulist.Membership, error) {
+	m, err := w.Lists.GetMembership(list, addr)
+	if w.IsSuperadmin(addr) {
+		m.Moderate = true
+		m.Admin = true
+	}
+	return m, err
+}
 
+func (w Web) IsSuperadmin(addr *ulist.Addr) bool {
+	if w.Superadmin == "" {
+		return false
+	}
+	if addr == nil {
+		return false
+	}
+	return addr.RFC5322AddrSpec() == w.Superadmin
+}
+
+func (w Web) Authenticate(email, password string) error {
+	for _, userRepo := range w.UserRepos {
+		if !userRepo.Available() {
+			continue
+		}
+		if success, err := userRepo.Authenticate(email, password); success && err == nil {
+			return nil
+		}
+	}
+	return errors.New("authentication error")
+}
+
+func (w Web) AuthenticationAvailable() bool {
+	for _, userRepo := range w.UserRepos {
+		if userRepo.Available() {
+			return true
+		}
+	}
+	return false
+}
+
+func (w Web) NewServer() *http.Server {
 	router := httprouter.New()
-
 	router.ServeFiles("/static/*filepath", http.FS(static.Files))
 
 	getAndPost := func(path string, handle httprouter.Handle) {
@@ -167,85 +204,49 @@ func webui() {
 	}
 
 	// unauthenticated join and leave
-
-	router.GET("/", middleware(false, public))
-	getAndPost("/join/:list", middleware(false, loadList(askJoin)))
-	getAndPost("/join/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmJoin)))
-	getAndPost("/leave/:list", middleware(false, askLeave))
-	getAndPost("/leave/:list/:timestamp/:hmac/:email", middleware(false, loadList(confirmLeave)))
+	router.GET("/", w.middleware(false, w.public))
+	getAndPost("/join/:list", w.middleware(false, w.loadList(w.askJoin)))
+	getAndPost("/join/:list/:timestamp/:hmac/:email", w.middleware(false, w.loadList(w.confirmJoin)))
+	getAndPost("/leave/:list", w.middleware(false, w.askLeave))
+	getAndPost("/leave/:list/:timestamp/:hmac/:email", w.middleware(false, w.loadList(w.confirmLeave)))
 
 	// logged-in users
-
-	getAndPost("/login", middleware(false, login))
-	router.GET("/logout", middleware(true, logout))
-	router.GET("/my", middleware(true, myLists))
-	getAndPost("/my/:list", middleware(true, leave))
-
-	router.GET("/list/:list", middleware(true, loadList(list)))
+	router.GET("/list/:list", w.middleware(true, w.loadList(w.list)))
+	getAndPost("/login", w.middleware(false, w.login))
+	router.GET("/logout", w.middleware(true, w.logout))
+	router.GET("/my", w.middleware(true, w.myLists))
+	getAndPost("/my/:list", w.middleware(true, w.leave))
 
 	// superadmin
-
-	router.GET("/all", middleware(true, all))
-	getAndPost("/create", middleware(true, create))
+	router.GET("/all", w.middleware(true, w.all))
+	getAndPost("/create", w.middleware(true, w.create))
 
 	// admins
-
-	getAndPost("/delete/:list", middleware(true, loadList(requireAdminPermission(delete))))
-	router.GET("/members/:list", middleware(true, loadList(requireAdminPermission(members))))
-	getAndPost("/members/:list/add", middleware(true, loadList(requireAdminPermission(membersAdd))))
-	router.POST("/members/:list/add/staging", middleware(true, loadList(requireAdminPermission(membersAddStagingPost))))
-	getAndPost("/members/:list/remove", middleware(true, loadList(requireAdminPermission(membersRemove))))
-	router.POST("/members/:list/remove/staging", middleware(true, loadList(requireAdminPermission(membersRemoveStagingPost))))
-	getAndPost("/member/:list/:email", middleware(true, loadList(requireAdminPermission(member))))
-	getAndPost("/settings/:list", middleware(true, loadList(requireAdminPermission(settings))))
+	getAndPost("/delete/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.delete))))
+	router.GET("/members/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.members))))
+	getAndPost("/members/:list/add", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAdd))))
+	router.POST("/members/:list/add/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAddStagingPost))))
+	getAndPost("/members/:list/remove", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemove))))
+	router.POST("/members/:list/remove/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemoveStagingPost))))
+	getAndPost("/member/:list/:email", w.middleware(true, w.loadList(w.requireAdminPermission(w.member))))
+	getAndPost("/settings/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.settings))))
 
 	// moderators
+	getAndPost("/knowns/:list", w.middleware(true, w.loadList(w.requireModPermission(w.knowns))))
+	getAndPost("/mod/:list", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	getAndPost("/mod/:list/:page", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	router.GET("/view/:list/:emlfilename", w.middleware(true, w.loadList(w.requireModPermission(w.view))))
 
-	getAndPost("/knowns/:list", middleware(true, loadList(requireModPermission(knowns))))
-	getAndPost("/mod/:list", middleware(true, loadList(requireModPermission(mod))))
-	getAndPost("/mod/:list/:page", middleware(true, loadList(requireModPermission(mod))))
-	router.GET("/view/:list/:emlfilename", middleware(true, loadList(requireModPermission(view))))
-
-	var err error
-	var listener net.Listener
-
-	var network string
-
-	if strings.Contains(WebListen, ":") {
-		network = "tcp"
-	} else {
-		network = "unix"
-		_ = util.RemoveSocket(WebListen) // remove old socket
-	}
-
-	listener, err = net.Listen(network, WebListen)
-	if err == nil {
-		log.Printf("web listener: %s://%s ", network, WebListen)
-	} else {
-		log.Fatalln(err)
-	}
-
-	if network == "unix" {
-		if err := os.Chmod(WebListen, os.ModePerm); err != nil { // chmod 777, so the webserver can connect to it
-			log.Fatalln(err)
-		} else {
-			log.Printf("permissions of %s set to %#o", WebListen, os.ModePerm)
-		}
-	}
-
-	server := &http.Server{
+	return &http.Server{
 		Handler:      sessionManager.LoadAndSave(router),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
-
-	server.Serve(listener)
-	server.Close()
 }
 
 // helper functions
 
-func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
+func (w Web) loadList(f func(*Context, *ulist.List) error) func(*Context) error {
 
 	return func(ctx *Context) error {
 
@@ -254,7 +255,7 @@ func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
 			return ErrNoList
 		}
 
-		list, err := db.GetList(listAddr)
+		list, err := w.Lists.GetList(listAddr)
 		if list == nil || err != nil {
 			return ErrNoList
 		}
@@ -263,9 +264,9 @@ func loadList(f func(*Context, *listdb.List) error) func(*Context) error {
 	}
 }
 
-func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
-	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin()); m.Admin {
+func (w Web) requireAdminPermission(f func(*Context, *ulist.List) error) func(*Context, *ulist.List) error {
+	return func(ctx *Context, list *ulist.List) error {
+		if m, _ := w.GetMembershipOfAuthUser(list, ctx.User); m.Admin {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -273,9 +274,9 @@ func requireAdminPermission(f func(*Context, *listdb.List) error) func(*Context,
 	}
 }
 
-func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *listdb.List) error {
-	return func(ctx *Context, list *listdb.List) error {
-		if m, _ := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin()); m.Moderate {
+func (w Web) requireModPermission(f func(*Context, *ulist.List) error) func(*Context, *ulist.List) error {
+	return func(ctx *Context, list *ulist.List) error {
+		if m, _ := w.GetMembershipOfAuthUser(list, ctx.User); m.Moderate {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -285,19 +286,22 @@ func requireModPermission(f func(*Context, *listdb.List) error) func(*Context, *
 
 // handler functions
 
-func myLists(ctx *Context) error {
+func (w Web) myLists(ctx *Context) error {
 
-	memberships, err := db.Memberships(ctx.User)
+	memberships, err := w.Lists.Memberships(ctx.User)
 	if err != nil {
 		return err
 	}
 
-	return ctx.Execute(html.My, memberships)
+	return ctx.Execute(html.My, html.MyData{
+		Lists:           memberships,
+		StorageFolderer: w,
+	})
 }
 
-func list(ctx *Context, list *listdb.List) error {
+func (w Web) list(ctx *Context, list *ulist.List) error {
 
-	membership, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	membership, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -316,31 +320,30 @@ func list(ctx *Context, list *listdb.List) error {
 	}
 }
 
-func login(ctx *Context) error {
+func (w Web) login(ctx *Context) error {
 
 	if ctx.LoggedIn() {
 		ctx.Redirect("/my")
 		return nil
 	}
 
-	if DummyMode {
-		ctx.setUser(Superadmin)
+	if w.DummyMode {
+		ctx.setUser(w.Superadmin)
 		ctx.Redirect("/my")
 		return nil
 	}
 
 	data := html.LoginData{
-		CanLogin: authenticators.Available() || DummyMode,
+		CanLogin: w.AuthenticationAvailable() || w.DummyMode,
 		Mail:     ctx.r.PostFormValue("email"),
 	}
 
 	if ctx.r.Method == http.MethodPost {
 
 		email := strings.ToLower(strings.TrimSpace(data.Mail))
+		password := ctx.r.PostFormValue("password")
 
-		success, err := authenticators.Authenticate(email, ctx.r.PostFormValue("password"))
-
-		if success {
+		if err := w.Authenticate(email, password); err == nil {
 			ctx.setUser(email)
 			ctx.Successf("Welcome!")
 			if redirect := ctx.r.URL.Query()["redirect"]; len(redirect) > 0 && !strings.Contains(redirect[0], ":") { // basic protection against hijacking (?redirect=https://eve.example.com)
@@ -348,51 +351,49 @@ func login(ctx *Context) error {
 			} else {
 				ctx.Redirect("/my")
 			}
-			return nil // any err is ignored
+			return nil
 		} else {
-			log.Printf("    web: authentication failed from client %s", client.ExtractIP(ctx.r)) // fail2ban can match this pattern
-			ctx.Alertf("Wrong email address or password")
-		}
-
-		if err != nil {
-			return err
+			log.Printf("    web: authentication failed from client %s with error: %v", ExtractIP(ctx.r), err) // fail2ban can match this pattern
+			ctx.Alertf("Error")
+			return nil
 		}
 	}
 
 	return ctx.Execute(html.Login, data)
 }
 
-func logout(ctx *Context) error {
+func (w Web) logout(ctx *Context) error {
 	ctx.Logout()
 	ctx.Redirect("/")
 	return nil
 }
 
-func settings(ctx *Context, list *listdb.List) error {
+func (w Web) settings(ctx *Context, list *ulist.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		actionMod, err := listdb.ParseAction(ctx.r.PostFormValue("action_mod"))
+		actionMod, err := ulist.ParseAction(ctx.r.PostFormValue("action_mod"))
 		if err != nil {
 			return err
 		}
 
-		actionMember, err := listdb.ParseAction(ctx.r.PostFormValue("action_member"))
+		actionMember, err := ulist.ParseAction(ctx.r.PostFormValue("action_member"))
 		if err != nil {
 			return err
 		}
 
-		actionKnown, err := listdb.ParseAction(ctx.r.PostFormValue("action_known"))
+		actionKnown, err := ulist.ParseAction(ctx.r.PostFormValue("action_known"))
 		if err != nil {
 			return err
 		}
 
-		actionUnknown, err := listdb.ParseAction(ctx.r.PostFormValue("action_unknown"))
+		actionUnknown, err := ulist.ParseAction(ctx.r.PostFormValue("action_unknown"))
 		if err != nil {
 			return err
 		}
 
-		if err := list.Update(
+		if err := w.Lists.Update(
+			list,
 			ctx.r.PostFormValue("name"),
 			ctx.r.PostFormValue("public_signup") != "",
 			ctx.r.PostFormValue("hide_from") != "",
@@ -409,7 +410,7 @@ func settings(ctx *Context, list *listdb.List) error {
 		return nil
 	}
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -420,23 +421,26 @@ func settings(ctx *Context, list *listdb.List) error {
 	})
 }
 
-func all(ctx *Context) error {
+func (w Web) all(ctx *Context) error {
 
-	if !ctx.IsSuperAdmin() {
+	if !w.IsSuperadmin(ctx.User) {
 		return errors.New("Unauthorized")
 	}
 
-	allLists, err := db.AllLists()
+	allLists, err := w.Lists.AllLists()
 	if err != nil {
 		return err
 	}
 
-	return ctx.Execute(html.All, allLists)
+	return ctx.Execute(html.All, html.AllData{
+		Lists:           allLists,
+		StorageFolderer: w,
+	})
 }
 
-func create(ctx *Context) error {
+func (w Web) create(ctx *Context) error {
 
-	if !ctx.IsSuperAdmin() {
+	if !w.IsSuperadmin(ctx.User) {
 		return errors.New("Unauthorized")
 	}
 
@@ -447,9 +451,12 @@ func create(ctx *Context) error {
 	data.AdminMods = ctx.r.PostFormValue("admin_mods")
 
 	if ctx.r.Method == http.MethodPost {
-		list, err := db.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User), ctx)
-		if err != nil {
-			return err
+		list, errs := w.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User))
+		if len(errs) > 0 {
+			for _, err := range errs {
+				ctx.Alertf("Error creating list: %v", err)
+			}
+			return nil
 		}
 		ctx.Successf("The mailing list %s has been created.", list)
 		ctx.Redirect("/members/%s", url.PathEscape(list.RFC5322AddrSpec()))
@@ -459,12 +466,12 @@ func create(ctx *Context) error {
 	return ctx.Execute(html.Create, data)
 }
 
-func delete(ctx *Context, list *listdb.List) error {
+func (w Web) delete(ctx *Context, list *ulist.List) error {
 
 	if ctx.r.Method == http.MethodPost && ctx.r.PostFormValue("delete") == "delete" {
 
 		if ctx.r.PostFormValue("confirm_delete") == "yes" {
-			if err := list.Delete(); err != nil {
+			if err := w.Lists.Delete(list); err != nil {
 				return err
 			}
 			log.Printf("    web: %s deleted the mailing list %s", ctx.User, list)
@@ -479,22 +486,28 @@ func delete(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Delete, list)
 }
 
-func members(ctx *Context, list *listdb.List) error {
+func (w Web) members(ctx *Context, list *ulist.List) error {
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	if err != nil {
+		return err
+	}
+
+	members, err := w.Lists.Members(list)
 	if err != nil {
 		return err
 	}
 
 	return ctx.Execute(html.Members, html.MembersData{
-		Auth: auth,
-		List: list,
+		Auth:    auth,
+		List:    list,
+		Members: members,
 	})
 }
 
-func membersAdd(ctx *Context, list *listdb.List) error {
+func (w Web) membersAdd(ctx *Context, list *ulist.List) error {
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -505,7 +518,7 @@ func membersAdd(ctx *Context, list *listdb.List) error {
 	}
 
 	if ctx.r.Method == http.MethodPost {
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
 			return ctx.Execute(html.MembersAddStaging, &html.MembersAddRemoveStagingData{
 				Auth:  auth,
@@ -523,12 +536,13 @@ func membersAdd(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.MembersAdd, data)
 }
 
-func membersAddStagingPost(ctx *Context, list *listdb.List) error {
+func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 
-	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 	for _, err := range errs {
 		// this should not happen
 		ctx.Alertf("Error parsing email addresses: %v", err)
+		return nil
 	}
 
 	var gdprNote = ctx.r.PostFormValue("gdpr-note")
@@ -542,7 +556,7 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 	case "checkback":
 		var sentCount = 0
 		for _, addr := range addrs {
-			if err := list.SendJoinCheckback(addr); err == nil {
+			if err := w.SendJoinCheckback(list, addr); err == nil {
 				sentCount++
 			} else {
 				ctx.Alertf("Error sending join checkback: %v", err)
@@ -552,9 +566,15 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		list.AddMembers(true, addrs, true, false, false, false, reason, ctx)
+		errs := w.AddMembers(list, true, addrs, true, false, false, false, reason)
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
+		}
 	case "silent":
-		list.AddMembers(false, addrs, true, false, false, false, reason, ctx)
+		errs := w.AddMembers(list, false, addrs, true, false, false, false, reason)
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
+		}
 	default:
 		return errors.New("unknown stage")
 	}
@@ -563,9 +583,9 @@ func membersAddStagingPost(ctx *Context, list *listdb.List) error {
 	return nil
 }
 
-func membersRemove(ctx *Context, list *listdb.List) error {
+func (w Web) membersRemove(ctx *Context, list *ulist.List) error {
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -576,7 +596,7 @@ func membersRemove(ctx *Context, list *listdb.List) error {
 	}
 
 	if ctx.r.Method == http.MethodPost {
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
 			return ctx.Execute(html.MembersRemoveStaging, &html.MembersAddRemoveStagingData{
 				Auth:  auth,
@@ -594,9 +614,9 @@ func membersRemove(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.MembersRemove, data)
 }
 
-func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
+func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 
-	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), listdb.BatchLimit)
+	addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 	for _, err := range errs {
 		// this should not happen
 		ctx.Alertf("Error parsing email addresses: %v", err)
@@ -613,7 +633,7 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 	case "checkback":
 		var sentCount = 0
 		for _, addr := range addrs {
-			if sent, err := list.SendLeaveCheckback(addr); err == nil {
+			if sent, err := w.SendLeaveCheckback(list, addr); err == nil {
 				if sent {
 					sentCount++
 				}
@@ -625,9 +645,15 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		list.RemoveMembers(true, addrs, reason, ctx)
+		errs := w.RemoveMembers(list, true, addrs, reason)
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
+		}
 	case "silent":
-		list.RemoveMembers(false, addrs, reason, ctx)
+		errs := w.RemoveMembers(list, false, addrs, reason)
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
+		}
 	default:
 		return errors.New("unknown stage")
 	}
@@ -636,14 +662,14 @@ func membersRemoveStagingPost(ctx *Context, list *listdb.List) error {
 	return nil
 }
 
-func member(ctx *Context, list *listdb.List) error {
+func (w Web) member(ctx *Context, list *ulist.List) error {
 
 	member, err := mailutil.ParseAddress(ctx.ps.ByName("email"))
 	if err != nil {
 		return err
 	}
 
-	m, err := list.GetMembership(member)
+	m, err := w.Lists.GetMembership(list, member)
 	if err != nil {
 		return err
 	}
@@ -657,9 +683,7 @@ func member(ctx *Context, list *listdb.List) error {
 		var moderate = ctx.r.PostFormValue("moderate") != ""
 		var notify = ctx.r.PostFormValue("notify") != ""
 		var admin = ctx.r.PostFormValue("admin") != ""
-
-		err = list.UpdateMember(m.MemberAddress, receive, moderate, notify, admin)
-		if err != nil {
+		if err := w.Lists.UpdateMember(list, m.MemberAddress, receive, moderate, notify, admin); err != nil {
 			log.Printf("    web: error updating member: %v", err)
 		}
 
@@ -676,37 +700,54 @@ func member(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.Member, data)
 }
 
-func knowns(ctx *Context, list *listdb.List) error {
+func (w Web) knowns(ctx *Context, list *ulist.List) error {
 
 	if ctx.r.Method == http.MethodPost {
 
-		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), listdb.BatchLimit)
+		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("emails"), ulist.WebBatchLimit)
 		for _, err := range errs {
 			ctx.Alertf("Error parsing email address: %v", err)
 		}
 
 		if ctx.r.PostFormValue("add") != "" {
-			list.AddKnowns(addrs, ctx)
+			added, err := w.Lists.AddKnowns(list, addrs)
+			if len(added) > 0 {
+				ctx.Successf("Added %d known addresses", len(added))
+			}
+			if err != nil {
+				ctx.Alertf("Error: %v", err)
+			}
 		} else if ctx.r.PostFormValue("remove") != "" {
-			list.RemoveKnowns(addrs, ctx)
+			removed, err := w.Lists.RemoveKnowns(list, addrs)
+			if len(removed) > 0 {
+				ctx.Successf("Added %d known addresses", len(removed))
+			}
+			if err != nil {
+				ctx.Alertf("Error: %v", err)
+			}
 		}
 
 		ctx.Redirect("/knowns/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	}
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	if err != nil {
+		return err
+	}
+
+	knowns, err := w.Lists.Knowns(list)
 	if err != nil {
 		return err
 	}
 
 	return ctx.Execute(html.Knowns, html.KnownsData{
-		Auth: auth,
-		List: list,
+		Auth:   auth,
+		Knowns: knowns,
 	})
 }
 
-func mod(ctx *Context, list *listdb.List) error {
+func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 	var err error
 
@@ -726,24 +767,24 @@ func mod(ctx *Context, list *listdb.List) error {
 
 			emlFilename = strings.TrimPrefix(emlFilename, "action-")
 
-			m, err := list.ReadMessage(emlFilename) // err is evaluated in the switch
+			m, err := w.ReadMessage(list, emlFilename) // err is evaluated in the switch
 
 			switch action[0] {
 
 			case "delete":
 
-				if err = list.DeleteModeratedMail(emlFilename); err != nil {
+				if err = w.DeleteModeratedMail(list, emlFilename); err != nil {
 					ctx.Alertf("Error deleting email: %v", err)
 				} else {
 					notifyDeleted++
 				}
 
 				if ctx.r.PostFormValue("addknown-delete-"+emlFilename) != "" {
-					if from, ok := m.SingleFrom(); ok && list.ActionKnown == listdb.Reject { // same condition as in template
-						if err := list.AddKnown(from); err == nil {
-							notifyAddedKnown++
-						} else {
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == ulist.Reject { // same condition as in template
+						if _, err := w.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
 							ctx.Alertf("Error adding known sender: %v", err)
+						} else {
+							notifyAddedKnown++
 						}
 					}
 				}
@@ -754,21 +795,21 @@ func mod(ctx *Context, list *listdb.List) error {
 					break // don't forward emails with (probably header parsing) error
 				}
 
-				if err = list.Forward(m); err != nil {
+				if err = w.Forward(list, m); err != nil {
 					log.Printf("    web: error sending email through list %s: %v", list, err)
 					ctx.Alertf("Error sending email through list: %v", err)
 				} else {
 					log.Printf("    web: email sent through list %s", list)
 					notifyPassed++
-					_ = list.DeleteModeratedMail(emlFilename)
+					_ = w.DeleteModeratedMail(list, emlFilename)
 				}
 
 				if ctx.r.PostFormValue("addknown-pass-"+emlFilename) != "" {
-					if from, ok := m.SingleFrom(); ok && list.ActionKnown == listdb.Pass { // same condition as in template
-						if err := list.AddKnown(from); err == nil {
-							notifyAddedKnown++
-						} else {
+					if from, ok := m.SingleFrom(); ok && list.ActionKnown == ulist.Pass { // same condition as in template
+						if _, err := w.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
 							ctx.Alertf("Error adding known sender: %v", err)
+						} else {
+							notifyAddedKnown++
 						}
 					}
 				}
@@ -799,7 +840,7 @@ func mod(ctx *Context, list *listdb.List) error {
 
 	var emlFilenames []string
 
-	if listStorageFolder, err := os.Open(list.StorageFolder()); err == nil { // the folder is created when the first message is moderated, so we ignore errors here
+	if listStorageFolder, err := os.Open(w.StorageFolder(list.ListInfo)); err == nil { // the folder is created when the first message is moderated, so we ignore errors here
 		emlFilenames, err = listStorageFolder.Readdirnames(1000)
 		if err != nil && err != io.EOF {
 			return err
@@ -831,7 +872,7 @@ func mod(ctx *Context, list *listdb.List) error {
 
 	// template data
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -860,7 +901,10 @@ func mod(ctx *Context, list *listdb.List) error {
 		if i > 0 && pages[i-1] == pages[i] {
 			continue // skip duplicates
 		}
-		data.PageLinks = append(data.PageLinks, html.PageLink{p, fmt.Sprintf("/mod/%s/%d", url.PathEscape(list.RFC5322AddrSpec()), p)})
+		data.PageLinks = append(data.PageLinks, html.PageLink{
+			Page: p,
+			Url:  fmt.Sprintf("/mod/%s/%d", url.PathEscape(list.RFC5322AddrSpec()), p),
+		})
 	}
 
 	// sort and slice the eml filenames
@@ -880,27 +924,31 @@ func mod(ctx *Context, list *listdb.List) error {
 	// load messages from eml files
 
 	for _, emlFilename := range emlFilenames {
-		header, err := list.ReadHeader(emlFilename)
-		data.Messages = append(data.Messages, html.StoredMessage{header, err, emlFilename})
+		header, err := w.ReadHeader(list, emlFilename)
+		data.Messages = append(data.Messages, html.StoredMessage{
+			Header:   header,
+			Err:      err,
+			Filename: emlFilename,
+		})
 	}
 
 	return ctx.Execute(html.Mod, data)
 }
 
-func view(ctx *Context, list *listdb.List) error {
+func (w Web) view(ctx *Context, list *ulist.List) error {
 
 	emlFilename := ctx.ps.ByName("emlfilename")
 	if strings.Contains(emlFilename, "..") || strings.Contains(emlFilename, "/") {
 		return errors.New("filename contains forbidden characters")
 	}
 
-	ctx.ServeFile(list.StorageFolder() + "/" + emlFilename)
+	ctx.ServeFile(w.StorageFolder(list.ListInfo) + "/" + emlFilename)
 	return nil
 }
 
 // join and leave
 
-func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timestamp int64, hmac []byte, err error) {
+func (w Web) parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timestamp int64, hmac []byte, err error) {
 
 	email, err = mailutil.ParseAddress(ps.ByName("email"))
 	if err != nil {
@@ -916,20 +964,20 @@ func parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timest
 	return
 }
 
-func public(ctx *Context) error {
+func (w Web) public(ctx *Context) error {
 
 	data := html.PublicData{
 		MyLists: make(map[string]interface{}),
 	}
 
 	var err error
-	data.PublicLists, err = db.PublicLists()
+	data.PublicLists, err = w.Lists.PublicLists()
 	if err != nil {
 		return err
 	}
 
 	if ctx.LoggedIn() {
-		memberships, err := db.Memberships(ctx.User)
+		memberships, err := w.Lists.Memberships(ctx.User)
 		if err != nil {
 			return err
 		}
@@ -941,7 +989,7 @@ func public(ctx *Context) error {
 	return ctx.Execute(html.Public, data)
 }
 
-func askJoin(ctx *Context, list *listdb.List) error {
+func (w Web) askJoin(ctx *Context, list *ulist.List) error {
 
 	// public lists only
 	if !list.PublicSignup {
@@ -950,7 +998,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 
 	// convenience feature: logged-in users don't have to validate their email address
 	if ctx.LoggedIn() {
-		checkbackUrl, err := list.CheckbackJoinUrl(ctx.User)
+		checkbackUrl, err := w.CheckbackJoinUrl(list, ctx.User)
 		if err != nil {
 			return err
 		}
@@ -974,7 +1022,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 			return err
 		}
 
-		if err := list.SendJoinCheckback(email); err != nil {
+		if err := w.SendJoinCheckback(list, email); err != nil {
 			return err
 		}
 
@@ -987,7 +1035,7 @@ func askJoin(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.JoinAsk, data)
 }
 
-func leave(ctx *Context) error {
+func (w Web) leave(ctx *Context) error {
 
 	// We must not reveal whether the list exists!
 
@@ -996,9 +1044,9 @@ func leave(ctx *Context) error {
 		return err
 	}
 
-	list, _ := db.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+	list, _ := w.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
 
-	if isMember, _ := list.IsMember(ctx.User); !isMember {
+	if isMember, _ := w.Lists.IsMember(list, ctx.User); !isMember {
 		return fmt.Errorf("no list or you are not a member: %s", listAddr)
 	}
 
@@ -1010,15 +1058,18 @@ func leave(ctx *Context) error {
 			return nil
 		}
 
-		if err := list.RemoveMember(ctx.User, "authenticated user left list via web ui"); err != nil {
-			return err
+		if errs := w.RemoveMembers(list, true, []*mailutil.Addr{ctx.User}, "authenticated user left list via web ui"); len(errs) > 0 {
+			for _, err := range errs {
+				ctx.Alertf("Error: %v", err)
+			}
+		} else {
+			ctx.Successf("You left the list %s", list.RFC5322AddrSpec())
 		}
-		ctx.Successf("You left the list %s", list.RFC5322AddrSpec())
 		ctx.Redirect("/")
 		return nil
 	}
 
-	auth, err := list.GetMembershipOfAuthUser(ctx.User, ctx.IsSuperAdmin())
+	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -1030,7 +1081,7 @@ func leave(ctx *Context) error {
 	})
 }
 
-func askLeave(ctx *Context) error {
+func (w Web) askLeave(ctx *Context) error {
 
 	// We must not reveal whether the list exists!
 
@@ -1039,11 +1090,11 @@ func askLeave(ctx *Context) error {
 		return err
 	}
 
-	list, _ := db.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+	list, _ := w.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
 
 	// convenience feature: logged-in members don't have to validate their email address
-	if isMember, _ := list.IsMember(ctx.User); isMember {
-		checkbackUrl, err := list.CheckbackLeaveUrl(ctx.User)
+	if isMember, _ := w.Lists.IsMember(list, ctx.User); isMember {
+		checkbackUrl, err := w.CheckbackLeaveUrl(list, ctx.User)
 		if err != nil {
 			return err
 		}
@@ -1069,7 +1120,7 @@ func askLeave(ctx *Context) error {
 				return err
 			}
 
-			if sent, err := list.SendLeaveCheckback(email); err == nil {
+			if sent, err := w.SendLeaveCheckback(list, email); err == nil {
 				if sent {
 					log.Printf("    web: sending leave checkback: list: %s, user: %s", list, email)
 				}
@@ -1087,11 +1138,11 @@ func askLeave(ctx *Context) error {
 	return ctx.Execute(html.LeaveAsk, data)
 }
 
-func confirmJoin(ctx *Context, list *listdb.List) error {
+func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 
 	// get address, validate HMAC
 
-	addr, timestamp, inputHMAC, err := parseEmailTimestampHMAC(ctx.ps)
+	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.ps)
 	if err != nil {
 		return err
 	}
@@ -1102,21 +1153,24 @@ func confirmJoin(ctx *Context, list *listdb.List) error {
 
 	// non-members only
 
-	m, err := list.GetMembership(addr)
+	m, err := w.Lists.GetMembership(list, addr)
 	if err != nil {
 		return err
 	}
 	if m.Member {
-		return errors.New("You are already a member of this list.")
+		return ErrAlreadyMember
 	}
 
 	// join list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_join") == "yes" {
-		if err = list.AddMember(addr, true, false, false, false, "user confirmed in web ui"); err != nil {
-			return err
+		if errs := w.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui"); len(errs) > 0 {
+			for _, err := range errs {
+				ctx.Alertf("Error: %v", err)
+			}
+		} else {
+			ctx.Successf("You have joined the mailing list %s", list)
 		}
-		ctx.Successf("You have joined the mailing list %s", list)
 		ctx.Redirect("/")
 		return nil
 	}
@@ -1131,11 +1185,11 @@ func confirmJoin(ctx *Context, list *listdb.List) error {
 	return ctx.Execute(html.JoinConfirm, data)
 }
 
-func confirmLeave(ctx *Context, list *listdb.List) error {
+func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 
 	// get address, validate HMAC
 
-	addr, timestamp, inputHMAC, err := parseEmailTimestampHMAC(ctx.ps)
+	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.ps)
 	if err != nil {
 		return err
 	}
@@ -1146,21 +1200,24 @@ func confirmLeave(ctx *Context, list *listdb.List) error {
 
 	// members only
 
-	m, err := list.GetMembership(addr)
+	m, err := w.Lists.GetMembership(list, addr)
 	if err != nil {
 		return err
 	}
 	if !m.Member {
-		return errors.New("You are not a member of this list.")
+		return ErrNoMember
 	}
 
 	// leave list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_leave") == "yes" {
-		if err = list.RemoveMember(addr, "user confirmed in web ui"); err != nil {
-			return err
+		if errs := w.RemoveMembers(list, true, []*mailutil.Addr{addr}, "user confirmed in web ui"); len(errs) > 0 {
+			for _, err := range errs {
+				ctx.Alertf("Error: %v", err)
+			}
+		} else {
+			ctx.Successf("You have left the mailing list %s", list)
 		}
-		ctx.Successf("You have left the mailing list %s", list)
 		ctx.Redirect("/")
 		return nil
 	}

@@ -147,7 +147,7 @@ func main() {
 	if socketmapSock != "" {
 		l, err := net.Listen("unix", socketmapSock)
 		if err != nil {
-			log.Fatalf("error creating socketmap socket %s: %v", socketmapSock, err)
+			log.Fatalf("error creating socketmap socket: %v", err)
 		}
 		go func() {
 			if err := sockmapSrv.Serve(l); err != nil {

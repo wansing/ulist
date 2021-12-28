@@ -22,11 +22,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const WarnFormat = "\033[1;31m%s\033[0m"
+const warnFormat = "\033[1;31m%s\033[0m"
 
 func main() {
 
 	log.SetFlags(0) // no log prefixes required, systemd-journald adds them
+	defer func() {
+		log.Println("exiting")
+	}()
+
+	// configuration
 
 	dummyMode := os.Getenv("dummymode") == "true"
 	lmtpSock := os.Getenv("lmtp")
@@ -59,7 +64,7 @@ func main() {
 
 	if dummyMode {
 		superadmin = "test@example.com"
-		log.Printf(WarnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
+		log.Printf(warnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
 	// sockets
@@ -90,11 +95,13 @@ func main() {
 
 	spoolDir := filepath.Join(stateDir, "spool")
 	if err := os.MkdirAll(spoolDir, 0700); err != nil {
-		log.Fatalf("error creating spool directory: %v", err)
+		log.Printf("error creating spool directory: %v", err)
+		return
 	}
 
 	if unix.Access(spoolDir, unix.W_OK) != nil {
-		log.Fatalf("spool directory %s is not writeable", spoolDir)
+		log.Printf("spool directory %s is not writeable", spoolDir)
+		return
 	}
 
 	log.Printf("spool directory: %s", spoolDir)
@@ -103,18 +110,22 @@ func main() {
 
 	gdprLogger, err := util.NewFileLogger(filepath.Join(stateDir, "gdpr.log"))
 	if err != nil {
-		log.Fatalf("error creating GDPR logfile: %v", err)
+		log.Printf("error creating GDPR logfile: %v", err)
+		return
 	}
+	defer gdprLogger.Close()
 
 	listDB, err := sqlite.OpenListDB(filepath.Join(stateDir, "lists.sqlite3"))
 	if err != nil {
-		log.Fatalf("error opening list db: %v", err)
+		log.Printf("error opening list db: %v", err)
+		return
 	}
 	defer listDB.Close()
 
 	userDB, err := sqlite.OpenUserDB(filepath.Join(stateDir, "users.sqlite3"))
 	if err != nil {
-		log.Fatalf("error opening user db: %v", err)
+		log.Printf("error opening user db: %v", err)
+		return
 	}
 	defer userDB.Close()
 
@@ -134,6 +145,7 @@ func main() {
 		SpoolDir:   spoolDir,
 		WebURL:     webURL,
 	}
+	defer ul.Waiting.Wait()
 
 	// servers
 
@@ -143,11 +155,13 @@ func main() {
 	// socketmap server
 
 	sockmapSrv := sockmap.NewServer(ul.Lists.IsList, lmtpSock)
+	defer sockmapSrv.Close()
 
 	if socketmapSock != "" {
 		l, err := net.Listen("unix", socketmapSock)
 		if err != nil {
-			log.Fatalf("error creating socketmap socket: %v", err)
+			log.Printf("error creating socketmap socket: %v", err)
+			return
 		}
 		go func() {
 			if err := sockmapSrv.Serve(l); err != nil {
@@ -175,7 +189,7 @@ func main() {
 	}
 
 	if !w.AuthenticationAvailable() && !ul.DummyMode {
-		log.Printf(WarnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
+		log.Printf(warnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
 	}
 
 	webNetwork := "unix"
@@ -185,10 +199,12 @@ func main() {
 
 	webListener, err := net.Listen(webNetwork, webListen)
 	if err != nil {
-		log.Fatalln(err)
+		log.Printf("error creating web listener: %v", err)
+		return
 	}
 
 	webSrv := w.NewServer()
+	defer webSrv.Close()
 
 	go func() {
 		if err := webSrv.Serve(webListener); err != nil && err != http.ErrServerClosed {
@@ -202,6 +218,7 @@ func main() {
 	// LMTP server
 
 	lmtpSrv := ulist.NewLMTPServer(lmtpSock, ul)
+	defer lmtpSrv.Close()
 
 	go func() {
 		if err := lmtpSrv.ListenAndServe(); err != nil {
@@ -212,15 +229,9 @@ func main() {
 
 	log.Printf("LMTP listener: %s", lmtpSock)
 
-	// graceful shutdown
+	// wait for shutdown signal
 
 	log.Printf("running")
-
 	<-shutdownChan
 	log.Println("received shutdown signal")
-	webSrv.Close()
-	lmtpSrv.Close()
-	sockmapSrv.Close()
-	ul.Waiting.Wait()
-	log.Printf("exiting")
 }

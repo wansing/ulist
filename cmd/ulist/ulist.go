@@ -34,17 +34,12 @@ func main() {
 	// configuration
 
 	dummyMode := os.Getenv("dummymode") == "true"
-	lmtpSock := os.Getenv("lmtp")
 	smtpsAuthPort, _ := strconv.Atoi(os.Getenv("smtps"))
-	socketmapSock := os.Getenv("socketmap")
 	starttlsAuthPort, _ := strconv.Atoi(os.Getenv("starttls"))
 	superadmin := os.Getenv("superadmin")
 	webListen := os.Getenv("http")
 	webURL := os.Getenv("weburl")
 
-	if lmtpSock == "" {
-		lmtpSock = "lmtp.sock"
-	}
 	if webListen == "" {
 		webListen = "127.0.0.1:8080"
 	}
@@ -53,9 +48,7 @@ func main() {
 	}
 
 	flag.BoolVar(&dummyMode, "dummymode", dummyMode, "accept any user credentials and don't send any emails")
-	flag.StringVar(&lmtpSock, "lmtp", lmtpSock, "create an LMTP server socket at this `path` and listen for incoming mail")
 	flag.IntVar(&smtpsAuthPort, "smtps", smtpsAuthPort, "connect to localhost:`port` for SMTPS user authentication (first choice)")
-	flag.StringVar(&socketmapSock, "socketmap", socketmapSock, "create a socketmap server socket at this `path`")
 	flag.IntVar(&starttlsAuthPort, "starttls", starttlsAuthPort, "connect to localhost:`port` for SMTP STARTTLS user authentication")
 	flag.StringVar(&superadmin, "superadmin", superadmin, "allow the user with this `email` address to create, delete and modify every list through the web interface")
 	flag.StringVar(&webListen, "http", webListen, "make the web interface available at this ip:port or socket path")
@@ -75,13 +68,8 @@ func main() {
 	}
 	runtimeDir = filepath.Join("/", runtimeDir) // make absolute
 
-	if !filepath.IsAbs(lmtpSock) {
-		lmtpSock = filepath.Join(runtimeDir, lmtpSock)
-	}
-
-	if socketmapSock != "" && !filepath.IsAbs(socketmapSock) {
-		socketmapSock = filepath.Join(runtimeDir, socketmapSock)
-	}
+	lmtpSock := filepath.Join(runtimeDir, "lmtp.sock")
+	socketmapSock := filepath.Join(runtimeDir, "socketmap.sock")
 
 	// spool dir
 
@@ -157,21 +145,19 @@ func main() {
 	sockmapSrv := sockmap.NewServer(ul.Lists.IsList, lmtpSock)
 	defer sockmapSrv.Close()
 
-	if socketmapSock != "" {
-		l, err := net.Listen("unix", socketmapSock)
-		if err != nil {
-			log.Printf("error creating socketmap socket: %v", err)
-			return
-		}
-		go func() {
-			if err := sockmapSrv.Serve(l); err != nil {
-				log.Printf("socketmap server error: %v", err)
-				shutdownChan <- syscall.SIGINT
-			}
-		}()
-
-		log.Printf("socketmap listener: %s", socketmapSock)
+	sockmapListener, err := net.Listen("unix", socketmapSock)
+	if err != nil {
+		log.Printf("error creating socketmap socket: %v", err)
+		return
 	}
+	go func() {
+		if err := sockmapSrv.Serve(sockmapListener); err != nil {
+			log.Printf("socketmap server error: %v", err)
+			shutdownChan <- syscall.SIGINT
+		}
+	}()
+
+	log.Printf("socketmap listener: %s", socketmapSock)
 
 	// web server
 

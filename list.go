@@ -86,32 +86,38 @@ func (list *List) createHMAC(addr *Addr, timestamp int64) ([]byte, error) {
 // (Mailman incorporates it last, which is probably never, because each email must have a From header: https://mail.python.org/pipermail/mailman-users/2017-January/081797.html)
 func (u *Ulist) GetAction(list *List, header mail.Header, froms []*Addr) (Action, string, error) {
 
-	action := list.ActionUnknown
-	reason := `all "From" addresses are unknown`
+	var action = list.ActionUnknown
+	var reason string
 
-	for _, from := range froms {
+	if action == Pass {
+		reason = `list allows any "From" address`
+	} else {
+		reason = `all "From" addresses are unknown`
 
-		statuses, err := u.GetRoles(list, from)
-		if err != nil {
-			return Reject, "", fmt.Errorf("error getting status from database: %v", err)
-		}
+		for _, from := range froms {
 
-		for _, status := range statuses {
-
-			var fromAction Action = Reject
-
-			switch status {
-			case Known:
-				fromAction = list.ActionKnown
-			case Member:
-				fromAction = list.ActionMember
-			case Moderator:
-				fromAction = list.ActionMod
+			statuses, err := u.GetRoles(list, from)
+			if err != nil {
+				return Reject, "", fmt.Errorf("error getting status from database: %v", err)
 			}
 
-			if action < fromAction {
-				action = fromAction
-				reason = fmt.Sprintf("%s is %s", from, status)
+			for _, status := range statuses {
+
+				var fromAction Action = Reject
+
+				switch status {
+				case Known:
+					fromAction = list.ActionKnown
+				case Member:
+					fromAction = list.ActionMember
+				case Moderator:
+					fromAction = list.ActionMod
+				}
+
+				if action < fromAction {
+					action = fromAction
+					reason = fmt.Sprintf("%s is %s", from, status)
+				}
 			}
 		}
 	}
@@ -121,7 +127,7 @@ func (u *Ulist) GetAction(list *List, header mail.Header, froms []*Addr) (Action
 	if action == Pass {
 		if isSpam, spamReason := mailutil.IsSpam(header); isSpam {
 			action = Mod
-			reason = spamReason
+			reason = fmt.Sprintf("%s, but %s", reason, spamReason)
 		}
 	}
 

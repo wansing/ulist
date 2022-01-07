@@ -150,6 +150,11 @@ func main() {
 		log.Printf("error creating socketmap socket: %v", err)
 		return
 	}
+	if err := os.Chmod(socketmapSock, 0777); err != nil {
+		log.Printf("error setting socketmap socket permissions: %v", err)
+		return
+	}
+
 	go func() {
 		if err := sockmapSrv.Serve(sockmapListener); err != nil {
 			log.Printf("socketmap server error: %v", err)
@@ -192,6 +197,12 @@ func main() {
 		log.Printf("error creating web listener: %v", err)
 		return
 	}
+	if webNetwork == "unix" {
+		if err := os.Chmod(webListen, 0777); err != nil {
+			log.Printf("error setting web socket permissions: %v", err)
+			return
+		}
+	}
 
 	webSrv := w.NewServer()
 	defer webSrv.Close()
@@ -216,6 +227,11 @@ func main() {
 			shutdownChan <- syscall.SIGINT
 		}
 	}()
+
+	if err := os.Chmod(lmtpSock, 0777); err != nil {
+		log.Printf("error setting LMTP socket permissions: %v", err)
+		return
+	}
 
 	log.Printf("LMTP listener: %s", lmtpSock)
 

@@ -103,14 +103,14 @@ func main() {
 	}
 	defer gdprLogger.Close()
 
-	listDB, err := sqlite.OpenListDB(filepath.Join(stateDir, "lists.sqlite3"))
+	listDB, err := sqlite.OpenListDB(filepath.Join(stateDir, "lists.sqlite3?_busy_timeout=10000&_journal=WAL&_sync=NORMAL&cache=shared"))
 	if err != nil {
 		log.Printf("error opening list db: %v", err)
 		return
 	}
 	defer listDB.Close()
 
-	userDB, err := sqlite.OpenUserDB(filepath.Join(stateDir, "users.sqlite3"))
+	userDB, err := sqlite.OpenUserDB(filepath.Join(stateDir, "users.sqlite3?_busy_timeout=10000&_journal=WAL&_sync=NORMAL&cache=shared"))
 	if err != nil {
 		log.Printf("error opening user db: %v", err)
 		return

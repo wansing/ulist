@@ -375,12 +375,14 @@ func (db *ListDB) AddMembers(list *ulist.List, addrs []*mailutil.Addr, receive, 
 	}
 	defer tx.Rollback()
 
+	stmt := tx.Stmt(db.addMemberStmt)
+
 	var added = make([]*mailutil.Addr, 0, len(addrs))
 	for _, addr := range addrs {
 		if list.Equals(addr) {
 			continue // don't add list to itself
 		}
-		if _, err := db.addMemberStmt.Exec(list.ID, addr.RFC5322AddrSpec(), receive, moderate, notify, admin); err != nil {
+		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec(), receive, moderate, notify, admin); err != nil {
 			return nil, err // not committed, return empty address slice
 		}
 		added = append(added, addr)
@@ -412,9 +414,11 @@ func (db *ListDB) RemoveMembers(list *ulist.List, addrs []*mailutil.Addr) ([]*ma
 	}
 	defer tx.Rollback()
 
+	stmt := tx.Stmt(db.removeMemberStmt)
+
 	var removed = make([]*mailutil.Addr, 0, len(addrs))
 	for _, addr := range addrs {
-		if _, err := db.removeMemberStmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
+		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
 			return nil, err // not committed, return empty address slice
 		}
 		removed = append(removed, addr)
@@ -435,12 +439,14 @@ func (db *ListDB) AddKnowns(list *ulist.List, addrs []*mailutil.Addr) ([]*mailut
 	}
 	defer tx.Rollback()
 
+	stmt := tx.Stmt(db.addKnownStmt)
+
 	var added = make([]*mailutil.Addr, 0, len(addrs))
 	for _, addr := range addrs {
 		if list.Equals(addr) {
 			continue // don't add list to itself
 		}
-		if _, err := db.addKnownStmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
+		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
 			return nil, err // not committed, return empty address slice
 		}
 		added = append(added, addr)
@@ -472,9 +478,11 @@ func (db *ListDB) RemoveKnowns(list *ulist.List, addrs []*mailutil.Addr) ([]*mai
 	}
 	defer tx.Rollback()
 
+	stmt := tx.Stmt(db.removeKnownStmt)
+
 	var removed = make([]*mailutil.Addr, 0, len(addrs))
 	for _, addr := range addrs {
-		if _, err := db.removeKnownStmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
+		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec()); err != nil {
 			return nil, err // not committed, return empty address slice
 		}
 		removed = append(removed, addr)

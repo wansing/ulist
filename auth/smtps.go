@@ -35,3 +35,7 @@ func (s SMTPS) Authenticate(email, password string) (bool, error) {
 func (s SMTPS) Available() bool {
 	return s.Port >= 1 && s.Port <= 65535
 }
+
+func (s SMTPS) Name() string {
+	return fmt.Sprintf("SMTPS at Port %d", s.Port)
+}

@@ -9,6 +9,7 @@ import (
 )
 
 type UserDB struct {
+	connStr  string // for Name()
 	sqlDB    *sql.DB
 	authStmt *sql.Stmt
 }
@@ -32,7 +33,8 @@ func OpenUserDB(connStr string) (*UserDB, error) {
 	}
 
 	db := &UserDB{
-		sqlDB: sqlDB,
+		connStr: connStr,
+		sqlDB:   sqlDB,
 	}
 
 	db.authStmt, err = sqlDB.Prepare("select scheme, hash from users where name = ?")
@@ -63,6 +65,10 @@ func (db *UserDB) Authenticate(username, password string) (bool, error) {
 	default:
 		return false, fmt.Errorf("unknown scheme %s", scheme)
 	}
+}
+
+func (db *UserDB) Name() string {
+	return fmt.Sprintf("SQLite3 database %s", db.connStr)
 }
 
 func (db *UserDB) Close() error {

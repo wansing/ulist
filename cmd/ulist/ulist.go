@@ -174,6 +174,10 @@ func main() {
 		},
 	}
 
+	if names := w.AuthenticatorNames(); names != "" {
+		log.Printf("authenticators: %s", names)
+	}
+
 	if !w.AuthenticationAvailable() && !ul.DummyMode {
 		log.Printf(warnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
 	}

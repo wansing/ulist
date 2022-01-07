@@ -34,3 +34,7 @@ func (s STARTTLS) Authenticate(email, password string) (bool, error) {
 func (s STARTTLS) Available() bool {
 	return s.Port >= 1 && s.Port <= 65535
 }
+
+func (s STARTTLS) Name() string {
+	return fmt.Sprintf("STARTTLS at Port %d", s.Port)
+}

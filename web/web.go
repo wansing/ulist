@@ -124,6 +124,7 @@ type Web struct {
 type UserRepo interface {
 	Authenticate(userid, password string) (success bool, err error) // should not be called if Available() returns false
 	Available() bool
+	Name() string
 }
 
 // if f returns err, it must not execute a template or redirect
@@ -192,6 +193,16 @@ func (w Web) AuthenticationAvailable() bool {
 		}
 	}
 	return false
+}
+
+func (w Web) AuthenticatorNames() string {
+	names := []string{}
+	for _, userRepo := range w.UserRepos {
+		if userRepo.Available() {
+			names = append(names, userRepo.Name())
+		}
+	}
+	return strings.Join(names, ", ")
 }
 
 func (w Web) NewServer() *http.Server {

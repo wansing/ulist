@@ -218,20 +218,25 @@ func main() {
 
 	// LMTP server
 
-	lmtpSrv := ulist.NewLMTPServer(lmtpSock, ul)
+	lmtpSrv := ulist.NewLMTPServer(ul)
 	defer lmtpSrv.Close()
 
-	go func() {
-		if err := lmtpSrv.ListenAndServe(); err != nil {
-			log.Printf("lmtp server error: %v", err)
-			shutdownChan <- syscall.SIGINT
-		}
-	}()
-
+	lmtpListener, err := net.Listen("unix", lmtpSock)
+	if err != nil {
+		log.Printf("error creating LMTP socket: %v", err)
+		return
+	}
 	if err := os.Chmod(lmtpSock, 0777); err != nil {
 		log.Printf("error setting LMTP socket permissions: %v", err)
 		return
 	}
+
+	go func() {
+		if err := lmtpSrv.Serve(lmtpListener); err != nil {
+			log.Printf("lmtp server error: %v", err)
+			shutdownChan <- syscall.SIGINT
+		}
+	}()
 
 	log.Printf("LMTP listener: %s", lmtpSock)
 

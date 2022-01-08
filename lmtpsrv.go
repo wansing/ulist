@@ -1,6 +1,7 @@
 package ulist
 
 import (
+	"net"
 	"time"
 
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
@@ -8,12 +9,11 @@ import (
 
 type LMTPServer interface {
 	Close() error
-	ListenAndServe() error
+	Serve(net.Listener) error
 }
 
-func NewLMTPServer(lmtpSock string, ul *Ulist) LMTPServer {
+func NewLMTPServer(ul *Ulist) LMTPServer {
 	s := smtp.NewServer(&LMTPBackend{ul})
-	s.Addr = lmtpSock
 	s.LMTP = true
 	s.Domain = "localhost"
 	s.WriteTimeout = 10 * time.Second

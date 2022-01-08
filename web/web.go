@@ -365,7 +365,8 @@ func (w Web) login(ctx *Context) error {
 			return nil
 		} else {
 			log.Printf("    web: authentication failed from client %s with error: %v", ExtractIP(ctx.r), err) // fail2ban can match this pattern
-			ctx.Alertf("Error")
+			ctx.Alertf("Authentication failed")
+			ctx.Redirect("/")
 			return nil
 		}
 	}

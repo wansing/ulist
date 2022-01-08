@@ -2,11 +2,13 @@ package mailutil
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
 	"net/mail"
 	"os/exec"
+	"time"
 )
 
 func writeMail(writer io.Writer, header mail.Header, body io.Reader) error {
@@ -38,6 +40,16 @@ func (DummyMTA) String() string {
 	return "DummyMTA"
 }
 
+// Sendmail runs /usr/bin/sendmail, which nowadays is an interface provided by several MTAs.
+//
+// The postfix sendmail interface needs access to:
+//
+//     /etc/postfix/main.cf (read)
+//     /var/spool/postfix/maildrop (write and execute)
+//
+// Postfix uses the postdrop setgid binary to access the maildrop directory.
+// Modern security measures (like mount namespaces and systemd service options) don't work with setgid.
+// Our workaround is to run our binary with SupplementaryGroup=postdrop.
 type Sendmail struct{}
 
 func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Header, body io.Reader) error {
@@ -45,7 +57,10 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 	args := []string{"-i", "-f", envelopeFrom, "--"} // -i When reading a message from standard input, don't treat a line with only a . character as the end of input.
 	args = append(args, envelopeTo...)
 
-	sendmail := exec.Command("/usr/sbin/sendmail", args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	sendmail := exec.CommandContext(ctx, "/usr/bin/sendmail", args...)
 
 	stdin, err := sendmail.StdinPipe()
 	if err != nil {
@@ -62,8 +77,7 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 
 	stdin.Close()
 
-	err = sendmail.Wait()
-	if err != nil {
+	if err := sendmail.Wait(); err != nil {
 		return fmt.Errorf("sendmail returned: %v", err)
 	}
 

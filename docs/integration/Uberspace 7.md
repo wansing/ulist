@@ -14,7 +14,7 @@ mkdir ~/ulist
 cd ~/ulist
 git clone https://github.com/wansing/ulist
 cd ulist
-./build.sh
+go build ./cmd/...
 ```
 
 ## `~/.qmail` files
@@ -35,6 +35,7 @@ Uberspace 7 does not support email namespaces any more. If you use virtual mailb
 ```
 [program:ulist]
 directory=/home/example/ulist
+environment=RUNTIME_DIRECTORY="/home/example/ulist",STATE_DIRECTORY="/home/example/ulist"
 command=/home/example/ulist/ulist/ulist -http 0.0.0.0:8080 -starttls 587 -superadmin admin@example.com -weburl "https://lists.example.com"
 autostart=yes
 autorestart=yes

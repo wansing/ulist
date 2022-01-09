@@ -2,20 +2,48 @@
 
 ## `/etc/systemd/system/ulist.service`
 
+You can omit this step if you installed ulist from a proper package source, like the [Arch Linux User Repository (AUR)](https://aur.archlinux.org/packages/ulist/).
+
 ```
 [Unit]
 Description=ulist
 After=network.target
 
 [Service]
-User=postfix
-Group=postfix
 Type=simple
-WorkingDirectory=/srv/ulist/data
-ExecStart=/usr/bin/ulist -lmtp /var/spool/postfix/private/ulist-lmtp -smtps 465 -socketmap /var/spool/postfix/private/ulist-socketmap -superadmin admin@example.com -weburl "https://lists.example.com"
+User=ulist
+Group=ulist
+SupplementaryGroups=postdrop
+PrivateDevices=true
+PrivateIPC=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/ulist
+ReadWritePaths=/var/spool/postfix/maildrop/
+RuntimeDirectory=ulist
+EnvironmentFile=/etc/ulist/ulist.conf
+ExecStart=/usr/bin/ulist
 
 [Install]
 WantedBy=multi-user.target
+```
+
+Create the system user:
+
+```
+useradd --system --shell /usr/bin/nologin --create-home --home-dir /var/lib/ulist ulist
+```
+
+## `/etc/ulist/ulist.conf`
+
+```
+http=127.0.0.1:8080
+smtps=
+starttls=
+superadmin=
+weburl=http://127.0.0.1:8080
 ```
 
 ## `/etc/nginx/nginx.conf`
@@ -44,6 +72,6 @@ The `recipient_delimiter = +` is required in order to receive bounces at `listna
 recipient_delimiter = +
 virtual_mailbox_domains = example.com [...]
 virtual_transport = lmtp:unix:/var/spool/postfix/private/dovecot-lmtp
-transport_maps = socketmap:unix:/var/spool/postfix/private/ulist-socketmap:name
+transport_maps = socketmap:unix:/run/ulist/socketmap.sock:name
 [...]
 ```

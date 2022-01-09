@@ -9,21 +9,17 @@ A mailing list service that keeps it simple. An alternative to mailman in some u
 ## Build
 
 ```
-go build
+go build ./cmd/...
 ```
 
 Arch Linux users can install ulist from the [AUR](https://aur.archlinux.org/packages/ulist/).
 
 ## Integration
 
-* mail submission: ulist listens to an LMTP socket
-* mail delivery to system's MTA: ulist executes `/usr/sbin/sendmail`
+* Email submission: ulist listens to an LMTP socket
+* Email delivery to system's MTA: ulist executes `/usr/sbin/sendmail`
 * Web UI: ulist listens to a port or a unix socket
-* Web UI authentication: against a local database or SMTP server, see [auth](https://github.com/wansing/auth)
-* Supported databases
-  * SQLite
-  * PostgreSQL (untested, probably not working yet)
-  * MySQL/MariaDB (untested, probably not working yet)
+* Web UI authentication: against a local SQLite database or an SMTP server
 
 See `docs/integration` for examples.
 
@@ -32,7 +28,7 @@ See `docs/integration` for examples.
 * single binary
 * nice web interface
 * works with SPF, DKIM etc. out of the box
-* pluggable authentication
+* SMTP authentication
 * probably GDPR compliant
 * appends a footer with an unsubscribe link
 * [socketmap](http://www.postfix.org/socketmap_table.5.html) server for postfix
@@ -41,7 +37,7 @@ See `docs/integration` for examples.
 
 * Email delivery via the sendmail interface
   * no recipient limit
-  * when running in a jail, you need access to `/etc/postfix`, `/var/log/postfix` and `/var/spool/postfix/maildrop`
+  * when running in a jail, you need access to `/etc/postfix/main.cf` and `/var/spool/postfix/maildrop`
   * easier than SMTP delivery (`localhost:25` usually accepts mail for localhost only and might drop emails for other recipients, `localhost:587` usually requires authentication and SSL/TLS)
 * From-Munging
   * If a forwarded email is not modified, DKIM will pass but SPF checks might fail. We could predict the consequences by checking the sender's DMARC policy. But for the sake of consistence, let's rewrite all `From` headers to the mailing list address and remove existing DKIM signatures.

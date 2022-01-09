@@ -732,7 +732,7 @@ func (w Web) knowns(ctx *Context, list *ulist.List) error {
 		} else if ctx.r.PostFormValue("remove") != "" {
 			removed, err := w.Lists.RemoveKnowns(list, addrs)
 			if len(removed) > 0 {
-				ctx.Successf("Added %d known addresses", len(removed))
+				ctx.Successf("Removed %d known addresses", len(removed))
 			}
 			if err != nil {
 				ctx.Alertf("Error: %v", err)

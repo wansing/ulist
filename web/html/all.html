@@ -2,7 +2,7 @@
 {{ define "content" }}
 	<h1>All mailing lists</h1>
 	{{ with .Lists }}
-		<div class="list-group">
+		<div class="list-group mb-4">
 			{{ $domain := "" }}
 			{{ range . }}
 				{{ if ne $domain .Domain }}

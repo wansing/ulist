@@ -463,10 +463,13 @@ func (w Web) create(ctx *Context) error {
 	data.AdminMods = ctx.r.PostFormValue("admin_mods")
 
 	if ctx.r.Method == http.MethodPost {
-		list, errs := w.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User))
+		list, added, errs := w.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User))
+		if added > 0 {
+			ctx.Successf("%d members have been added and notified.", added)
+		}
 		if len(errs) > 0 {
 			for _, err := range errs {
-				ctx.Alertf("Error creating list: %v", err)
+				ctx.Alertf("Error: %v", err)
 			}
 			return nil
 		}
@@ -578,12 +581,18 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		errs := w.AddMembers(list, true, addrs, true, false, false, false, reason)
+		added, errs := w.AddMembers(list, true, addrs, true, false, false, false, reason)
+		if added > 0 {
+			ctx.Successf("%d members have been added and notified.", added)
+		}
 		for _, err := range errs {
 			ctx.Alertf("Error: %v", err)
 		}
 	case "silent":
-		errs := w.AddMembers(list, false, addrs, true, false, false, false, reason)
+		added, errs := w.AddMembers(list, false, addrs, true, false, false, false, reason)
+		if added > 0 {
+			ctx.Successf("%d members have been added.", added)
+		}
 		for _, err := range errs {
 			ctx.Alertf("Error: %v", err)
 		}
@@ -657,12 +666,18 @@ func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		errs := w.RemoveMembers(list, true, addrs, reason)
+		removed, errs := w.RemoveMembers(list, true, addrs, reason)
+		if removed > 0 {
+			ctx.Successf("%d members have been removed and notified.", removed)
+		}
 		for _, err := range errs {
 			ctx.Alertf("Error: %v", err)
 		}
 	case "silent":
-		errs := w.RemoveMembers(list, false, addrs, reason)
+		removed, errs := w.RemoveMembers(list, false, addrs, reason)
+		if removed > 0 {
+			ctx.Successf("%d members have been removed.", removed)
+		}
 		for _, err := range errs {
 			ctx.Alertf("Error: %v", err)
 		}
@@ -1070,12 +1085,12 @@ func (w Web) leave(ctx *Context) error {
 			return nil
 		}
 
-		if errs := w.RemoveMembers(list, true, []*mailutil.Addr{ctx.User}, "authenticated user left list via web ui"); len(errs) > 0 {
-			for _, err := range errs {
-				ctx.Alertf("Error: %v", err)
-			}
-		} else {
-			ctx.Successf("You left the list %s", list.RFC5322AddrSpec())
+		removed, errs := w.RemoveMembers(list, true, []*mailutil.Addr{ctx.User}, "authenticated user left list via web ui")
+		if removed == 1 {
+			ctx.Successf("You have left the mailing list %s", list.RFC5322AddrSpec())
+		}
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
 		}
 		ctx.Redirect("/")
 		return nil
@@ -1176,12 +1191,12 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 	// join list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_join") == "yes" {
-		if errs := w.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui"); len(errs) > 0 {
-			for _, err := range errs {
-				ctx.Alertf("Error: %v", err)
-			}
-		} else {
+		added, errs := w.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui")
+		if added == 1 {
 			ctx.Successf("You have joined the mailing list %s", list)
+		}
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
 		}
 		ctx.Redirect("/")
 		return nil
@@ -1223,12 +1238,12 @@ func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 	// leave list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_leave") == "yes" {
-		if errs := w.RemoveMembers(list, true, []*mailutil.Addr{addr}, "user confirmed in web ui"); len(errs) > 0 {
-			for _, err := range errs {
-				ctx.Alertf("Error: %v", err)
-			}
-		} else {
+		removed, errs := w.RemoveMembers(list, true, []*mailutil.Addr{addr}, "user confirmed in web ui")
+		if removed == 1 {
 			ctx.Successf("You have left the mailing list %s", list)
+		}
+		for _, err := range errs {
+			ctx.Alertf("Error: %v", err)
 		}
 		ctx.Redirect("/")
 		return nil

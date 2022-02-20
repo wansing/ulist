@@ -232,14 +232,14 @@ func transact(envelopes ...*mailutil.MTAEnvelope) error {
 }
 
 func TestCreateListBounceSuffix(t *testing.T) {
-	_, errs := ul.CreateList("suffix+bounces@example.com", "name", "", "testing")
+	_, _, errs := ul.CreateList("suffix+bounces@example.com", "name", "", "testing")
 	wantErrs(t, errs, `list address can't end with "+bounces"`)
 	wantChansEmpty(t)
 }
 
 func TestGetList(t *testing.T) {
 
-	if _, errs := ul.CreateList("get-list@example.com", "Created List", "", "testing"); errs != nil {
+	if _, _, errs := ul.CreateList("get-list@example.com", "Created List", "", "testing"); errs != nil {
 		t.Fatal(errs)
 	}
 

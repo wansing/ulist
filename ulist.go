@@ -238,11 +238,11 @@ func (u *Ulist) SignoffJoinMessage(list *List, member *Addr) (*bytes.Buffer, err
 	return buf, err
 }
 
-func (u *Ulist) AddMembers(list *List, sendWelcome bool, addrs []*Addr, receive, moderate, notify, admin bool, reason string) []error {
+func (u *Ulist) AddMembers(list *List, sendWelcome bool, addrs []*Addr, receive, moderate, notify, admin bool, reason string) (int, []error) {
 
 	added, err := u.Lists.AddMembers(list, addrs, receive, moderate, notify, admin)
 	if err != nil {
-		return []error{err}
+		return 0, []error{err}
 	}
 
 	var gdprEvent = &strings.Builder{}
@@ -285,24 +285,25 @@ func (u *Ulist) AddMembers(list *List, sendWelcome bool, addrs []*Addr, receive,
 		}
 	}
 
-	return errs
+	return len(added), errs
 }
 
-func (u *Ulist) CreateList(address, name, rawAdminMods string, reason string) (*List, []error) {
+func (u *Ulist) CreateList(address, name, rawAdminMods string, reason string) (*List, int, []error) {
 	adminMods, errs := mailutil.ParseAddresses(rawAdminMods, WebBatchLimit)
 	if len(errs) > 0 {
-		return nil, []error{fmt.Errorf("parsing %d email addresses", len(errs))}
+		return nil, 0, []error{fmt.Errorf("parsing %d email addresses", len(errs))}
 	}
 
 	list, err := u.Lists.Create(address, name)
 	if err != nil {
-		return nil, []error{err}
+		return nil, 0, []error{err}
 	}
 
-	return list, u.AddMembers(list, true, adminMods, true, true, true, true, reason)
+	added, errs := u.AddMembers(list, true, adminMods, true, true, true, true, reason)
+	return list, added, errs
 }
 
-func (u *Ulist) RemoveMembers(list *List, sendGoodbye bool, addrs []*Addr, reason string) []error {
+func (u *Ulist) RemoveMembers(list *List, sendGoodbye bool, addrs []*Addr, reason string) (int, []error) {
 
 	// goodbye message is the same for all users, so we can create it now
 	var goodbyeBody []byte
@@ -310,13 +311,13 @@ func (u *Ulist) RemoveMembers(list *List, sendGoodbye bool, addrs []*Addr, reaso
 	if sendGoodbye {
 		goodbyeBody, err = list.SignoffLeaveMessage()
 		if err != nil {
-			return []error{fmt.Errorf("executing email template: %w", err)}
+			return 0, []error{fmt.Errorf("executing email template: %w", err)}
 		}
 	}
 
 	removed, err := u.Lists.RemoveMembers(list, addrs)
 	if err != nil {
-		return []error{err}
+		return 0, []error{err}
 	}
 
 	var gdprEvent = &strings.Builder{}
@@ -349,5 +350,5 @@ func (u *Ulist) RemoveMembers(list *List, sendGoodbye bool, addrs []*Addr, reaso
 		}
 	}
 
-	return errs
+	return len(removed), errs
 }

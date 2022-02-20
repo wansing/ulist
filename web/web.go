@@ -24,8 +24,8 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/captcha"
+	"github.com/wansing/ulist/html/static"
 	"github.com/wansing/ulist/mailutil"
-	"github.com/wansing/ulist/static"
 	"github.com/wansing/ulist/web/html"
 )
 

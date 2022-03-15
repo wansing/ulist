@@ -60,7 +60,7 @@ func (Sendmail) Send(envelopeFrom string, envelopeTo []string, header mail.Heade
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	sendmail := exec.CommandContext(ctx, "/usr/bin/sendmail", args...)
+	sendmail := exec.CommandContext(ctx, "/usr/sbin/sendmail", args...)
 
 	stdin, err := sendmail.StdinPipe()
 	if err != nil {

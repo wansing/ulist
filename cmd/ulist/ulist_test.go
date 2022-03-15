@@ -15,9 +15,9 @@ import (
 
 	"github.com/emersion/go-smtp"
 	"github.com/wansing/ulist"
+	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/repos/sqlite"
-	"github.com/wansing/ulist/util"
 	"github.com/wansing/ulist/web"
 )
 
@@ -44,7 +44,7 @@ func init() {
 
 	ul = &ulist.Ulist{
 		DummyMode:  true,
-		GDPRLogger: util.ChanLogger(gdprChannel),
+		GDPRLogger: filelog.ChanLogger(gdprChannel),
 		Lists:      listDB,
 		MTA:        mailutil.ChanMTA(messageChannel),
 		SpoolDir:   "/tmp",

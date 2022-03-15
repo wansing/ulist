@@ -14,10 +14,10 @@ import (
 
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/auth"
+	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/repos/sqlite"
 	"github.com/wansing/ulist/sockmap"
-	"github.com/wansing/ulist/util"
 	"github.com/wansing/ulist/web"
 	"golang.org/x/sys/unix"
 )
@@ -96,7 +96,7 @@ func main() {
 
 	// dbs
 
-	gdprLogger, err := util.NewFileLogger(filepath.Join(stateDir, "gdpr.log"))
+	gdprLogger, err := filelog.NewFileLogger(filepath.Join(stateDir, "gdpr.log"))
 	if err != nil {
 		log.Printf("error creating GDPR logfile: %v", err)
 		return

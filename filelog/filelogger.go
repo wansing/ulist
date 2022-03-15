@@ -1,4 +1,4 @@
-package util
+package filelog
 
 import (
 	"fmt"
@@ -6,13 +6,6 @@ import (
 	"os"
 	"sync"
 )
-
-type ChanLogger chan string
-
-func (c ChanLogger) Printf(format string, v ...interface{}) error {
-	chan string(c) <- fmt.Sprintf(format, v...)
-	return nil
-}
 
 // Logs into a file. Timestamps are in UTC.
 type FileLogger struct {

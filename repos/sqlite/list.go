@@ -1,7 +1,10 @@
 package sqlite
 
 import (
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,7 +12,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/mailutil"
-	"github.com/wansing/ulist/util"
 )
 
 type ListDB struct {
@@ -204,6 +206,20 @@ func (db *ListDB) PublicLists() ([]ulist.ListInfo, error) {
 	return db.listsWhere("public_signup = 1")
 }
 
+// 24 bytes (192 bits) of entropy, base64 encoded
+func randomString32() (string, error) {
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+
+	encoded := base64.URLEncoding.EncodeToString(b) // URLEncoding is with padding
+	if len(encoded) < 32 {
+		return "", errors.New("random string is too short")
+	}
+	return encoded[:32], nil
+}
+
 // CreateList creates a new mailing list with default actions: messages from unknown senders are moderated, all others pass.
 func (db *ListDB) Create(address, name string) (*ulist.List, error) {
 
@@ -220,7 +236,7 @@ func (db *ListDB) Create(address, name string) (*ulist.List, error) {
 		addr.Display = name // override parsed display name
 	}
 
-	hmacKey, err := util.RandomString32()
+	hmacKey, err := randomString32()
 	if err != nil {
 		return nil, err
 	}

@@ -3,19 +3,25 @@ package captcha
 import (
 	"errors"
 	"html/template"
+	"math/rand"
 	"net/http"
-
-	"github.com/wansing/ulist/util"
+	"time"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 var ErrBotDetected = errors.New("bot detected")
 
-func Create() (template.HTML, error) {
-	r, err := util.RandomString32()
-	if err != nil {
-		return "", err
+var letters = []byte("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+
+func Create() template.HTML {
+	r := make([]byte, 32)
+	for i := range r {
+		r[i] = letters[rand.Intn(len(letters))]
 	}
-	return template.HTML(`<input name="` + r + `" class="form-control" value="" />`), nil
+	return template.HTML(`<input name="` + string(r) + `" class="form-control" value="" />`)
 }
 
 func Check(r *http.Request) error {

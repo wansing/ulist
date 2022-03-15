@@ -14,7 +14,7 @@ mkdir ~/ulist
 cd ~/ulist
 git clone https://github.com/wansing/ulist
 cd ulist
-go build ./cmd/...
+go build -trimpath -buildmode=pie -mod=readonly -modcacherw -ldflags "-linkmode external -extldflags \"${LDFLAGS}\"" ./cmd/...
 ```
 
 ## `~/.qmail` files

@@ -6,33 +6,25 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
+	"net/http"
 	"net/mail"
-	"net/url"
+	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/sockmap"
 	"github.com/wansing/ulist/txt"
+	"golang.org/x/sys/unix"
 )
 
 const BounceAddressSuffix = "+bounces"
 const WebBatchLimit = 1000
-
-type Ulist struct {
-	DummyMode  bool
-	GDPRLogger Logger
-	Lists      ListRepo
-	LMTPSock   string
-	MTA        mailutil.MTA
-	SpoolDir   string
-	Superadmin string // RFC5322 AddrSpec, can create new mailing lists and modify all mailing lists
-	WebURL     string
-
-	LastLogID uint32
-	Waiting   sync.WaitGroup
-}
 
 type ListRepo interface {
 	AddKnowns(list *List, addrs []*Addr) ([]*Addr, error)
@@ -60,6 +52,128 @@ type ListRepo interface {
 
 type Logger interface {
 	Printf(format string, v ...interface{}) error
+}
+
+type WebInterface interface {
+	AskLeaveUrl(list *List) string
+	AuthenticationAvailable() bool
+	CheckbackJoinUrl(list *List, timestamp int64, hmac string, recipient *Addr) string
+	CheckbackLeaveUrl(list *List, timestamp int64, hmac string, recipient *Addr) string
+	FooterHTML(list *List) string
+	FooterPlain(list *List) string
+	ListenAndServe() error
+	ModUrl(list *List) string
+}
+
+type Ulist struct {
+	DummyMode     bool
+	GDPRLogger    Logger
+	Lists         ListRepo
+	LMTPSock      string
+	MTA           mailutil.MTA
+	SocketmapSock string
+	SpoolDir      string
+	Superadmin    string       // RFC5322 AddrSpec, can create new mailing lists and modify all mailing lists
+	Web           WebInterface // if nil, users won't be able to checkback join and leave, and moderators won't be able to moderate
+
+	LastLogID uint32
+	Waiting   sync.WaitGroup
+}
+
+func (u *Ulist) ListenAndServe() {
+
+	if u.MTA == nil {
+		u.MTA = mailutil.Sendmail{}
+	}
+
+	// check spool dir
+
+	if err := os.MkdirAll(u.SpoolDir, 0700); err != nil {
+		log.Printf("error creating spool directory: %v", err)
+		return
+	}
+
+	if unix.Access(u.SpoolDir, unix.W_OK) != nil {
+		log.Printf("spool directory %s is not writeable", u.SpoolDir)
+		return
+	}
+
+	log.Printf("spool directory: %s", u.SpoolDir)
+
+	// graceful shutdown
+
+	shutdownChan := make(chan os.Signal, 1)
+	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// socketmap server
+
+	sockmapSrv := sockmap.NewServer(u.Lists.IsList, u.LMTPSock)
+	defer sockmapSrv.Close()
+
+	sockmapListener, err := net.Listen("unix", u.SocketmapSock)
+	if err != nil {
+		log.Printf("error creating socketmap socket: %v", err)
+		return
+	}
+	if err := os.Chmod(u.SocketmapSock, 0777); err != nil {
+		log.Printf("error setting socketmap socket permissions: %v", err)
+		return
+	}
+
+	go func() {
+		if err := sockmapSrv.Serve(sockmapListener); err != nil {
+			log.Printf("socketmap server error: %v", err)
+			shutdownChan <- syscall.SIGINT
+		}
+	}()
+
+	log.Printf("socketmap listener: %s", u.SocketmapSock)
+
+	// web server
+
+	if u.Web != nil {
+		go func() {
+			if err := u.Web.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				log.Printf("web server error: %v", err)
+				shutdownChan <- syscall.SIGINT
+			}
+		}()
+
+		if !u.Web.AuthenticationAvailable() && !u.DummyMode {
+			const warnFormat = "\033[1;31m%s\033[0m"
+			log.Printf(warnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
+		}
+	}
+
+	// LMTP server
+
+	lmtpSrv := NewLMTPServer(u)
+	defer lmtpSrv.Close()
+
+	lmtpListener, err := net.Listen("unix", u.LMTPSock)
+	if err != nil {
+		log.Printf("error creating LMTP socket: %v", err)
+		return
+	}
+	if err := os.Chmod(u.LMTPSock, 0777); err != nil {
+		log.Printf("error setting LMTP socket permissions: %v", err)
+		return
+	}
+
+	go func() {
+		if err := lmtpSrv.Serve(lmtpListener); err != nil {
+			log.Printf("lmtp server error: %v", err)
+			shutdownChan <- syscall.SIGINT
+		}
+	}()
+
+	log.Printf("LMTP listener: %s", u.LMTPSock)
+
+	// wait for shutdown signal
+
+	log.Printf("running")
+	<-shutdownChan
+	log.Println("received shutdown signal")
 }
 
 func (u *Ulist) GetRoles(list *List, addr *Addr) ([]Status, error) {
@@ -155,9 +269,14 @@ func (u *Ulist) Forward(list *List, m *mailutil.Message) error {
 
 	// add footer
 
-	var bodyWithFooter, err = u.insertFooter(list, header, m.BodyReader())
-	if err != nil {
-		return err
+	var bodyWithFooter = m.BodyReader()
+	if u.Web != nil {
+		// add footer
+		var err error
+		bodyWithFooter, err = mailutil.InsertFooter(header, bodyWithFooter, u.Web.FooterPlain(list), u.Web.FooterHTML(list))
+		if err != nil {
+			return err
+		}
 	}
 
 	// send emails
@@ -175,19 +294,25 @@ func (u *Ulist) StorageFolder(li ListInfo) string {
 }
 
 func (u *Ulist) CheckbackJoinUrl(list *List, recipient *Addr) (string, error) {
-	timestamp, hmac, err := list.CreateHMAC(recipient)
-	if err != nil {
-		return "", err
+	if u.Web != nil {
+		timestamp, hmac, err := list.CreateHMAC(recipient)
+		if err != nil {
+			return "", err
+		}
+		return u.Web.CheckbackJoinUrl(list, timestamp, hmac, recipient), nil
 	}
-	return fmt.Sprintf("%s/join/%s/%d/%s/%s", u.WebURL, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec())), nil
+	return "", nil
 }
 
 func (u *Ulist) CheckbackLeaveUrl(list *List, recipient *Addr) (string, error) {
-	timestamp, hmac, err := list.CreateHMAC(recipient)
-	if err != nil {
-		return "", err
+	if u.Web != nil {
+		timestamp, hmac, err := list.CreateHMAC(recipient)
+		if err != nil {
+			return "", err
+		}
+		return u.Web.CheckbackLeaveUrl(list, timestamp, hmac, recipient), nil
 	}
-	return fmt.Sprintf("%s/leave/%s/%d/%s/%s", u.WebURL, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec())), nil
+	return "", nil
 }
 
 // Notify notifies recipients about something related to the list.
@@ -206,11 +331,18 @@ func (u *Ulist) NotifyMods(list *List, mods []string) error {
 
 	// render template
 
+	var footer string
+	var modUrl string
+	if u.Web != nil {
+		footer = u.Web.FooterPlain(list)
+		modUrl = u.Web.ModUrl(list)
+	}
+
 	body := &bytes.Buffer{}
 	data := txt.NotifyModsData{
-		Footer:       u.plainFooter(list),
+		Footer:       footer,
 		ListNameAddr: list.RFC5322NameAddr(),
-		ModHref:      fmt.Sprintf("%s/mod/%s", u.WebURL, url.PathEscape(list.RFC5322AddrSpec())),
+		ModHref:      modUrl,
 	}
 
 	if err := txt.NotifyMods.Execute(body, data); err != nil {
@@ -229,9 +361,15 @@ func (u *Ulist) NotifyMods(list *List, mods []string) error {
 }
 
 func (u *Ulist) SignoffJoinMessage(list *List, member *Addr) (*bytes.Buffer, error) {
+
+	var footer string
+	if u.Web != nil {
+		footer = u.Web.FooterPlain(list)
+	}
+
 	var buf = &bytes.Buffer{}
 	var err = txt.SignoffJoin.Execute(buf, txt.SignoffJoinData{
-		Footer:      u.plainFooter(list),
+		Footer:      footer,
 		ListAddress: list.RFC5322AddrSpec(),
 		MailAddress: member.RFC5322AddrSpec(),
 	})

@@ -3,26 +3,17 @@ package main
 import (
 	"flag"
 	"log"
-	"net"
-	"net/http"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strconv"
-	"strings"
-	"syscall"
 
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/auth"
 	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/repos/sqlite"
-	"github.com/wansing/ulist/sockmap"
 	"github.com/wansing/ulist/web"
-	"golang.org/x/sys/unix"
 )
-
-const warnFormat = "\033[1;31m%s\033[0m"
 
 func main() {
 
@@ -57,6 +48,7 @@ func main() {
 
 	if dummyMode {
 		superadmin = "test@example.com"
+		const warnFormat = "\033[1;31m%s\033[0m"
 		log.Printf(warnFormat, "ulist runs in dummy mode. Everyone can login as superadmin and no emails are sent.")
 	}
 
@@ -82,17 +74,6 @@ func main() {
 	}
 
 	spoolDir := filepath.Join(stateDir, "spool")
-	if err := os.MkdirAll(spoolDir, 0700); err != nil {
-		log.Printf("error creating spool directory: %v", err)
-		return
-	}
-
-	if unix.Access(spoolDir, unix.W_OK) != nil {
-		log.Printf("spool directory %s is not writeable", spoolDir)
-		return
-	}
-
-	log.Printf("spool directory: %s", spoolDir)
 
 	// dbs
 
@@ -119,55 +100,21 @@ func main() {
 
 	// create Ulist
 
-	var mta mailutil.MTA = mailutil.Sendmail{}
-	if dummyMode {
-		mta = mailutil.DummyMTA{}
-	}
-
 	ul := &ulist.Ulist{
-		DummyMode:  dummyMode,
-		GDPRLogger: gdprLogger,
-		Lists:      listDB,
-		MTA:        mta,
-		Superadmin: superadmin,
-		SpoolDir:   spoolDir,
-		WebURL:     webURL,
+		DummyMode:     dummyMode,
+		GDPRLogger:    gdprLogger,
+		Lists:         listDB,
+		LMTPSock:      lmtpSock,
+		SocketmapSock: socketmapSock,
+		Superadmin:    superadmin,
+		SpoolDir:      spoolDir,
 	}
 	defer ul.Waiting.Wait()
 
-	// servers
-
-	shutdownChan := make(chan os.Signal, 1)
-	signal.Notify(shutdownChan, syscall.SIGINT, syscall.SIGTERM)
-
-	// socketmap server
-
-	sockmapSrv := sockmap.NewServer(ul.Lists.IsList, lmtpSock)
-	defer sockmapSrv.Close()
-
-	sockmapListener, err := net.Listen("unix", socketmapSock)
-	if err != nil {
-		log.Printf("error creating socketmap socket: %v", err)
-		return
-	}
-	if err := os.Chmod(socketmapSock, 0777); err != nil {
-		log.Printf("error setting socketmap socket permissions: %v", err)
-		return
-	}
-
-	go func() {
-		if err := sockmapSrv.Serve(sockmapListener); err != nil {
-			log.Printf("socketmap server error: %v", err)
-			shutdownChan <- syscall.SIGINT
-		}
-	}()
-
-	log.Printf("socketmap listener: %s", socketmapSock)
-
-	// web server
-
-	w := web.Web{
-		Ulist: ul,
+	ul.Web = web.Web{
+		Ulist:  ul,
+		Listen: webListen,
+		URL:    webURL,
 		UserRepos: []web.UserRepo{ // SQL database first. Note that if both smtps and starttls ports are given and refer to the same email server, the email server might be queried twice.
 			userDB,
 			auth.SMTPS{
@@ -179,70 +126,11 @@ func main() {
 		},
 	}
 
-	if names := w.AuthenticatorNames(); names != "" {
-		log.Printf("authenticators: %s", names)
+	if dummyMode {
+		ul.MTA = mailutil.DummyMTA{}
 	}
 
-	if !w.AuthenticationAvailable() && !ul.DummyMode {
-		log.Printf(warnFormat, "There are no authenticators available. Users won't be able to log into the web interface.")
+	if err := ul.ListenAndServe(); err != nil {
+		log.Printf("error %v", err)
 	}
-
-	webNetwork := "unix"
-	if strings.Contains(webListen, ":") {
-		webNetwork = "tcp"
-	}
-
-	webListener, err := net.Listen(webNetwork, webListen)
-	if err != nil {
-		log.Printf("error creating web listener: %v", err)
-		return
-	}
-	if webNetwork == "unix" {
-		if err := os.Chmod(webListen, 0777); err != nil {
-			log.Printf("error setting web socket permissions: %v", err)
-			return
-		}
-	}
-
-	webSrv := w.NewServer()
-	defer webSrv.Close()
-
-	go func() {
-		if err := webSrv.Serve(webListener); err != nil && err != http.ErrServerClosed {
-			log.Printf("web server error: %v", err)
-			shutdownChan <- syscall.SIGINT
-		}
-	}()
-
-	log.Printf("web listener: %s://%s ", webNetwork, webListen)
-
-	// LMTP server
-
-	lmtpSrv := ulist.NewLMTPServer(ul)
-	defer lmtpSrv.Close()
-
-	lmtpListener, err := net.Listen("unix", lmtpSock)
-	if err != nil {
-		log.Printf("error creating LMTP socket: %v", err)
-		return
-	}
-	if err := os.Chmod(lmtpSock, 0777); err != nil {
-		log.Printf("error setting LMTP socket permissions: %v", err)
-		return
-	}
-
-	go func() {
-		if err := lmtpSrv.Serve(lmtpListener); err != nil {
-			log.Printf("lmtp server error: %v", err)
-			shutdownChan <- syscall.SIGINT
-		}
-	}()
-
-	log.Printf("LMTP listener: %s", lmtpSock)
-
-	// wait for shutdown signal
-
-	log.Printf("running")
-	<-shutdownChan
-	log.Println("received shutdown signal")
 }

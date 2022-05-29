@@ -12,6 +12,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -24,7 +25,7 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/captcha"
-	"github.com/wansing/ulist/html/static"
+	"github.com/wansing/ulist/web/static"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/web/html"
 )
@@ -116,15 +117,41 @@ func (ctx *Context) Logout() {
 	_ = sessionManager.Destroy(ctx.r.Context())
 }
 
-type Web struct {
-	*ulist.Ulist
-	UserRepos []UserRepo // repos are queried in the given order
-}
-
 type UserRepo interface {
 	Authenticate(userid, password string) (success bool, err error) // should not be called if Available() returns false
 	Available() bool
 	Name() string
+}
+
+type Web struct {
+	*ulist.Ulist
+	Listen    string
+	URL       string
+	UserRepos []UserRepo // repos are queried in the given order
+}
+
+func (web Web) AskLeaveUrl(list *ulist.List) string {
+	return fmt.Sprintf("%s/leave/%s", web.URL, url.PathEscape(list.RFC5322AddrSpec()))
+}
+
+func (web Web) CheckbackJoinUrl(list *ulist.List, timestamp int64, hmac string, recipient *ulist.Addr) string {
+	return fmt.Sprintf("%s/join/%s/%d/%s/%s", web.URL, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec()))
+}
+
+func (web Web) CheckbackLeaveUrl(list *ulist.List, timestamp int64, hmac string, recipient *ulist.Addr) string {
+	return fmt.Sprintf("%s/leave/%s/%d/%s/%s", web.URL, url.PathEscape(list.RFC5322AddrSpec()), timestamp, hmac, url.PathEscape(recipient.RFC5322AddrSpec()))
+}
+
+func (web Web) ModUrl(list *ulist.List) string {
+	return fmt.Sprintf("%s/mod/%s", web.URL, url.PathEscape(list.RFC5322AddrSpec()))
+}
+
+func (web Web) FooterHTML(list *ulist.List) string {
+	return fmt.Sprintf(`<span style="font-size: 9pt;">You can leave the mailing list "%s" <a href="%s">here</a>.</span>`, list.DisplayOrLocal(), web.AskLeaveUrl(list))
+}
+
+func (web Web) FooterPlain(list *ulist.List) string {
+	return fmt.Sprintf(`You can leave the mailing list "%s" here: %s`, list.DisplayOrLocal(), web.AskLeaveUrl(list))
 }
 
 // if f returns err, it must not execute a template or redirect
@@ -203,6 +230,35 @@ func (w Web) AuthenticatorNames() string {
 		}
 	}
 	return strings.Join(names, ", ")
+}
+
+func (w Web) ListenAndServe() error {
+
+	if names := w.AuthenticatorNames(); names != "" {
+		log.Printf("authenticators: %s", names)
+	}
+
+	webNetwork := "unix"
+	if strings.Contains(w.Listen, ":") {
+		webNetwork = "tcp"
+	}
+
+	webListener, err := net.Listen(webNetwork, w.Listen)
+	if err != nil {
+		return fmt.Errorf("creating web listener: %v", err)
+	}
+	if webNetwork == "unix" {
+		if err := os.Chmod(w.Listen, 0777); err != nil {
+			return fmt.Errorf("setting web socket permissions: %v", err)
+		}
+	}
+
+	webSrv := w.NewServer()
+	defer webSrv.Close()
+
+	log.Printf("web listener: %s://%s ", webNetwork, w.Listen)
+
+	return webSrv.Serve(webListener)
 }
 
 func (w Web) NewServer() *http.Server {
@@ -1025,7 +1081,7 @@ func (w Web) askJoin(ctx *Context, list *ulist.List) error {
 
 	// convenience feature: logged-in users don't have to validate their email address
 	if ctx.LoggedIn() {
-		checkbackUrl, err := w.CheckbackJoinUrl(list, ctx.User)
+		checkbackUrl, err := w.Ulist.CheckbackJoinUrl(list, ctx.User)
 		if err != nil {
 			return err
 		}
@@ -1121,7 +1177,7 @@ func (w Web) askLeave(ctx *Context) error {
 
 	// convenience feature: logged-in members don't have to validate their email address
 	if isMember, _ := w.Lists.IsMember(list, ctx.User); isMember {
-		checkbackUrl, err := w.CheckbackLeaveUrl(list, ctx.User)
+		checkbackUrl, err := w.Ulist.CheckbackLeaveUrl(list, ctx.User)
 		if err != nil {
 			return err
 		}

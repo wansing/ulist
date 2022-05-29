@@ -1,17 +1,15 @@
-package ulist
+package mailutil
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"mime"
 	"mime/multipart"
 	"net/mail"
 	"net/textproto"
-	"net/url"
 )
 
-func (u *Ulist) insertFooter(list *List, header mail.Header, body io.Reader) (io.Reader, error) {
+func InsertFooter(header mail.Header, body io.Reader, plain, html string) (io.Reader, error) {
 
 	// RFC2045 5.2
 	// This default is assumed if no Content-Type header field is specified.
@@ -32,7 +30,7 @@ func (u *Ulist) insertFooter(list *List, header mail.Header, body io.Reader) (io
 	case "text/plain": // append footer to plain text
 		io.Copy(bodyWithFooter, body)
 		bodyWithFooter.WriteString("\r\n\r\n----\r\n")
-		bodyWithFooter.WriteString(u.plainFooter(list))
+		bodyWithFooter.WriteString(plain)
 
 	case "multipart/mixed": // insert footer as a part
 
@@ -60,7 +58,7 @@ func (u *Ulist) insertFooter(list *List, header mail.Header, body io.Reader) (io
 			io.Copy(partWriter, p)
 
 			if !footerWritten {
-				if err = u.writeMultipartFooter(list, multipartWriter); err != nil {
+				if err = writeMultipartFooter(multipartWriter, plain, html); err != nil {
 					return nil, err
 				}
 				footerWritten = true
@@ -92,7 +90,7 @@ func (u *Ulist) insertFooter(list *List, header mail.Header, body io.Reader) (io
 		}
 		io.Copy(mainPart, body)
 
-		if err := u.writeMultipartFooter(list, multipartWriter); err != nil {
+		if err := writeMultipartFooter(multipartWriter, plain, html); err != nil {
 			return nil, err
 		}
 
@@ -107,19 +105,7 @@ func (u *Ulist) insertFooter(list *List, header mail.Header, body io.Reader) (io
 	return bodyWithFooter, nil
 }
 
-func (u *Ulist) plainFooter(list *List) string {
-	return fmt.Sprintf(`You can leave the mailing list "%s" here: %s`, list.DisplayOrLocal(), u.askLeaveUrl(list))
-}
-
-func (u *Ulist) htmlFooter(list *List) string {
-	return fmt.Sprintf(`<span style="font-size: 9pt;">You can leave the mailing list "%s" <a href="%s">here</a>.</span>`, list.DisplayOrLocal(), u.askLeaveUrl(list))
-}
-
-func (u *Ulist) askLeaveUrl(list *List) string {
-	return fmt.Sprintf("%s/leave/%s", u.WebURL, url.PathEscape(list.RFC5322AddrSpec()))
-}
-
-func (u *Ulist) writeMultipartFooter(list *List, mw *multipart.Writer) error {
+func writeMultipartFooter(mw *multipart.Writer, plain, html string) error {
 
 	var randomBoundary = multipart.NewWriter(nil).Boundary() // can't use footerMW.Boundary() because we need it now
 
@@ -138,27 +124,27 @@ func (u *Ulist) writeMultipartFooter(list *List, mw *multipart.Writer) error {
 
 	// plain text footer
 
-	var footerPlainHeader = textproto.MIMEHeader{}
-	footerPlainHeader.Add("Content-Type", "text/plain; charset=us-ascii")
-	footerPlainHeader.Add("Content-Disposition", "inline")
+	var plainHeader = textproto.MIMEHeader{}
+	plainHeader.Add("Content-Type", "text/plain; charset=us-ascii")
+	plainHeader.Add("Content-Disposition", "inline")
 
-	plainWriter, err := footerMW.CreatePart(footerPlainHeader) // don't need the returned writer because the plain text footer content is inserted later
+	plainWriter, err := footerMW.CreatePart(plainHeader) // don't need the returned writer because the plain text footer content is inserted later
 	if err != nil {
 		return err
 	}
-	plainWriter.Write([]byte(u.plainFooter(list)))
+	plainWriter.Write([]byte(plain))
 
 	// HTML footer
 
-	var footerHtmlHeader = textproto.MIMEHeader{}
-	footerHtmlHeader.Add("Content-Type", "text/html; charset=us-ascii")
-	footerHtmlHeader.Add("Content-Disposition", "inline")
+	var htmlHeader = textproto.MIMEHeader{}
+	htmlHeader.Add("Content-Type", "text/html; charset=us-ascii")
+	htmlHeader.Add("Content-Disposition", "inline")
 
-	htmlWriter, err := footerMW.CreatePart(footerHtmlHeader) // don't need the returned writer because the HTML footer content is inserted later
+	htmlWriter, err := footerMW.CreatePart(htmlHeader) // don't need the returned writer because the HTML footer content is inserted later
 	if err != nil {
 		return err
 	}
-	htmlWriter.Write([]byte(u.htmlFooter(list)))
+	htmlWriter.Write([]byte(html))
 
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 )
 
 type SMTPS struct {
-	Port uint
+	Port int
 }
 
 func (s SMTPS) Authenticate(email, password string) (bool, error) {

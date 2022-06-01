@@ -9,8 +9,8 @@ import (
 	"strings"
 
 	"github.com/wansing/ulist"
-	"github.com/wansing/ulist/captcha"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/web/captcha"
 )
 
 //go:embed *

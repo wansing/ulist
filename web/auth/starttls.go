@@ -7,7 +7,7 @@ import (
 )
 
 type STARTTLS struct {
-	Port uint
+	Port int
 }
 
 func (s STARTTLS) Authenticate(email, password string) (bool, error) {

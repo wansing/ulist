@@ -13,12 +13,12 @@ func TestBounceAddress(t *testing.T) {
 		input    ListInfo
 		expected string
 	}{
-		{ListInfo{1, Addr{"", `foo`, `example.com`}}, `foo+bounces@example.com`},
-		{ListInfo{2, Addr{"", `foo.bar`, `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
-		{ListInfo{3, Addr{"", `foo..bar`, `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
-		{ListInfo{4, Addr{"", `foo bar`, `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{5, Addr{"", `foo@bar`, `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
-		{ListInfo{6, Addr{"", `"foo@bar"`, `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
+		{ListInfo{1, Addr{Display: "", Local: `foo`, Domain: `example.com`}}, `foo+bounces@example.com`},
+		{ListInfo{2, Addr{Display: "", Local: `foo.bar`, Domain: `example.com`}}, `foo.bar+bounces@example.com`},         // one dot is okay
+		{ListInfo{3, Addr{Display: "", Local: `foo..bar`, Domain: `example.com`}}, `"foo..bar+bounces"@example.com`},     // local-parts with consecutive dots must be quoted
+		{ListInfo{4, Addr{Display: "", Local: `foo bar`, Domain: `example.com`}}, `"foo bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{5, Addr{Display: "", Local: `foo@bar`, Domain: `example.com`}}, `"foo@bar+bounces"@example.com`},       // some characters are only allowed in quotes
+		{ListInfo{6, Addr{Display: "", Local: `"foo@bar"`, Domain: `example.com`}}, `"\"foo@bar\"+bounces"@example.com`}, // double quotes must be escaped
 	}
 
 	for _, test := range tests {

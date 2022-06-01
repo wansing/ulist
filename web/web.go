@@ -24,10 +24,10 @@ import (
 	"github.com/alexedwards/scs/v2"
 	"github.com/julienschmidt/httprouter"
 	"github.com/wansing/ulist"
-	"github.com/wansing/ulist/captcha"
-	"github.com/wansing/ulist/web/static"
 	"github.com/wansing/ulist/mailutil"
+	"github.com/wansing/ulist/web/captcha"
 	"github.com/wansing/ulist/web/html"
+	"github.com/wansing/ulist/web/static"
 )
 
 var ErrAlreadyMember = errors.New("you are already a member of this list")
@@ -124,7 +124,7 @@ type UserRepo interface {
 }
 
 type Web struct {
-	*ulist.Ulist
+	Ulist     *ulist.Ulist
 	Listen    string
 	URL       string
 	UserRepos []UserRepo // repos are queried in the given order
@@ -165,7 +165,7 @@ func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(
 			r:            r,
 			ps:           ps,
 			User:         user,
-			IsSuperadmin: web.IsSuperadmin(user),
+			IsSuperadmin: web.isSuperadmin(user),
 		}
 
 		if mustBeLoggedIn && !ctx.LoggedIn() {
@@ -182,27 +182,27 @@ func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(
 	}
 }
 
-func (w Web) GetMembershipOfAuthUser(list *ulist.List, addr *ulist.Addr) (ulist.Membership, error) {
-	m, err := w.Lists.GetMembership(list, addr)
-	if w.IsSuperadmin(addr) {
+func (web Web) getMembershipOfAuthUser(list *ulist.List, addr *ulist.Addr) (ulist.Membership, error) {
+	m, err := web.Ulist.Lists.GetMembership(list, addr)
+	if web.isSuperadmin(addr) {
 		m.Moderate = true
 		m.Admin = true
 	}
 	return m, err
 }
 
-func (w Web) IsSuperadmin(addr *ulist.Addr) bool {
-	if w.Superadmin == "" {
+func (web Web) isSuperadmin(addr *ulist.Addr) bool {
+	if web.Ulist.Superadmin == "" {
 		return false
 	}
 	if addr == nil {
 		return false
 	}
-	return addr.RFC5322AddrSpec() == w.Superadmin
+	return addr.RFC5322AddrSpec() == web.Ulist.Superadmin
 }
 
-func (w Web) Authenticate(email, password string) error {
-	for _, userRepo := range w.UserRepos {
+func (web Web) authenticate(email, password string) error {
+	for _, userRepo := range web.UserRepos {
 		if !userRepo.Available() {
 			continue
 		}
@@ -213,8 +213,8 @@ func (w Web) Authenticate(email, password string) error {
 	return errors.New("authentication error")
 }
 
-func (w Web) AuthenticationAvailable() bool {
-	for _, userRepo := range w.UserRepos {
+func (web Web) AuthenticationAvailable() bool {
+	for _, userRepo := range web.UserRepos {
 		if userRepo.Available() {
 			return true
 		}
@@ -222,9 +222,9 @@ func (w Web) AuthenticationAvailable() bool {
 	return false
 }
 
-func (w Web) AuthenticatorNames() string {
+func (web Web) authenticatorNames() string {
 	names := []string{}
-	for _, userRepo := range w.UserRepos {
+	for _, userRepo := range web.UserRepos {
 		if userRepo.Available() {
 			names = append(names, userRepo.Name())
 		}
@@ -232,36 +232,35 @@ func (w Web) AuthenticatorNames() string {
 	return strings.Join(names, ", ")
 }
 
-func (w Web) ListenAndServe() error {
+func (web Web) ListenAndServe() error {
 
-	if names := w.AuthenticatorNames(); names != "" {
+	if names := web.authenticatorNames(); names != "" {
 		log.Printf("authenticators: %s", names)
 	}
 
 	webNetwork := "unix"
-	if strings.Contains(w.Listen, ":") {
+	if strings.Contains(web.Listen, ":") {
 		webNetwork = "tcp"
 	}
 
-	webListener, err := net.Listen(webNetwork, w.Listen)
+	webListener, err := net.Listen(webNetwork, web.Listen)
 	if err != nil {
 		return fmt.Errorf("creating web listener: %v", err)
 	}
 	if webNetwork == "unix" {
-		if err := os.Chmod(w.Listen, 0777); err != nil {
+		if err := os.Chmod(web.Listen, 0777); err != nil {
 			return fmt.Errorf("setting web socket permissions: %v", err)
 		}
 	}
 
-	webSrv := w.NewServer()
+	log.Printf("web listener: %s://%s ", webNetwork, web.Listen)
+
+	webSrv := web.newServer()
 	defer webSrv.Close()
-
-	log.Printf("web listener: %s://%s ", webNetwork, w.Listen)
-
 	return webSrv.Serve(webListener)
 }
 
-func (w Web) NewServer() *http.Server {
+func (w Web) newServer() *http.Server {
 	router := httprouter.New()
 	router.ServeFiles("/static/*filepath", http.FS(static.Files))
 
@@ -322,7 +321,7 @@ func (w Web) loadList(f func(*Context, *ulist.List) error) func(*Context) error 
 			return ErrNoList
 		}
 
-		list, err := w.Lists.GetList(listAddr)
+		list, err := w.Ulist.Lists.GetList(listAddr)
 		if list == nil || err != nil {
 			return ErrNoList
 		}
@@ -333,7 +332,7 @@ func (w Web) loadList(f func(*Context, *ulist.List) error) func(*Context) error 
 
 func (w Web) requireAdminPermission(f func(*Context, *ulist.List) error) func(*Context, *ulist.List) error {
 	return func(ctx *Context, list *ulist.List) error {
-		if m, _ := w.GetMembershipOfAuthUser(list, ctx.User); m.Admin {
+		if m, _ := w.getMembershipOfAuthUser(list, ctx.User); m.Admin {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -343,7 +342,7 @@ func (w Web) requireAdminPermission(f func(*Context, *ulist.List) error) func(*C
 
 func (w Web) requireModPermission(f func(*Context, *ulist.List) error) func(*Context, *ulist.List) error {
 	return func(ctx *Context, list *ulist.List) error {
-		if m, _ := w.GetMembershipOfAuthUser(list, ctx.User); m.Moderate {
+		if m, _ := w.getMembershipOfAuthUser(list, ctx.User); m.Moderate {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -355,20 +354,20 @@ func (w Web) requireModPermission(f func(*Context, *ulist.List) error) func(*Con
 
 func (w Web) myLists(ctx *Context) error {
 
-	memberships, err := w.Lists.Memberships(ctx.User)
+	memberships, err := w.Ulist.Lists.Memberships(ctx.User)
 	if err != nil {
 		return err
 	}
 
 	return ctx.Execute(html.My, html.MyData{
 		Lists:           memberships,
-		StorageFolderer: w,
+		StorageFolderer: w.Ulist,
 	})
 }
 
 func (w Web) list(ctx *Context, list *ulist.List) error {
 
-	membership, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	membership, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -394,14 +393,14 @@ func (w Web) login(ctx *Context) error {
 		return nil
 	}
 
-	if w.DummyMode {
-		ctx.setUser(w.Superadmin)
+	if w.Ulist.DummyMode {
+		ctx.setUser(w.Ulist.Superadmin)
 		ctx.Redirect("/my")
 		return nil
 	}
 
 	data := html.LoginData{
-		CanLogin: w.AuthenticationAvailable() || w.DummyMode,
+		CanLogin: w.AuthenticationAvailable() || w.Ulist.DummyMode,
 		Mail:     ctx.r.PostFormValue("email"),
 	}
 
@@ -410,7 +409,7 @@ func (w Web) login(ctx *Context) error {
 		email := strings.ToLower(strings.TrimSpace(data.Mail))
 		password := ctx.r.PostFormValue("password")
 
-		if err := w.Authenticate(email, password); err == nil {
+		if err := w.authenticate(email, password); err == nil {
 			ctx.setUser(email)
 			ctx.Successf("Welcome!")
 			if redirect := ctx.r.URL.Query()["redirect"]; len(redirect) > 0 && !strings.Contains(redirect[0], ":") { // basic protection against hijacking (?redirect=https://eve.example.com)
@@ -460,7 +459,7 @@ func (w Web) settings(ctx *Context, list *ulist.List) error {
 			return err
 		}
 
-		if err := w.Lists.Update(
+		if err := w.Ulist.Lists.Update(
 			list,
 			ctx.r.PostFormValue("name"),
 			ctx.r.PostFormValue("public_signup") != "",
@@ -478,7 +477,7 @@ func (w Web) settings(ctx *Context, list *ulist.List) error {
 		return nil
 	}
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -491,24 +490,24 @@ func (w Web) settings(ctx *Context, list *ulist.List) error {
 
 func (w Web) all(ctx *Context) error {
 
-	if !w.IsSuperadmin(ctx.User) {
+	if !w.isSuperadmin(ctx.User) {
 		return errors.New("Unauthorized")
 	}
 
-	allLists, err := w.Lists.AllLists()
+	allLists, err := w.Ulist.Lists.AllLists()
 	if err != nil {
 		return err
 	}
 
 	return ctx.Execute(html.All, html.AllData{
 		Lists:           allLists,
-		StorageFolderer: w,
+		StorageFolderer: w.Ulist,
 	})
 }
 
 func (w Web) create(ctx *Context) error {
 
-	if !w.IsSuperadmin(ctx.User) {
+	if !w.isSuperadmin(ctx.User) {
 		return errors.New("Unauthorized")
 	}
 
@@ -519,7 +518,7 @@ func (w Web) create(ctx *Context) error {
 	data.AdminMods = ctx.r.PostFormValue("admin_mods")
 
 	if ctx.r.Method == http.MethodPost {
-		list, added, errs := w.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User))
+		list, added, errs := w.Ulist.CreateList(data.Address, data.Name, data.AdminMods, fmt.Sprintf("specified during list creation by %s", ctx.User))
 		if added > 0 {
 			ctx.Successf("%d members have been added and notified.", added)
 		}
@@ -542,7 +541,7 @@ func (w Web) delete(ctx *Context, list *ulist.List) error {
 	if ctx.r.Method == http.MethodPost && ctx.r.PostFormValue("delete") == "delete" {
 
 		if ctx.r.PostFormValue("confirm_delete") == "yes" {
-			if err := w.Lists.Delete(list); err != nil {
+			if err := w.Ulist.Lists.Delete(list); err != nil {
 				return err
 			}
 			log.Printf("    web: %s deleted the mailing list %s", ctx.User, list)
@@ -559,12 +558,12 @@ func (w Web) delete(ctx *Context, list *ulist.List) error {
 
 func (w Web) members(ctx *Context, list *ulist.List) error {
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
 
-	members, err := w.Lists.Members(list)
+	members, err := w.Ulist.Lists.Members(list)
 	if err != nil {
 		return err
 	}
@@ -578,7 +577,7 @@ func (w Web) members(ctx *Context, list *ulist.List) error {
 
 func (w Web) membersAdd(ctx *Context, list *ulist.List) error {
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -627,7 +626,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 	case "checkback":
 		var sentCount = 0
 		for _, addr := range addrs {
-			if err := w.SendJoinCheckback(list, addr); err == nil {
+			if err := w.Ulist.SendJoinCheckback(list, addr); err == nil {
 				sentCount++
 			} else {
 				ctx.Alertf("Error sending join checkback: %v", err)
@@ -637,7 +636,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		added, errs := w.AddMembers(list, true, addrs, true, false, false, false, reason)
+		added, errs := w.Ulist.AddMembers(list, true, addrs, true, false, false, false, reason)
 		if added > 0 {
 			ctx.Successf("%d members have been added and notified.", added)
 		}
@@ -645,7 +644,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Alertf("Error: %v", err)
 		}
 	case "silent":
-		added, errs := w.AddMembers(list, false, addrs, true, false, false, false, reason)
+		added, errs := w.Ulist.AddMembers(list, false, addrs, true, false, false, false, reason)
 		if added > 0 {
 			ctx.Successf("%d members have been added.", added)
 		}
@@ -662,7 +661,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 
 func (w Web) membersRemove(ctx *Context, list *ulist.List) error {
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -710,7 +709,7 @@ func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 	case "checkback":
 		var sentCount = 0
 		for _, addr := range addrs {
-			if sent, err := w.SendLeaveCheckback(list, addr); err == nil {
+			if sent, err := w.Ulist.SendLeaveCheckback(list, addr); err == nil {
 				if sent {
 					sentCount++
 				}
@@ -722,7 +721,7 @@ func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		removed, errs := w.RemoveMembers(list, true, addrs, reason)
+		removed, errs := w.Ulist.RemoveMembers(list, true, addrs, reason)
 		if removed > 0 {
 			ctx.Successf("%d members have been removed and notified.", removed)
 		}
@@ -730,7 +729,7 @@ func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Alertf("Error: %v", err)
 		}
 	case "silent":
-		removed, errs := w.RemoveMembers(list, false, addrs, reason)
+		removed, errs := w.Ulist.RemoveMembers(list, false, addrs, reason)
 		if removed > 0 {
 			ctx.Successf("%d members have been removed.", removed)
 		}
@@ -752,7 +751,7 @@ func (w Web) member(ctx *Context, list *ulist.List) error {
 		return err
 	}
 
-	m, err := w.Lists.GetMembership(list, member)
+	m, err := w.Ulist.Lists.GetMembership(list, member)
 	if err != nil {
 		return err
 	}
@@ -766,7 +765,7 @@ func (w Web) member(ctx *Context, list *ulist.List) error {
 		var moderate = ctx.r.PostFormValue("moderate") != ""
 		var notify = ctx.r.PostFormValue("notify") != ""
 		var admin = ctx.r.PostFormValue("admin") != ""
-		if err := w.Lists.UpdateMember(list, m.MemberAddress, receive, moderate, notify, admin); err != nil {
+		if err := w.Ulist.Lists.UpdateMember(list, m.MemberAddress, receive, moderate, notify, admin); err != nil {
 			log.Printf("    web: error updating member: %v", err)
 		}
 
@@ -793,7 +792,7 @@ func (w Web) knowns(ctx *Context, list *ulist.List) error {
 		}
 
 		if ctx.r.PostFormValue("add") != "" {
-			added, err := w.Lists.AddKnowns(list, addrs)
+			added, err := w.Ulist.Lists.AddKnowns(list, addrs)
 			if len(added) > 0 {
 				ctx.Successf("Added %d known addresses", len(added))
 			}
@@ -801,7 +800,7 @@ func (w Web) knowns(ctx *Context, list *ulist.List) error {
 				ctx.Alertf("Error: %v", err)
 			}
 		} else if ctx.r.PostFormValue("remove") != "" {
-			removed, err := w.Lists.RemoveKnowns(list, addrs)
+			removed, err := w.Ulist.Lists.RemoveKnowns(list, addrs)
 			if len(removed) > 0 {
 				ctx.Successf("Removed %d known addresses", len(removed))
 			}
@@ -814,12 +813,12 @@ func (w Web) knowns(ctx *Context, list *ulist.List) error {
 		return nil
 	}
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
 
-	knowns, err := w.Lists.Knowns(list)
+	knowns, err := w.Ulist.Lists.Knowns(list)
 	if err != nil {
 		return err
 	}
@@ -850,13 +849,13 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 			emlFilename = strings.TrimPrefix(emlFilename, "action-")
 
-			m, err := w.ReadMessage(list, emlFilename) // err is evaluated in the switch
+			m, err := w.Ulist.ReadMessage(list, emlFilename) // err is evaluated in the switch
 
 			switch action[0] {
 
 			case "delete":
 
-				if err = w.DeleteModeratedMail(list, emlFilename); err != nil {
+				if err = w.Ulist.DeleteModeratedMail(list, emlFilename); err != nil {
 					ctx.Alertf("Error deleting email: %v", err)
 				} else {
 					notifyDeleted++
@@ -864,7 +863,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 				if ctx.r.PostFormValue("addknown-delete-"+emlFilename) != "" {
 					if from, ok := m.SingleFrom(); ok && list.ActionKnown == ulist.Reject { // same condition as in template
-						if _, err := w.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
+						if _, err := w.Ulist.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
 							ctx.Alertf("Error adding known sender: %v", err)
 						} else {
 							notifyAddedKnown++
@@ -878,18 +877,18 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 					break // don't forward emails with (probably header parsing) error
 				}
 
-				if err = w.Forward(list, m); err != nil {
+				if err = w.Ulist.Forward(list, m); err != nil {
 					log.Printf("    web: error sending email through list %s: %v", list, err)
 					ctx.Alertf("Error sending email through list: %v", err)
 				} else {
 					log.Printf("    web: email sent through list %s", list)
 					notifyPassed++
-					_ = w.DeleteModeratedMail(list, emlFilename)
+					_ = w.Ulist.DeleteModeratedMail(list, emlFilename)
 				}
 
 				if ctx.r.PostFormValue("addknown-pass-"+emlFilename) != "" {
 					if from, ok := m.SingleFrom(); ok && list.ActionKnown == ulist.Pass { // same condition as in template
-						if _, err := w.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
+						if _, err := w.Ulist.Lists.AddKnowns(list, []*ulist.Addr{from}); err != nil {
 							ctx.Alertf("Error adding known sender: %v", err)
 						} else {
 							notifyAddedKnown++
@@ -923,7 +922,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 	var emlFilenames []string
 
-	if listStorageFolder, err := os.Open(w.StorageFolder(list.ListInfo)); err == nil { // the folder is created when the first message is moderated, so we ignore errors here
+	if listStorageFolder, err := os.Open(w.Ulist.StorageFolder(list.ListInfo)); err == nil { // the folder is created when the first message is moderated, so we ignore errors here
 		emlFilenames, err = listStorageFolder.Readdirnames(1000)
 		if err != nil && err != io.EOF {
 			return err
@@ -955,7 +954,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 	// template data
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -1007,7 +1006,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 	// load messages from eml files
 
 	for _, emlFilename := range emlFilenames {
-		header, err := w.ReadHeader(list, emlFilename)
+		header, err := w.Ulist.ReadHeader(list, emlFilename)
 		data.Messages = append(data.Messages, html.StoredMessage{
 			Header:   header,
 			Err:      err,
@@ -1025,7 +1024,7 @@ func (w Web) view(ctx *Context, list *ulist.List) error {
 		return errors.New("filename contains forbidden characters")
 	}
 
-	ctx.ServeFile(w.StorageFolder(list.ListInfo) + "/" + emlFilename)
+	ctx.ServeFile(w.Ulist.StorageFolder(list.ListInfo) + "/" + emlFilename)
 	return nil
 }
 
@@ -1054,13 +1053,13 @@ func (w Web) public(ctx *Context) error {
 	}
 
 	var err error
-	data.PublicLists, err = w.Lists.PublicLists()
+	data.PublicLists, err = w.Ulist.Lists.PublicLists()
 	if err != nil {
 		return err
 	}
 
 	if ctx.LoggedIn() {
-		memberships, err := w.Lists.Memberships(ctx.User)
+		memberships, err := w.Ulist.Lists.Memberships(ctx.User)
 		if err != nil {
 			return err
 		}
@@ -1105,7 +1104,7 @@ func (w Web) askJoin(ctx *Context, list *ulist.List) error {
 			return err
 		}
 
-		if err := w.SendJoinCheckback(list, email); err != nil {
+		if err := w.Ulist.SendJoinCheckback(list, email); err != nil {
 			return err
 		}
 
@@ -1127,9 +1126,9 @@ func (w Web) leave(ctx *Context) error {
 		return err
 	}
 
-	list, _ := w.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+	list, _ := w.Ulist.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
 
-	if isMember, _ := w.Lists.IsMember(list, ctx.User); !isMember {
+	if isMember, _ := w.Ulist.Lists.IsMember(list, ctx.User); !isMember {
 		return fmt.Errorf("no list or you are not a member: %s", listAddr)
 	}
 
@@ -1141,7 +1140,7 @@ func (w Web) leave(ctx *Context) error {
 			return nil
 		}
 
-		removed, errs := w.RemoveMembers(list, true, []*mailutil.Addr{ctx.User}, "authenticated user left list via web ui")
+		removed, errs := w.Ulist.RemoveMembers(list, true, []*mailutil.Addr{ctx.User}, "authenticated user left list via web ui")
 		if removed == 1 {
 			ctx.Successf("You have left the mailing list %s", list.RFC5322AddrSpec())
 		}
@@ -1152,7 +1151,7 @@ func (w Web) leave(ctx *Context) error {
 		return nil
 	}
 
-	auth, err := w.GetMembershipOfAuthUser(list, ctx.User)
+	auth, err := w.getMembershipOfAuthUser(list, ctx.User)
 	if err != nil {
 		return err
 	}
@@ -1173,10 +1172,10 @@ func (w Web) askLeave(ctx *Context) error {
 		return err
 	}
 
-	list, _ := w.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
+	list, _ := w.Ulist.Lists.GetList(listAddr) // ignore err as we must not reveal whether the list exists
 
 	// convenience feature: logged-in members don't have to validate their email address
-	if isMember, _ := w.Lists.IsMember(list, ctx.User); isMember {
+	if isMember, _ := w.Ulist.Lists.IsMember(list, ctx.User); isMember {
 		checkbackUrl, err := w.Ulist.CheckbackLeaveUrl(list, ctx.User)
 		if err != nil {
 			return err
@@ -1203,7 +1202,7 @@ func (w Web) askLeave(ctx *Context) error {
 				return err
 			}
 
-			if sent, err := w.SendLeaveCheckback(list, email); err == nil {
+			if sent, err := w.Ulist.SendLeaveCheckback(list, email); err == nil {
 				if sent {
 					log.Printf("    web: sending leave checkback: list: %s, user: %s", list, email)
 				}
@@ -1236,7 +1235,7 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 
 	// non-members only
 
-	m, err := w.Lists.GetMembership(list, addr)
+	m, err := w.Ulist.Lists.GetMembership(list, addr)
 	if err != nil {
 		return err
 	}
@@ -1247,7 +1246,7 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 	// join list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_join") == "yes" {
-		added, errs := w.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui")
+		added, errs := w.Ulist.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui")
 		if added == 1 {
 			ctx.Successf("You have joined the mailing list %s", list)
 		}
@@ -1283,7 +1282,7 @@ func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 
 	// members only
 
-	m, err := w.Lists.GetMembership(list, addr)
+	m, err := w.Ulist.Lists.GetMembership(list, addr)
 	if err != nil {
 		return err
 	}
@@ -1294,7 +1293,7 @@ func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 	// leave list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_leave") == "yes" {
-		removed, errs := w.RemoveMembers(list, true, []*mailutil.Addr{addr}, "user confirmed in web ui")
+		removed, errs := w.Ulist.RemoveMembers(list, true, []*mailutil.Addr{addr}, "user confirmed in web ui")
 		if removed == 1 {
 			ctx.Successf("You have left the mailing list %s", list)
 		}

@@ -8,11 +8,11 @@ import (
 	"strconv"
 
 	"github.com/wansing/ulist"
-	"github.com/wansing/ulist/auth"
 	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
-	"github.com/wansing/ulist/repos/sqlite"
+	"github.com/wansing/ulist/repo/sqlite"
 	"github.com/wansing/ulist/web"
+	"github.com/wansing/ulist/web/auth"
 )
 
 func main() {
@@ -118,10 +118,10 @@ func main() {
 		UserRepos: []web.UserRepo{ // SQL database first. Note that if both smtps and starttls ports are given and refer to the same email server, the email server might be queried twice.
 			userDB,
 			auth.SMTPS{
-				Port: uint(smtpsAuthPort),
+				Port: smtpsAuthPort,
 			},
 			auth.STARTTLS{
-				Port: uint(starttlsAuthPort),
+				Port: starttlsAuthPort,
 			},
 		},
 	}
@@ -131,6 +131,6 @@ func main() {
 	}
 
 	if err := ul.ListenAndServe(); err != nil {
-		log.Printf("error %v", err)
+		log.Printf("error: %v", err)
 	}
 }

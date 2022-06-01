@@ -80,7 +80,7 @@ type Ulist struct {
 	Waiting   sync.WaitGroup
 }
 
-func (u *Ulist) ListenAndServe() {
+func (u *Ulist) ListenAndServe() error {
 
 	if u.MTA == nil {
 		u.MTA = mailutil.Sendmail{}
@@ -89,13 +89,11 @@ func (u *Ulist) ListenAndServe() {
 	// check spool dir
 
 	if err := os.MkdirAll(u.SpoolDir, 0700); err != nil {
-		log.Printf("error creating spool directory: %v", err)
-		return
+		return fmt.Errorf("recursively creating spool directory: %v", err)
 	}
 
 	if unix.Access(u.SpoolDir, unix.W_OK) != nil {
-		log.Printf("spool directory %s is not writeable", u.SpoolDir)
-		return
+		return fmt.Errorf("spool directory %s is not writeable", u.SpoolDir)
 	}
 
 	log.Printf("spool directory: %s", u.SpoolDir)
@@ -112,12 +110,10 @@ func (u *Ulist) ListenAndServe() {
 
 	sockmapListener, err := net.Listen("unix", u.SocketmapSock)
 	if err != nil {
-		log.Printf("error creating socketmap socket: %v", err)
-		return
+		return fmt.Errorf("creating socketmap socket: %v", err)
 	}
 	if err := os.Chmod(u.SocketmapSock, 0777); err != nil {
-		log.Printf("error setting socketmap socket permissions: %v", err)
-		return
+		return fmt.Errorf("setting socketmap socket permissions: %v", err)
 	}
 
 	go func() {
@@ -152,12 +148,10 @@ func (u *Ulist) ListenAndServe() {
 
 	lmtpListener, err := net.Listen("unix", u.LMTPSock)
 	if err != nil {
-		log.Printf("error creating LMTP socket: %v", err)
-		return
+		return fmt.Errorf("creating LMTP socket: %v", err)
 	}
 	if err := os.Chmod(u.LMTPSock, 0777); err != nil {
-		log.Printf("error setting LMTP socket permissions: %v", err)
-		return
+		return fmt.Errorf("setting LMTP socket permissions: %v", err)
 	}
 
 	go func() {
@@ -174,6 +168,8 @@ func (u *Ulist) ListenAndServe() {
 	log.Printf("running")
 	<-shutdownChan
 	log.Println("received shutdown signal")
+
+	return nil
 }
 
 func (u *Ulist) GetRoles(list *List, addr *Addr) ([]Status, error) {

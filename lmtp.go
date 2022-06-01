@@ -6,10 +6,23 @@ import (
 	"net/mail"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/emersion/go-smtp" // not to be confused with golang's net/smtp
 	"github.com/wansing/ulist/mailutil"
 )
+
+func NewLMTPServer(ul *Ulist) *smtp.Server {
+	s := smtp.NewServer(&LMTPBackend{ul})
+	s.LMTP = true
+	s.Domain = "localhost"
+	s.WriteTimeout = 10 * time.Second
+	s.ReadTimeout = 10 * time.Second
+	s.MaxMessageBytes = 50 * 1024 * 1024 // 50 MiB sounds reasonable (note that base64 encoding costs 33%)
+	s.MaxRecipients = 50                 // value in go-smtp example code is 50, postfix lmtp_destination_recipient_limit is 50
+	s.AllowInsecureAuth = true
+	return s
+}
 
 type LMTPBackend struct {
 	Ulist *Ulist
@@ -20,32 +33,31 @@ func (LMTPBackend) Login(_ *smtp.ConnectionState, _, _ string) (smtp.Session, er
 }
 
 func (lb LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error) {
-	s := &LMTPSession{
+	return &lmtpSession{
 		Ulist: lb.Ulist,
-	}
-	return s, nil
+	}, nil
 }
 
 // implements smtp.Session
-type LMTPSession struct {
+type lmtpSession struct {
 	Ulist    *Ulist
 	Lists    []*List
 	isBounce bool // indicated by empty Envelope-From
 	logId    uint32
 }
 
-func (s *LMTPSession) logf(format string, a ...interface{}) {
+func (s *lmtpSession) logf(format string, a ...interface{}) {
 	log.Printf("% 7d: "+format, append([]interface{}{s.logId}, a...)...)
 }
 
 // "RSET". Aborts the current mail transaction.
-func (s *LMTPSession) Reset() {
+func (s *lmtpSession) Reset() {
 	s.Lists = nil
 	s.isBounce = false
 }
 
 // "MAIL FROM". Starts a new mail transaction.
-func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
+func (s *lmtpSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 
 	s.Reset() // just in case
 	s.logId = atomic.AddUint32(&s.Ulist.LastLogID, 1)
@@ -59,7 +71,7 @@ func (s *LMTPSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 }
 
 // "RCPT TO". Can be called multiple times for multiple recipients.
-func (s *LMTPSession) Rcpt(to string) error {
+func (s *lmtpSession) Rcpt(to string) error {
 	err := s.rcpt(to)
 	if err != nil {
 		s.logf("\033[1;31mrcpt error: %v\033[0m", err) // red color
@@ -67,7 +79,7 @@ func (s *LMTPSession) Rcpt(to string) error {
 	return err
 }
 
-func (s *LMTPSession) rcpt(toStr string) error {
+func (s *lmtpSession) rcpt(toStr string) error {
 
 	s.logf("envelope-to: %s", toStr)
 
@@ -101,7 +113,7 @@ func (s *LMTPSession) rcpt(toStr string) error {
 }
 
 // "DATA". Finishes a transaction.
-func (s *LMTPSession) Data(r io.Reader) error {
+func (s *lmtpSession) Data(r io.Reader) error {
 
 	s.Ulist.Waiting.Add(1)
 	defer s.Ulist.Waiting.Done()
@@ -114,7 +126,7 @@ func (s *LMTPSession) Data(r io.Reader) error {
 	return nil
 }
 
-func (s *LMTPSession) data(r io.Reader) error {
+func (s *lmtpSession) data(r io.Reader) error {
 
 	// check s.Lists again (in case MAIL FROM and RCPT TO have not been called before)
 
@@ -319,6 +331,6 @@ func (s *LMTPSession) data(r io.Reader) error {
 	return nil
 }
 
-func (*LMTPSession) Logout() error {
+func (*lmtpSession) Logout() error {
 	return nil
 }

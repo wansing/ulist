@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,7 +16,7 @@ import (
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
-	"github.com/wansing/ulist/repos/sqlite"
+	"github.com/wansing/ulist/repo/sqlite"
 	"github.com/wansing/ulist/web"
 )
 
@@ -48,21 +47,20 @@ func init() {
 		Lists:      listDB,
 		MTA:        mailutil.ChanMTA(messageChannel),
 		SpoolDir:   "/tmp",
-		WebURL:     "https://lists.example.com",
 	}
 
-	w := web.Web{
-		Ulist: ul,
+	ul.Web = web.Web{
+		Ulist:  ul,
+		Listen: "127.0.0.1:65535",
+		URL:    "https://lists.example.com",
 	}
 
-	webListener, err := net.Listen("tcp", "127.0.0.1:65535")
-	if err != nil {
-		log.Fatalf("error creating web listener: %v", err)
-	}
-
-	webSrv := w.NewServer()
-
-	go webSrv.Serve(webListener)
+	// web server only
+	go func() {
+		if err := ul.Web.ListenAndServe(); err != nil {
+			log.Fatalln(err)
+		}
+	}()
 }
 
 func mustParse(email string) *mailutil.Addr {
@@ -200,7 +198,9 @@ func mustTransact(envelopes ...*mailutil.MTAEnvelope) {
 
 func transact(envelopes ...*mailutil.MTAEnvelope) error {
 
-	backend := &ulist.LMTPBackend{ul}
+	backend := &ulist.LMTPBackend{
+		Ulist: ul,
+	}
 
 	session, err := backend.AnonymousLogin(nil)
 	if err != nil {
@@ -533,8 +533,8 @@ You can leave the mailing list "Public" here: https://lists.example.com/leave/pu
 	if got, err := ul.Lists.GetMembership(list, mustParse("bob@example.com")); err == nil {
 		want := ulist.Membership{
 			ListInfo: ulist.ListInfo{
-				5,
-				mailutil.Addr{
+				ID: 5,
+				Addr: mailutil.Addr{
 					Display: "Public",
 					Local:   "public",
 					Domain:  "example.com",
@@ -1176,8 +1176,8 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 	}
 
 	wantListInfo := ulist.ListInfo{
-		18,
-		mailutil.Addr{
+		ID: 18,
+		Addr: mailutil.Addr{
 			Display: "List",
 			Local:   "members",
 			Domain:  "example.com",

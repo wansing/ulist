@@ -70,7 +70,13 @@ func main() {
 		stateDir = "/var/lib/ulist"
 	}
 	if dummyMode {
-		stateDir = "/tmp/ulist"
+		// never leak production data in dummy mode, use dummy state directory instead
+		var err error
+		stateDir, err = os.MkdirTemp("", "ulist")
+		if err != nil {
+			log.Printf("error creating temporary state dir: %v", err)
+			return
+		}
 	}
 
 	spoolDir := filepath.Join(stateDir, "spool")

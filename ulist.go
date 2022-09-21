@@ -256,7 +256,7 @@ func (u *Ulist) Forward(list *List, m *mailutil.Message) error {
 		for _, oldFrom := range oldFroms {
 			replyTo = append(replyTo, oldFrom.RFC5322NameAddr())
 		}
-		header["Reply-To"] = []string{strings.Join(replyTo, ", ")} // https://tools.ietf.org/html/rfc5322: reply-to = "Reply-To:" address-list CRLF
+		header["Reply-To"] = []string{mailutil.AddressList(replyTo)}
 	}
 
 	// No "Sender" field required because there is exactly one "From" address. https://tools.ietf.org/html/rfc5322#section-3.6.2 "If the from field contains more than one mailbox specification in the mailbox-list, then the sender field, containing the field name "Sender" and a single mailbox specification, MUST appear in the message."

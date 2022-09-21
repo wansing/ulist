@@ -19,6 +19,15 @@ var spamKeys = []string{
 	textproto.CanonicalMIMEHeaderKey("X-Spam-Status"),
 }
 
+// AddressList joins the given addresses with a comma and a space.
+//
+// See https://www.rfc-editor.org/rfc/rfc5322#section-3.6.3:
+//
+//	address-list    =   (address *("," address)) / obs-addr-list
+func AddressList(addrs []string) string {
+	return strings.Join(addrs, ", ")
+}
+
 // like https://github.com/rspamd/rspamd/blob/master/rules/regexp/upstream_spam_filters.lua#L50
 func IsSpam(header mail.Header) (bool, string) {
 	for _, key := range spamKeys {
@@ -163,6 +172,7 @@ func headerWritelnFold(w io.Writer, name, body string) error {
 	return nil
 }
 
+// WriteHeader writes the given header to the given writer.
 func WriteHeader(w io.Writer, header mail.Header) error {
 
 	// sort keys (else the map was iterated randomly)
@@ -182,6 +192,20 @@ func WriteHeader(w io.Writer, header mail.Header) error {
 	// write key-value-pairs and trailing newline, strip private information
 
 	for _, k := range keys {
+		switch k {
+		// Join some address-lists if a header occurs multiple times but may occur just once. See https://www.rfc-editor.org/rfc/rfc5322#section-3.6
+		case "Reply-To":
+			fallthrough
+		case "To":
+			fallthrough
+		case "Cc":
+			fallthrough
+		case "Bcc":
+			if len(header[k]) > 1 {
+				header[k] = []string{AddressList(header[k])}
+			}
+		}
+
 		for _, v := range header[k] {
 			switch k {
 			case "User-Agent":
@@ -195,6 +219,7 @@ func WriteHeader(w io.Writer, header mail.Header) error {
 			case "Mime-Version":
 				k = "MIME-Version" // rspamd gives a penalty if it's not written "MIME-Version"
 			}
+
 			if err := headerWritelnFold(w, k, v); err != nil {
 				return err
 			}

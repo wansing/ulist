@@ -44,8 +44,8 @@ func (DummyMTA) String() string {
 //
 // The postfix sendmail interface needs access to:
 //
-//     /etc/postfix/main.cf (read)
-//     /var/spool/postfix/maildrop (write and execute)
+//	/etc/postfix/main.cf (read)
+//	/var/spool/postfix/maildrop (write and execute)
 //
 // Postfix uses the postdrop setgid binary to access the maildrop directory.
 // Modern security measures (like mount namespaces and systemd service options) don't work with setgid.

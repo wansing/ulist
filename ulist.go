@@ -36,7 +36,7 @@ type ListRepo interface {
 	GetList(list *Addr) (*List, error)
 	Members(list *List) ([]Membership, error)
 	GetMembership(list *List, user *Addr) (Membership, error)
-	IsList(addr *Addr) (bool, error)
+	IsList(addr Addr) (bool, error)
 	IsMember(list *List, addr *Addr) (bool, error)
 	IsKnown(list *List, rawAddress string) (bool, error)
 	Knowns(list *List) ([]string, error)
@@ -80,6 +80,11 @@ type Ulist struct {
 	Waiting   sync.WaitGroup
 }
 
+func (u *Ulist) isListOrBounce(addr mailutil.Addr) (bool, error) {
+	addr.Local = strings.TrimSuffix(addr.Local, BounceAddressSuffix)
+	return u.Lists.IsList(addr)
+}
+
 func (u *Ulist) ListenAndServe() error {
 
 	if u.MTA == nil {
@@ -105,7 +110,7 @@ func (u *Ulist) ListenAndServe() error {
 
 	// socketmap server
 
-	sockmapSrv := sockmap.NewServer(u.Lists.IsList, u.LMTPSock)
+	sockmapSrv := sockmap.NewServer(u.isListOrBounce, u.LMTPSock)
 	defer sockmapSrv.Close()
 
 	sockmapListener, err := net.Listen("unix", u.SocketmapSock)

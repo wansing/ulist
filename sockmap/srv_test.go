@@ -25,7 +25,7 @@ postmap-b@example.com	lmtp:unix:/tmp/lmtp.sock
 `
 
 	srv := NewServer(
-		func(addr *mailutil.Addr) (bool, error) {
+		func(addr mailutil.Addr) (bool, error) {
 			switch addr.RFC5322AddrSpec() {
 			case "postmap-a@example.com":
 				return true, nil

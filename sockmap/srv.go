@@ -30,7 +30,7 @@ import (
 // The name of the socketmap (here: "name") is ignored.
 
 type Server struct {
-	Exists        func(addr *mailutil.Addr) (bool, error)
+	Exists        func(addr mailutil.Addr) (bool, error)
 	ExistResponse string // LMTP socket path
 
 	done      chan struct{}
@@ -39,7 +39,7 @@ type Server struct {
 	conns     map[net.Conn]struct{}
 }
 
-func NewServer(exists func(addr *mailutil.Addr) (bool, error), existResponse string) *Server {
+func NewServer(exists func(addr mailutil.Addr) (bool, error), existResponse string) *Server {
 	return &Server{
 		Exists:        exists,
 		ExistResponse: existResponse,
@@ -131,7 +131,7 @@ func (srv *Server) handleConn(conn net.Conn) {
 			continue
 		}
 
-		if ok, err := srv.Exists(listAddr); err == nil {
+		if ok, err := srv.Exists(*listAddr); err == nil {
 			if ok {
 				conn.Write(netstring.Encode("OK lmtp:unix:" + srv.ExistResponse))
 			} else {

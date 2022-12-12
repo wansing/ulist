@@ -264,7 +264,7 @@ func (db *ListDB) GetList(listAddress *mailutil.Addr) (*ulist.List, error) {
 	}
 }
 
-func (db *ListDB) IsList(address *mailutil.Addr) (bool, error) {
+func (db *ListDB) IsList(address mailutil.Addr) (bool, error) {
 	var exists bool
 	return exists, db.isListStmt.QueryRow(address.Local, address.Domain).Scan(&exists)
 }

@@ -110,25 +110,27 @@ func (u *Ulist) ListenAndServe() error {
 
 	// socketmap server
 
-	sockmapSrv := sockmap.NewServer(u.isListOrBounce, u.LMTPSock)
-	defer sockmapSrv.Close()
+	if u.SocketmapSock != "" {
+		sockmapSrv := sockmap.NewServer(u.isListOrBounce, u.LMTPSock)
+		defer sockmapSrv.Close()
 
-	sockmapListener, err := net.Listen("unix", u.SocketmapSock)
-	if err != nil {
-		return fmt.Errorf("creating socketmap socket: %v", err)
-	}
-	if err := os.Chmod(u.SocketmapSock, 0777); err != nil {
-		return fmt.Errorf("setting socketmap socket permissions: %v", err)
-	}
-
-	go func() {
-		if err := sockmapSrv.Serve(sockmapListener); err != nil {
-			log.Printf("socketmap server error: %v", err)
-			shutdownChan <- syscall.SIGINT
+		sockmapListener, err := net.Listen("unix", u.SocketmapSock)
+		if err != nil {
+			return fmt.Errorf("creating socketmap socket: %v", err)
 		}
-	}()
+		if err := os.Chmod(u.SocketmapSock, 0777); err != nil {
+			return fmt.Errorf("setting socketmap socket permissions: %v", err)
+		}
 
-	log.Printf("socketmap listener: %s", u.SocketmapSock)
+		go func() {
+			if err := sockmapSrv.Serve(sockmapListener); err != nil {
+				log.Printf("socketmap server error: %v", err)
+				shutdownChan <- syscall.SIGINT
+			}
+		}()
+
+		log.Printf("socketmap listener: %s", u.SocketmapSock)
+	}
 
 	// web server
 

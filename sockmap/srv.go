@@ -30,8 +30,8 @@ import (
 // The name of the socketmap (here: "name") is ignored.
 
 type Server struct {
-	Exists  func(addr *mailutil.Addr) (bool, error)
-	NextHop string // LMTP socket path
+	Exists        func(addr *mailutil.Addr) (bool, error)
+	ExistResponse string // LMTP socket path
 
 	done      chan struct{}
 	locker    sync.Mutex
@@ -39,17 +39,17 @@ type Server struct {
 	conns     map[net.Conn]struct{}
 }
 
-func NewServer(exists func(addr *mailutil.Addr) (bool, error), nextHop string) *Server {
+func NewServer(exists func(addr *mailutil.Addr) (bool, error), existResponse string) *Server {
 	return &Server{
-		Exists:  exists,
-		NextHop: nextHop,
-		done:    make(chan struct{}, 1),
-		conns:   make(map[net.Conn]struct{}),
+		Exists:        exists,
+		ExistResponse: existResponse,
+		done:          make(chan struct{}, 1),
+		conns:         make(map[net.Conn]struct{}),
 	}
 }
 
 // Serve accepts incoming connections on the Listener l.
-// For each email address for which srv.Exists returns true, srv.NextHop is returned.
+// For each email address for which srv.Exists returns true, srv.ExistResponse is returned.
 // The reply argument will usually be the absolute path to your LMTP socket.
 func (srv *Server) Serve(l net.Listener) error {
 	srv.locker.Lock()
@@ -133,7 +133,7 @@ func (srv *Server) handleConn(conn net.Conn) {
 
 		if ok, err := srv.Exists(listAddr); err == nil {
 			if ok {
-				conn.Write(netstring.Encode("OK lmtp:unix:" + srv.NextHop))
+				conn.Write(netstring.Encode("OK lmtp:unix:" + srv.ExistResponse))
 			} else {
 				conn.Write(netstring.Encode("NOTFOUND "))
 			}

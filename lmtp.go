@@ -271,14 +271,14 @@ func (s *lmtpSession) data(r io.Reader) error {
 			// public signup check is crucial, as SendJoinCheckback sends a confirmation link which allows the receiver to join
 			if list.PublicSignup && !m.Member && command == "join" {
 				if err = s.Ulist.SendJoinCheckback(list, personalFrom); err != nil {
-					return SMTPErrorf(451, "subscribing: %v", err)
+					return SMTPErrorf(451, "sending join checkback: %v", err)
 				}
 				continue // next list
 			}
 
 			if m.Member && command == "leave" {
 				if _, err = s.Ulist.SendLeaveCheckback(list, personalFrom); err != nil {
-					return SMTPErrorf(451, "unsubscribing: %v", err)
+					return SMTPErrorf(451, "sending leave checkback: %v", err)
 				}
 				continue // next list
 			}

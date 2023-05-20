@@ -611,8 +611,8 @@ func TestRejectAll(t *testing.T) {
 	ul.Lists.Update(list, "List name", false, false, ulist.Reject, ulist.Reject, ulist.Reject, ulist.Reject)
 
 	ul.Lists.AddKnowns(list, []*ulist.Addr{mustParse("known@example.com")})
-	ul.AddMembers(list, true, []*ulist.Addr{mustParse("member@example.com")}, true, false, false, false, "testing")
-	ul.AddMembers(list, true, []*ulist.Addr{mustParse("mod@example.com")}, true, true, false, false, "testing")
+	ul.AddMembers(list, true, []*ulist.Addr{mustParse("member@example.com")}, true, false, false, false, false, "testing")
+	ul.AddMembers(list, true, []*ulist.Addr{mustParse("mod@example.com")}, true, true, false, false, false, "testing")
 
 	wantGDPREvent(t, "member@example.com joined the list reject-all@example.com, reason: testing")
 	wantGDPREvent(t, "mod@example.com joined the list reject-all@example.com, reason: testing")
@@ -1141,6 +1141,7 @@ func TestMembers(t *testing.T) {
 		false,     // moderate
 		false,     // notify
 		false,     // admin
+		false,     // bounces
 		"testing", // reason
 	)
 
@@ -1192,6 +1193,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      true,
 			Notify:        true,
 			Admin:         true,
+			Bounce:        true,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1200,6 +1202,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
+			Bounce:        false,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1208,6 +1211,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
+			Bounce:        false,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1216,6 +1220,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
+			Bounce:        false,
 		},
 	}
 

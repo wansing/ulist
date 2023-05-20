@@ -636,7 +636,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Successf("Sent %d checkback emails", sentCount)
 		}
 	case "signoff":
-		added, errs := w.Ulist.AddMembers(list, true, addrs, true, false, false, false, reason)
+		added, errs := w.Ulist.AddMembers(list, true, addrs, true, false, false, false, false, reason)
 		if added > 0 {
 			ctx.Successf("%d members have been added and notified.", added)
 		}
@@ -644,7 +644,7 @@ func (w Web) membersAddStagingPost(ctx *Context, list *ulist.List) error {
 			ctx.Alertf("Error: %v", err)
 		}
 	case "silent":
-		added, errs := w.Ulist.AddMembers(list, false, addrs, true, false, false, false, reason)
+		added, errs := w.Ulist.AddMembers(list, false, addrs, true, false, false, false, false, reason)
 		if added > 0 {
 			ctx.Successf("%d members have been added.", added)
 		}
@@ -765,7 +765,8 @@ func (w Web) member(ctx *Context, list *ulist.List) error {
 		var moderate = ctx.r.PostFormValue("moderate") != ""
 		var notify = ctx.r.PostFormValue("notify") != ""
 		var admin = ctx.r.PostFormValue("admin") != ""
-		if err := w.Ulist.Lists.UpdateMember(list, m.MemberAddress, receive, moderate, notify, admin); err != nil {
+		var bounces = ctx.r.PostFormValue("bounces") != ""
+		if err := w.Ulist.Lists.UpdateMember(list, m.MemberAddress, receive, moderate, notify, admin, bounces); err != nil {
 			log.Printf("    web: error updating member: %v", err)
 		}
 
@@ -1246,7 +1247,7 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 	// join list if web button is clicked
 
 	if ctx.r.PostFormValue("confirm_join") == "yes" {
-		added, errs := w.Ulist.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, "user confirmed in web ui")
+		added, errs := w.Ulist.AddMembers(list, true, []*mailutil.Addr{addr}, true, false, false, false, false, "user confirmed in web ui")
 		if added == 1 {
 			ctx.Successf("You have joined the mailing list %s", list)
 		}

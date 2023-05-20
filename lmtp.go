@@ -216,9 +216,9 @@ func (s *lmtpSession) data(r io.Reader) error {
 
 		if s.isBounce {
 
-			admins, err := s.Ulist.Lists.Admins(list)
+			notifieds, err := s.Ulist.Lists.BounceNotifieds(list)
 			if err != nil {
-				return SMTPErrorf(451, "getting list admins from database: %v", err) // 451 Aborted – Local error in processing
+				return SMTPErrorf(451, "getting list bounce notifieds from database: %v", err) // 451 Aborted – Local error in processing
 			}
 
 			header := make(mail.Header)
@@ -228,12 +228,12 @@ func (s *lmtpSession) data(r io.Reader) error {
 			header["Subject"] = []string{"[" + list.DisplayOrLocal() + "] Bounce notification: " + message.Header.Get("Subject")}
 			header["To"] = []string{list.BounceAddress()}
 
-			err = s.Ulist.MTA.Send("", admins, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
+			err = s.Ulist.MTA.Send("", notifieds, header, message.BodyReader()) // empty envelope-from, so if this mail gets bounced, that won't cause a bounce loop
 			if err != nil {
 				s.logf("error forwarding bounce notification: %v", err)
 			}
 
-			s.logf("forwarded bounce to admins of %s through %s", list, s.Ulist.MTA)
+			s.logf("forwarded bounce to notifieds of %s through %s", list, s.Ulist.MTA)
 
 			continue // to next list
 		}

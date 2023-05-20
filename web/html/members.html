@@ -23,6 +23,7 @@
 					<th>Moderate</th>
 					<th>Notify on moderation</th>
 					<th>Admin</th>
+					<th>Notify on bounce</th>
 					<th></th>
 				</tr>
 			</thead>
@@ -34,6 +35,7 @@
 					<td>{{ if .Moderate }}&#10004;{{ end }}</td>
 					<td>{{ if .Notify   }}&#10004;{{ end }}</td>
 					<td>{{ if .Admin    }}&#10004;{{ end }}</td>
+					<td>{{ if .Bounces  }}&#10004;{{ end }}</td>
 					<td><a href="/member/{{ PathEscape $.List.RFC5322AddrSpec }}/{{ .MemberAddress }}">Edit</a></td>
 				</tr>
 				{{ end }}

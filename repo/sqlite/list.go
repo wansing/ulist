@@ -20,6 +20,7 @@ type ListDB struct {
 	addMemberStmt         *sql.Stmt
 	createListStmt        *sql.Stmt
 	getAdminsStmt         *sql.Stmt
+	getBouncesStmt        *sql.Stmt
 	getKnownsStmt         *sql.Stmt
 	getListStmt           *sql.Stmt
 	getMemberStmt         *sql.Stmt
@@ -44,6 +45,14 @@ func OpenListDB(connStr string) (*ListDB, error) {
 		return nil, err
 	}
 
+	// database migration
+	_, _ = sqlDB.Exec(`
+		BEGIN TRANSACTION;
+		ALTER TABLE member ADD COLUMN bounces BOOLEAN NOT NULL default 0;
+		UPDATE member SET bounces = admin;
+		COMMIT;
+	`)
+
 	_, err = sqlDB.Exec(`
 
 		CREATE TABLE IF NOT EXISTS list (
@@ -67,7 +76,8 @@ func OpenListDB(connStr string) (*ListDB, error) {
 			receive  BOOLEAN NOT NULL, -- receive messages from the list
 			moderate BOOLEAN NOT NULL, -- moderate the list
 			notify   BOOLEAN NOT NULL, -- get moderation notifications
-			admin    BOOLEAN NOT NULL, -- can administrate the list
+			admin    BOOLEAN NOT NULL, -- administrate the list
+			bounces  BOOLEAN NOT NULL, -- get admin notifications
 			UNIQUE(list, address)
 		);
 
@@ -116,7 +126,11 @@ func OpenListDB(connStr string) (*ListDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.getMembersStmt, err = db.sqlDB.Prepare("select address, receive, moderate, notify, admin from member where list = ? order by address")
+	db.getBouncesStmt, err = db.sqlDB.Prepare("select address from member where list = ? and bounces = 1 order by address")
+	if err != nil {
+		return nil, err
+	}
+	db.getMembersStmt, err = db.sqlDB.Prepare("select address, receive, moderate, notify, admin, bounces from member where list = ? order by address")
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +164,11 @@ func OpenListDB(connStr string) (*ListDB, error) {
 	}
 
 	// member
-	db.addMemberStmt, err = db.sqlDB.Prepare("replace into member (list, address, receive, moderate, notify, admin) values (?, ?, ?, ?, ?, ?)")
+	db.addMemberStmt, err = db.sqlDB.Prepare("replace into member (list, address, receive, moderate, notify, admin, bounces) values (?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return nil, err
 	}
-	db.getMemberStmt, err = db.sqlDB.Prepare("select receive, moderate, notify, admin from member where list = ? and address = ?")
+	db.getMemberStmt, err = db.sqlDB.Prepare("select receive, moderate, notify, admin, bounces from member where list = ? and address = ?")
 	if err != nil {
 		return nil, err
 	}
@@ -162,13 +176,13 @@ func OpenListDB(connStr string) (*ListDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.updateMemberStmt, err = db.sqlDB.Prepare("update member SET receive = ?, moderate = ?, notify = ?, admin = ? where list = ? and address = ?")
+	db.updateMemberStmt, err = db.sqlDB.Prepare("update member SET receive = ?, moderate = ?, notify = ?, admin = ?, bounces = ? where list = ? and address = ?")
 	if err != nil {
 		return nil, err
 	}
 
 	// user
-	db.getMembershipsStmt, err = db.sqlDB.Prepare("select l.id, l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin from list l, member m where l.id = m.list and m.address = ? order by l.domain, l.local")
+	db.getMembershipsStmt, err = db.sqlDB.Prepare("select l.id, l.display, l.local, l.domain, m.receive, m.moderate, m.notify, m.admin, m.bounces from list l, member m where l.id = m.list and m.address = ? order by l.domain, l.local")
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +294,7 @@ func (db *ListDB) Memberships(member *ulist.Addr) ([]ulist.Membership, error) {
 	memberships := []ulist.Membership{}
 	for rows.Next() {
 		var m ulist.Membership
-		rows.Scan(&m.ID, &m.Display, &m.Local, &m.Domain, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+		rows.Scan(&m.ID, &m.Display, &m.Local, &m.Domain, &m.Receive, &m.Moderate, &m.Notify, &m.Admin, &m.Bounces)
 		memberships = append(memberships, m)
 	}
 
@@ -313,7 +327,7 @@ func (db *ListDB) GetMembership(list *ulist.List, addr *mailutil.Addr) (ulist.Me
 	m := ulist.Membership{
 		ListInfo: list.ListInfo,
 	}
-	err := db.getMemberStmt.QueryRow(list.ID, addr.RFC5322AddrSpec()).Scan(&m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+	err := db.getMemberStmt.QueryRow(list.ID, addr.RFC5322AddrSpec()).Scan(&m.Receive, &m.Moderate, &m.Notify, &m.Admin, &m.Bounces)
 	switch err {
 	case nil:
 		m.Member = true
@@ -347,11 +361,15 @@ func (db *ListDB) Members(list *ulist.List) ([]ulist.Membership, error) {
 	for rows.Next() {
 		m := ulist.Membership{}
 		m.ListInfo = list.ListInfo
-		rows.Scan(&m.MemberAddress, &m.Receive, &m.Moderate, &m.Notify, &m.Admin)
+		rows.Scan(&m.MemberAddress, &m.Receive, &m.Moderate, &m.Notify, &m.Admin, &m.Bounces)
 		members = append(members, m)
 	}
 
 	return members, nil
+}
+
+func (db *ListDB) BounceNotifieds(list *ulist.List) ([]string, error) {
+	return db.membersWhere(list, db.getBouncesStmt)
 }
 
 func (db *ListDB) Notifieds(list *ulist.List) ([]string, error) {
@@ -383,7 +401,7 @@ func (db *ListDB) Knowns(list *ulist.List) ([]string, error) {
 }
 
 // returns addresses which have been added successfully
-func (db *ListDB) AddMembers(list *ulist.List, addrs []*mailutil.Addr, receive, moderate, notify, admin bool) ([]*mailutil.Addr, error) {
+func (db *ListDB) AddMembers(list *ulist.List, addrs []*mailutil.Addr, receive, moderate, notify, admin, bounces bool) ([]*mailutil.Addr, error) {
 
 	tx, err := db.sqlDB.Begin()
 	if err != nil {
@@ -398,7 +416,7 @@ func (db *ListDB) AddMembers(list *ulist.List, addrs []*mailutil.Addr, receive, 
 		if list.Equals(addr) {
 			continue // don't add list to itself
 		}
-		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec(), receive, moderate, notify, admin); err != nil {
+		if _, err := stmt.Exec(list.ID, addr.RFC5322AddrSpec(), receive, moderate, notify, admin, bounces); err != nil {
 			return nil, err // not committed, return empty address slice
 		}
 		added = append(added, addr)
@@ -411,14 +429,14 @@ func (db *ListDB) AddMembers(list *ulist.List, addrs []*mailutil.Addr, receive, 
 	return added, nil
 }
 
-func (db *ListDB) UpdateMember(list *ulist.List, rawAddress string, receive, moderate, notify, admin bool) error {
+func (db *ListDB) UpdateMember(list *ulist.List, rawAddress string, receive, moderate, notify, admin, bounces bool) error {
 
 	addr, err := mailutil.ParseAddress(rawAddress)
 	if err != nil {
 		return err
 	}
 
-	_, err = db.updateMemberStmt.Exec(receive, moderate, notify, admin, list.ID, addr.RFC5322AddrSpec())
+	_, err = db.updateMemberStmt.Exec(receive, moderate, notify, admin, bounces, list.ID, addr.RFC5322AddrSpec())
 	return err
 }
 

@@ -8,4 +8,5 @@ type Membership struct {
 	Moderate      bool
 	Notify        bool
 	Admin         bool
+	Bounces       bool
 }

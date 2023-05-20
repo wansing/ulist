@@ -28,9 +28,10 @@ const WebBatchLimit = 1000
 
 type ListRepo interface {
 	AddKnowns(list *List, addrs []*Addr) ([]*Addr, error)
-	AddMembers(list *List, addrs []*Addr, receive, moderate, notify, admin bool) ([]*Addr, error)
+	AddMembers(list *List, addrs []*Addr, receive, moderate, notify, admin, bounces bool) ([]*Addr, error)
 	Admins(list *List) ([]string, error)
 	AllLists() ([]ListInfo, error)
+	BounceNotifieds(list *List) ([]string, error)
 	Create(address, name string) (*List, error)
 	Delete(list *List) error
 	GetList(list *Addr) (*List, error)
@@ -47,7 +48,7 @@ type ListRepo interface {
 	RemoveKnowns(list *List, addrs []*Addr) ([]*mailutil.Addr, error)
 	RemoveMembers(list *List, addrs []*Addr) ([]*Addr, error)
 	Update(list *List, display string, publicSignup, hideFrom bool, actionMod, actionMember, actionKnown, actionUnknown Action) error
-	UpdateMember(list *List, rawAddress string, receive, moderate, notify, admin bool) error
+	UpdateMember(list *List, rawAddress string, receive, moderate, notify, admin, bounces bool) error
 }
 
 type Logger interface {
@@ -379,9 +380,9 @@ func (u *Ulist) SignoffJoinMessage(list *List, member *Addr) (*bytes.Buffer, err
 	return buf, err
 }
 
-func (u *Ulist) AddMembers(list *List, sendWelcome bool, addrs []*Addr, receive, moderate, notify, admin bool, reason string) (int, []error) {
+func (u *Ulist) AddMembers(list *List, sendWelcome bool, addrs []*Addr, receive, moderate, notify, admin, bounces bool, reason string) (int, []error) {
 
-	added, err := u.Lists.AddMembers(list, addrs, receive, moderate, notify, admin)
+	added, err := u.Lists.AddMembers(list, addrs, receive, moderate, notify, admin, bounces)
 	if err != nil {
 		return 0, []error{err}
 	}
@@ -440,7 +441,7 @@ func (u *Ulist) CreateList(address, name, rawAdminMods string, reason string) (*
 		return nil, 0, []error{err}
 	}
 
-	added, errs := u.AddMembers(list, true, adminMods, true, true, true, true, reason)
+	added, errs := u.AddMembers(list, true, adminMods, true, true, true, true, true, reason)
 	return list, added, errs
 }
 

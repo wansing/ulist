@@ -1193,7 +1193,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      true,
 			Notify:        true,
 			Admin:         true,
-			Bounce:        true,
+			Bounces:       true,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1202,7 +1202,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
-			Bounce:        false,
+			Bounces:       false,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1211,7 +1211,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
-			Bounce:        false,
+			Bounces:       false,
 		},
 		ulist.Membership{
 			ListInfo:      wantListInfo,
@@ -1220,7 +1220,7 @@ You can leave the mailing list "List" here: https://lists.example.com/leave/memb
 			Moderate:      false,
 			Notify:        false,
 			Admin:         false,
-			Bounce:        false,
+			Bounces:       false,
 		},
 	}
 

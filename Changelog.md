@@ -2,4 +2,11 @@
 
 ## v0.14.0 (2023-05-20)
 
-v0.14.0 adds a column to the database schema. The upgrade is performed automatically. See `repo/sqlite/list.go` for details.
+A database schema upgrade is required:
+
+```
+BEGIN TRANSACTION;
+ALTER TABLE member ADD COLUMN bounces BOOLEAN NOT NULL default 0;
+UPDATE member SET bounces = admin;
+COMMIT;
+```

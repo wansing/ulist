@@ -45,14 +45,6 @@ func OpenListDB(connStr string) (*ListDB, error) {
 		return nil, err
 	}
 
-	// database migration
-	_, _ = sqlDB.Exec(`
-		BEGIN TRANSACTION;
-		ALTER TABLE member ADD COLUMN bounces BOOLEAN NOT NULL default 0;
-		UPDATE member SET bounces = admin;
-		COMMIT;
-	`)
-
 	_, err = sqlDB.Exec(`
 
 		CREATE TABLE IF NOT EXISTS list (

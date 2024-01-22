@@ -28,11 +28,7 @@ type LMTPBackend struct {
 	Ulist *Ulist
 }
 
-func (LMTPBackend) Login(_ *smtp.ConnectionState, _, _ string) (smtp.Session, error) {
-	return nil, smtp.ErrAuthUnsupported
-}
-
-func (lb LMTPBackend) AnonymousLogin(_ *smtp.ConnectionState) (smtp.Session, error) {
+func (lb LMTPBackend) NewSession(_ *smtp.Conn) (smtp.Session, error) {
 	return &lmtpSession{
 		Ulist: lb.Ulist,
 	}, nil
@@ -56,8 +52,16 @@ func (s *lmtpSession) Reset() {
 	s.isBounce = false
 }
 
+func (*lmtpSession) Logout() error {
+	return nil
+}
+
+func (*lmtpSession) AuthPlain(username, password string) error {
+	return smtp.ErrAuthUnsupported
+}
+
 // "MAIL FROM". Starts a new mail transaction.
-func (s *lmtpSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
+func (s *lmtpSession) Mail(envelopeFrom string, _ *smtp.MailOptions) error {
 
 	s.Reset() // just in case
 	s.logId = atomic.AddUint32(&s.Ulist.LastLogID, 1)
@@ -71,7 +75,7 @@ func (s *lmtpSession) Mail(envelopeFrom string, _ smtp.MailOptions) error {
 }
 
 // "RCPT TO". Can be called multiple times for multiple recipients.
-func (s *lmtpSession) Rcpt(to string) error {
+func (s *lmtpSession) Rcpt(to string, _ *smtp.RcptOptions) error {
 	err := s.rcpt(to)
 	if err != nil {
 		s.logf("\033[1;31mrcpt error: %v\033[0m", err) // red color
@@ -328,9 +332,5 @@ func (s *lmtpSession) data(r io.Reader) error {
 		}
 	}
 
-	return nil
-}
-
-func (*lmtpSession) Logout() error {
 	return nil
 }

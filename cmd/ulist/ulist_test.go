@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emersion/go-smtp"
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/filelog"
 	"github.com/wansing/ulist/mailutil"
@@ -202,20 +201,20 @@ func transact(envelopes ...*mailutil.MTAEnvelope) error {
 		Ulist: ul,
 	}
 
-	session, err := backend.AnonymousLogin(nil)
+	session, err := backend.NewSession(nil)
 	if err != nil {
 		return err
 	}
 
 	for _, envelope := range envelopes {
 
-		err = session.Mail(envelope.EnvelopeFrom, smtp.MailOptions{})
+		err = session.Mail(envelope.EnvelopeFrom, nil)
 		if err != nil {
 			return err
 		}
 
 		for _, to := range envelope.EnvelopeTo {
-			err := session.Rcpt(to)
+			err := session.Rcpt(to, nil)
 			if err != nil {
 				return err
 			}
@@ -623,7 +622,7 @@ func TestRejectAll(t *testing.T) {
 To: reject-all@example.com
 
 `)
-		wantErr(t, err, "user not found")
+		wantErr(t, err, "SMTP error 550: user not found")
 	}
 
 	wantMessage(t, "reject-all+bounces@example.com", []string{"member@example.com"}, `Content-Type: text/plain; charset=utf-8
@@ -670,7 +669,7 @@ Subject: Hi
 
 Hello`)
 
-	wantErr(t, err, "email loop detected: loop@example.com")
+	wantErr(t, err, "SMTP error 554: email loop detected: loop@example.com")
 
 	wantChansEmpty(t)
 }
@@ -781,7 +780,7 @@ Subject: Hi
 
 Hello`)
 
-	wantErr(t, err, "bounce address accepts only bounce notifications (with empty envelope-from)")
+	wantErr(t, err, "SMTP error 541: bounce address accepts only bounce notifications (with empty envelope-from)")
 
 	wantChansEmpty(t)
 }
@@ -800,7 +799,7 @@ Subject: Hi
 
 Hello`)
 
-	wantErr(t, err, "got bounce notification (with empty envelope-from) to non-bounce address")
+	wantErr(t, err, "SMTP error 541: got bounce notification (with empty envelope-from) to non-bounce address")
 
 	wantChansEmpty(t)
 }
@@ -847,7 +846,7 @@ Subject: Hi
 
 Hello`)
 
-	wantErr(t, err, "list address cc-bcc@example.com is not in To or Cc")
+	wantErr(t, err, "SMTP error 541: list address cc-bcc@example.com is not in To or Cc")
 
 	// CC
 

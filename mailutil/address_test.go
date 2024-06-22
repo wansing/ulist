@@ -13,8 +13,8 @@ func TestDecode(t *testing.T) {
 		{"Name <address@example.com>", "Name", "address@example.com", ""},
 		{"Ääää <ööööööö@üüüüüüü.com>", "Ääää", "ööööööö@üüüüüüü.com", ""},
 		{"=?ISO-8859-15?Q?K=F6hler?= <test@example.com>", "Köhler", "test@example.com", ""},
-		{"=?utf-8?q?=C2=A1Hola,_se=C3=B1or!?= <test@example.com>", "¡Hola, señor!", "test@example.com", ""},
-		{"=?utf-8?B?c3BhbUBleGFtcGxlLmNvbQ==?=", "", "", "mail: no angle-addr"}, // apparently only used by spammers to obfuscate their email address
+		{"=?utf-8?q?=C2=A1Hola=2C_se=C3=B1or!?= <test@example.com>", "¡Hola, señor!", "test@example.com", ""}, // mime.QEncoding would keep the comma, which is not suitable for RFC 5322 address and address-list.
+		{"=?utf-8?B?c3BhbUBleGFtcGxlLmNvbQ==?=", "", "", "mail: no angle-addr"},                               // apparently only used by spammers to obfuscate their email address
 	}
 
 	for _, test := range tests {

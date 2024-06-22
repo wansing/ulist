@@ -47,9 +47,9 @@ func parse(fn string) *template.Template {
 				}
 				return len(entries)
 			},
-			"CreateCaptcha": captcha.Create,
-			"PathEscape":    url.PathEscape,
-			"TryMimeDecode": mailutil.TryMimeDecode,
+			"CreateCaptcha":    captcha.Create,
+			"PathEscape":       url.PathEscape,
+			"RobustWordDecode": mailutil.RobustWordDecode,
 		},
 	).ParseFS(files, "layout.html", fn))
 }

@@ -9,10 +9,8 @@ import (
 	"strings"
 )
 
-// Decodes the Name (not used at the moment).
-// mail.ParseAddress and mail.ParseAddressList yield errors on encoded input, so we should this
 var RobustAddressParser = mail.AddressParser{
-	WordDecoder: TryMimeDecoder,
+	WordDecoder: RobustWordDecoder,
 }
 
 var ErrInvalidAddress = errors.New("invalid email address")

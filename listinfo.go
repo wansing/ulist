@@ -38,7 +38,7 @@ func (li *ListInfo) NewMessageId() string {
 }
 
 func (li *ListInfo) PrefixSubject(subject string) string {
-	subject = mailutil.TryMimeDecode(subject)
+	subject = mailutil.RobustWordDecode(subject)
 	var prefix = "[" + li.DisplayOrLocal() + "]"
 	if firstSquareBracket := strings.Index(subject, "["); firstSquareBracket == -1 || firstSquareBracket != strings.Index(subject, prefix) { // square bracket not found or before prefix
 		subject = prefix + " " + subject

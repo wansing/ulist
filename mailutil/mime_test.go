@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestTryMimeDecode(t *testing.T) {
+func TestRobustWordDecode(t *testing.T) {
 
 	tests := []struct {
 		input  string
@@ -16,7 +16,7 @@ func TestTryMimeDecode(t *testing.T) {
 	}
 
 	for _, test := range tests {
-		if got := TryMimeDecode(test.input); got != test.expect {
+		if got := RobustWordDecode(test.input); got != test.expect {
 			t.Errorf("got %s, want %s", got, test.expect)
 		}
 	}

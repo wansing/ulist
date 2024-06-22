@@ -7,8 +7,8 @@ import (
 	"golang.org/x/text/encoding/htmlindex"
 )
 
-// CharsetReader never returns an error
-var TryMimeDecoder = &mime.WordDecoder{
+// RobustWordDecoder is a mime.WordDecoder which never returns an error. It also tries to resolve charsets which are not supported by the default mime.WordDecoder.
+var RobustWordDecoder = &mime.WordDecoder{
 	CharsetReader: func(charset string, input io.Reader) (io.Reader, error) {
 		if enc, err := htmlindex.Get(charset); err == nil {
 			return enc.NewDecoder().Reader(input), nil
@@ -19,7 +19,7 @@ var TryMimeDecoder = &mime.WordDecoder{
 }
 
 // "[DecodeHeader] decodes all encoded-words of the given string"
-func TryMimeDecode(input string) string {
-	result, _ := TryMimeDecoder.DecodeHeader(input) // TryMimeDecoder never returns an error
+func RobustWordDecode(input string) string {
+	result, _ := RobustWordDecoder.DecodeHeader(input) // err is always nil
 	return result
 }

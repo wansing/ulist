@@ -145,19 +145,19 @@ func (s *lmtpSession) data(r io.Reader) error {
 
 	// logging
 
-	if from := mailutil.TryMimeDecode(message.Header.Get("From")); from != "" {
+	if from := mailutil.RobustWordDecode(message.Header.Get("From")); from != "" {
 		s.logf("from: %s", from)
 	}
 
-	if to := mailutil.TryMimeDecode(message.Header.Get("To")); to != "" {
+	if to := mailutil.RobustWordDecode(message.Header.Get("To")); to != "" {
 		s.logf("to: %s", to)
 	}
 
-	if cc := mailutil.TryMimeDecode(message.Header.Get("Cc")); cc != "" {
+	if cc := mailutil.RobustWordDecode(message.Header.Get("Cc")); cc != "" {
 		s.logf("cc: %s", cc)
 	}
 
-	if subject := mailutil.TryMimeDecode(message.Header.Get("Subject")); subject != "" {
+	if subject := mailutil.RobustWordDecode(message.Header.Get("Subject")); subject != "" {
 		s.logf("subject: %s", subject)
 	}
 

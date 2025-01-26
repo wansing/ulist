@@ -28,8 +28,15 @@ type List struct {
 	ActionUnknown Action
 }
 
-var sentJoinCheckbacks = make(map[string]int64)  // RFC5322AddrSpec => unix time
-var sentLeaveCheckbacks = make(map[string]int64) // RFC5322AddrSpec => unix time
+type rateLimitKey struct {
+	addr string
+	list string
+}
+
+var (
+	sentJoinCheckbacks  = make(map[rateLimitKey]int64) // value: unix time
+	sentLeaveCheckbacks = make(map[rateLimitKey]int64) // value: unix time
+)
 
 // CreateHMAC creates an HMAC with a given user email address and the current time. The HMAC is returned as a base64 RawURLEncoding string.
 func (list *List) CreateHMAC(addr *Addr) (int64, string, error) {
@@ -139,7 +146,7 @@ func (u *Ulist) SendJoinCheckback(list *List, recipient *Addr) error {
 
 	// rate limiting
 
-	if lastSentTimestamp, ok := sentJoinCheckbacks[recipient.RFC5322AddrSpec()]; ok {
+	if lastSentTimestamp, ok := sentJoinCheckbacks[rateLimitKey{recipient.RFC5322AddrSpec(), list.RFC5322AddrSpec()}]; ok {
 		if lastSentTimestamp < time.Now().AddDate(0, 0, 7).Unix() {
 			return fmt.Errorf("A join request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", recipient)
 		}
@@ -175,7 +182,7 @@ func (u *Ulist) SendJoinCheckback(list *List, recipient *Addr) error {
 		return err
 	}
 
-	sentJoinCheckbacks[recipient.RFC5322AddrSpec()] = time.Now().Unix()
+	sentJoinCheckbacks[rateLimitKey{recipient.RFC5322AddrSpec(), list.RFC5322AddrSpec()}] = time.Now().Unix()
 
 	return nil
 }
@@ -189,7 +196,7 @@ func (u *Ulist) SendLeaveCheckback(list *List, user *Addr) (bool, error) {
 
 	// rate limiting
 
-	if lastSentTimestamp, ok := sentLeaveCheckbacks[user.RFC5322AddrSpec()]; ok {
+	if lastSentTimestamp, ok := sentLeaveCheckbacks[rateLimitKey{user.RFC5322AddrSpec(), list.RFC5322AddrSpec()}]; ok {
 		if lastSentTimestamp < time.Now().AddDate(0, 0, 7).Unix() {
 			return false, fmt.Errorf("A leave request has already been sent to %v. In order to prevent spamming, requests can be sent every seven days only.", user)
 		}
@@ -225,7 +232,7 @@ func (u *Ulist) SendLeaveCheckback(list *List, user *Addr) (bool, error) {
 		return false, err
 	}
 
-	sentLeaveCheckbacks[user.RFC5322AddrSpec()] = time.Now().Unix()
+	sentLeaveCheckbacks[rateLimitKey{user.RFC5322AddrSpec(), list.RFC5322AddrSpec()}] = time.Now().Unix()
 
 	return true, nil
 }

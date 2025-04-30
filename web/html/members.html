@@ -31,12 +31,12 @@
 				{{ range . }}
 				<tr id="{{ PathEscape .MemberAddress }}">
 					<td><address>{{ .MemberAddress }}</address></td><!-- some language processors mess up email addresses, hope that the address tag prevents that -->
-					<td>{{ if .Receive  }}&#10004;{{ end }}</td>
-					<td>{{ if .Moderate }}&#10004;{{ end }}</td>
-					<td>{{ if .Notify   }}&#10004;{{ end }}</td>
-					<td>{{ if .Admin    }}&#10004;{{ end }}</td>
-					<td>{{ if .Bounces  }}&#10004;{{ end }}</td>
-					<td><a href="/member/{{ PathEscape $.List.RFC5322AddrSpec }}/{{ .MemberAddress }}">Edit</a></td>
+					<td style="user-select: none;">{{ if .Receive  }}&#10004;{{ end }}</td>
+					<td style="user-select: none;">{{ if .Moderate }}&#10004;{{ end }}</td>
+					<td style="user-select: none;">{{ if .Notify   }}&#10004;{{ end }}</td>
+					<td style="user-select: none;">{{ if .Admin    }}&#10004;{{ end }}</td>
+					<td style="user-select: none;">{{ if .Bounces  }}&#10004;{{ end }}</td>
+					<td style="user-select: none;"><a href="/member/{{ PathEscape $.List.RFC5322AddrSpec }}/{{ .MemberAddress }}">Edit</a></td>
 				</tr>
 				{{ end }}
 			</tbody>

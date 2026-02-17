@@ -413,7 +413,7 @@ func (w Web) login(ctx *Context) error {
 			ctx.setUser(email)
 			ctx.Successf("Welcome!")
 			if redirect := ctx.r.URL.Query()["redirect"]; len(redirect) > 0 && !strings.Contains(redirect[0], ":") { // basic protection against hijacking (?redirect=https://eve.example.com)
-				ctx.Redirect(redirect[0])
+				ctx.Redirect("%s", redirect[0])
 			} else {
 				ctx.Redirect("/my")
 			}
@@ -912,7 +912,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 		}
 
 		if successNotification != "" {
-			ctx.Successf(successNotification)
+			ctx.Successf("%s", successNotification)
 		}
 
 		ctx.Redirect("/mod/%s", url.PathEscape(list.RFC5322AddrSpec()))

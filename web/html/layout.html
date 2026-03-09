@@ -70,7 +70,7 @@
 {{define "list-tabs"}}
 	<h1>{{ .Auth.ListInfo.RFC5322AddrSpec }}</h1>
 	<ul class="nav nav-tabs my-3">
-		{{if .Auth.Moderate}}
+		{{if (or .Auth.Moderate .Auth.Admin)}}
 			<li class="nav-item">
 				<a class="nav-link {{if ActiveTab "mod" .}}active{{end}}" href="/mod/{{.Auth.ListInfo.RFC5322AddrSpec}}">Moderation requests</a>
 			</li>

@@ -342,7 +342,7 @@ func (w Web) requireAdminPermission(f func(*Context, *ulist.List) error) func(*C
 
 func (w Web) requireModPermission(f func(*Context, *ulist.List) error) func(*Context, *ulist.List) error {
 	return func(ctx *Context, list *ulist.List) error {
-		if m, _ := w.getMembershipOfAuthUser(list, ctx.User); m.Moderate {
+		if m, _ := w.getMembershipOfAuthUser(list, ctx.User); m.Admin || m.Moderate {
 			return f(ctx, list)
 		} else {
 			return ErrUnauthorized
@@ -372,11 +372,8 @@ func (w Web) list(ctx *Context, list *ulist.List) error {
 		return err
 	}
 	switch {
-	case membership.Moderate:
+	case membership.Moderate || membership.Admin:
 		ctx.Redirect("/mod/%s", url.PathEscape(list.RFC5322AddrSpec()))
-		return nil
-	case membership.Admin:
-		ctx.Redirect("/members/%s", url.PathEscape(list.RFC5322AddrSpec()))
 		return nil
 	case membership.Member:
 		ctx.Redirect("/leave/%s", url.PathEscape(list.RFC5322AddrSpec()))

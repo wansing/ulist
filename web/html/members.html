@@ -1,20 +1,20 @@
-{{ define "content" }}
+{{define "content"}}
 	{{template "list-tabs" .}}
 	<!-- it's easier to copy the headline and nav than to nest templates -->
 	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}">List</a>
+			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">List</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/add">Add</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">Add</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/remove">Remove</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">Remove</a>
 		</li>
 	</ul>
 
-	{{ with .Members }}
-		<p>The list has {{ len .}} members.</p>
+	{{with .Members}}
+		<p>The list has {{len .}} members.</p>
 		<table class="table">
 			<thead>
 				<tr>
@@ -28,18 +28,18 @@
 				</tr>
 			</thead>
 			<tbody>
-				{{ range . }}
-				<tr id="{{ PathEscape .MemberAddress }}">
-					<td><address>{{ .MemberAddress }}</address></td><!-- some language processors mess up email addresses, hope that the address tag prevents that -->
-					<td style="user-select: none;">{{ if .Receive  }}&#10004;{{ end }}</td>
-					<td style="user-select: none;">{{ if .Moderate }}&#10004;{{ end }}</td>
-					<td style="user-select: none;">{{ if .Notify   }}&#10004;{{ end }}</td>
-					<td style="user-select: none;">{{ if .Admin    }}&#10004;{{ end }}</td>
-					<td style="user-select: none;">{{ if .Bounces  }}&#10004;{{ end }}</td>
-					<td style="user-select: none;"><a href="/member/{{ PathEscape $.List.RFC5322AddrSpec }}/{{ .MemberAddress }}">Edit</a></td>
+				{{range .}}
+				<tr id="{{PathEscape .MemberAddress}}">
+					<td><address>{{.MemberAddress}}</address></td><!-- some language processors mess up email addresses, hope that the address tag prevents that -->
+					<td style="user-select: none;">{{if .Receive }}&#10004;{{end}}</td>
+					<td style="user-select: none;">{{if .Moderate}}&#10004;{{end}}</td>
+					<td style="user-select: none;">{{if .Notify  }}&#10004;{{end}}</td>
+					<td style="user-select: none;">{{if .Admin   }}&#10004;{{end}}</td>
+					<td style="user-select: none;">{{if .Bounces }}&#10004;{{end}}</td>
+					<td style="user-select: none;"><a href="/member/{{PathEscape $.List.RFC5322AddrSpec}}/{{.MemberAddress}}">Edit</a></td>
 				</tr>
-				{{ end }}
+				{{end}}
 			</tbody>
 		</table>
-	{{ end }}
-{{ end }}
+	{{end}}
+{{end}}

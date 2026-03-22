@@ -1,6 +1,6 @@
-{{ define "content" }}
+{{define "content"}}
 	<h1>Lists</h1>
-	{{ with .PublicLists }}
+	{{with .PublicLists}}
 		<table class="table">
 			<thead>
 				<tr>
@@ -10,20 +10,20 @@
 				</tr>
 			</thead>
 			<tbody>
-				{{ range .}}
+				{{range .}}
 					<tr>
-						<td>{{ .RFC5322AddrSpec }}</td>
-						<td>{{ .Display }}</td>
+						<td>{{.RFC5322AddrSpec}}</td>
+						<td>{{.Display}}</td>
 						<td>
-							{{ if not (index $.MyLists .RFC5322AddrSpec) }}
-								<a href="/join/{{ PathEscape .RFC5322AddrSpec }}">Join</a>
-							{{ end }}
+							{{if not (index $.MyLists .RFC5322AddrSpec)}}
+								<a href="/join/{{PathEscape .RFC5322AddrSpec}}">Join</a>
+							{{end}}
 						</td>
 					</tr>
-				{{ end }}
+				{{end}}
 			</tbody>
 		</table>
-	{{ else }}
+	{{else}}
 		<p>No lists.</p>
-	{{ end }}
-{{ end }}
+	{{end}}
+{{end}}

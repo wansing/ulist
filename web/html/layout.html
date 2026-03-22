@@ -15,60 +15,60 @@
 			<li class="nav-item">
 				<a class="nav-link" href="/">Public lists</a>
 			</li>
-			{{ if .LoggedIn }}
+			{{if .LoggedIn}}
 				<li class="nav-item">
 					<a class="nav-link" href="/my">My lists</a>
 				</li>
-				{{ if .IsSuperadmin }}
+				{{if .IsSuperadmin}}
 					<li class="nav-item">
 						<a class="nav-link" href="/all">All lists</a>
 					</li>
 					<li class="nav-item">
 						<a class="nav-link" href="/create">Create list</a>
 					</li>
-				{{ end }}
+				{{end}}
 				<li class="nav-item">
-					<a class="nav-link" href="/logout">Logout ({{ .User }})</a>
+					<a class="nav-link" href="/logout">Logout ({{.User}})</a>
 				</li>
-			{{ else }}
+			{{else}}
 				<li class="nav-item">
 					<a class="nav-link" href="/login">Login</a>
 				</li>
-			{{ end }}
+			{{end}}
 		</ul>
 	</nav>
 	<main role="main" class="container">
-		{{ range .Notifications }}
-			<div class="alert alert-{{ .Style }} mt-3">{{ .Message }}</div>
-		{{ end }}
-		{{ template "content" .Data }}
+		{{range .Notifications}}
+			<div class="alert alert-{{.Style}} mt-3">{{.Message}}</div>
+		{{end}}
+		{{template "content" .Data}}
 	</main>
 </body>
 </html>
 
-{{ define "addrs-card" }}
-	{{ if gt (len .) 10 }}
+{{define "addrs-card"}}
+	{{if gt (len .) 10}}
 	<style>
 		label:hover { cursor: pointer; }
 		#collapsed-addrs { display: none; }
 		#collapse-addrs:checked ~ #collapsed-addrs { display: block; }
 	</style>
-	{{ end }}
+	{{end}}
 	<div class="card mb-4">
 		<label for="collapse-addrs" class="card-body mb-0">
-			{{ len . }} email addresses
+			{{len .}} email addresses
 		</label>
 		<input type="checkbox" class="d-none" id="collapse-addrs">
 		<div class="card-footer" id="collapsed-addrs">
-			{{ range . }}
-				{{ . }}<br>
-			{{ end }}
+			{{range .}}
+				{{.}}<br>
+			{{end}}
 		</div>
 	</div>
-{{ end }}
+{{end}}
 
 {{define "list-tabs"}}
-	<h1>{{ .Auth.ListInfo.RFC5322AddrSpec }}</h1>
+	<h1>{{.Auth.ListInfo.RFC5322AddrSpec}}</h1>
 	<ul class="nav nav-tabs my-3">
 		{{if (or .Auth.Moderate .Auth.Admin)}}
 			<li class="nav-item">

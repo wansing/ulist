@@ -1,21 +1,21 @@
-{{ define "content" }}
+{{define "content"}}
 	{{template "list-tabs" .}}
 	<!-- it's easier to copy the headline and nav than to nest templates -->
 	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}">List</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">List</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/add">Add</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">Add</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{ PathEscape .List.RFC5322AddrSpec }}/remove">Remove</a>
+			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">Remove</a>
 		</li>
 	</ul>
 
-	<form action="/members/{{ PathEscape .List.RFC5322AddrSpec }}/remove/staging" method="post">
-		<input type="hidden" name="addrs" value="{{ .AddrsString}}">
-		{{ template "addrs-card" .Addrs }}
+	<form action="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove/staging" method="post">
+		<input type="hidden" name="addrs" value="{{.AddrsString}}">
+		{{template "addrs-card" .Addrs}}
 		<div class="form-group form-check">
 			<input class="form-check-input" type="radio" name="stage" id="checkback" value="checkback" onchange="document.getElementById('gdpr-note').style.display = 'none'">
 			<label class="form-check-label" for="checkback">
@@ -40,4 +40,4 @@
 		</div>
 		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove</button>
 	</form>
-{{ end }}
+{{end}}

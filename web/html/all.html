@@ -1,23 +1,23 @@
 <!-- partly copied from my.html -->
-{{ define "content" }}
+{{define "content"}}
 	<h1>All mailing lists</h1>
-	{{ with .Lists }}
+	{{with .Lists}}
 		<div class="list-group mb-4">
-			{{ $domain := "" }}
-			{{ range . }}
-				{{ if ne $domain .Domain }}
+			{{$domain := ""}}
+			{{range .}}
+				{{if ne $domain .Domain}}
 					<div class="list-group-item"><strong>{{.Domain}}</strong></div>
-				{{ end }}
-				{{ $domain = .Domain }}
+				{{end}}
+				{{$domain = .Domain}}
 				<a href="/list/{{PathEscape .RFC5322AddrSpec}}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-					<span>{{ .RFC5322AddrSpec }}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</span>
+					<span>{{.RFC5322AddrSpec}}{{with .Display}} &mdash; <em>{{.}}</em>{{end}}</span>
 					{{with CountMod ($.StorageFolderer.StorageFolder .)}}
 						<span class="badge badge-primary badge-pill">{{.}}</span>
 					{{end}}
 				</a>
-			{{ end }}
+			{{end}}
 		</div>
-	{{ else }}
+	{{else}}
 		<p>No lists.</p>
-	{{ end }}
-{{ end }}
+	{{end}}
+{{end}}

@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/alexedwards/scs/v2"
-	"github.com/julienschmidt/httprouter"
 	"github.com/wansing/ulist"
 	"github.com/wansing/ulist/mailutil"
 	"github.com/wansing/ulist/web/captcha"
@@ -60,7 +59,6 @@ func init() {
 type Context struct {
 	w             http.ResponseWriter
 	r             *http.Request
-	ps            httprouter.Params
 	User          *mailutil.Addr
 	IsSuperadmin  bool
 	Notifications []Notification
@@ -155,15 +153,14 @@ func (web Web) FooterPlain(list *ulist.List) string {
 }
 
 // if f returns err, it must not execute a template or redirect
-func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.ResponseWriter, *http.Request, httprouter.Params) {
-	return func(w http.ResponseWriter, r *http.Request, ps httprouter.Params) {
+func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
 
 		user, _ := mailutil.ParseAddress(sessionManager.GetString(r.Context(), "user"))
 
 		ctx := &Context{
 			w:            w,
 			r:            r,
-			ps:           ps,
 			User:         user,
 			IsSuperadmin: web.isSuperadmin(user),
 		}
@@ -261,50 +258,60 @@ func (web Web) ListenAndServe() error {
 }
 
 func (w Web) newServer() *http.Server {
-	router := httprouter.New()
-	router.ServeFiles("/static/*filepath", http.FS(static.Files))
-
-	getAndPost := func(path string, handle httprouter.Handle) {
-		router.GET(path, handle)
-		router.POST(path, handle)
-	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /static/", http.StripPrefix("/static", http.FileServerFS(ModTimeFS{static.Files, time.Now()})))
 
 	// unauthenticated join and leave
-	router.GET("/", w.middleware(false, w.public))
-	getAndPost("/join/:list", w.middleware(false, w.loadList(w.askJoin)))
-	getAndPost("/join/:list/:timestamp/:hmac/:email", w.middleware(false, w.loadList(w.confirmJoin)))
-	getAndPost("/leave/:list", w.middleware(false, w.askLeave))
-	getAndPost("/leave/:list/:timestamp/:hmac/:email", w.middleware(false, w.loadList(w.confirmLeave)))
+	mux.HandleFunc("GET  /{$}", w.middleware(false, w.public))
+	mux.HandleFunc("GET  /join/{list}", w.middleware(false, w.loadList(w.askJoin)))
+	mux.HandleFunc("POST /join/{list}", w.middleware(false, w.loadList(w.askJoin)))
+	mux.HandleFunc("GET  /join/{list}/{timestamp}/{hmac}/{email}", w.middleware(false, w.loadList(w.confirmJoin)))
+	mux.HandleFunc("POST /join/{list}/{timestamp}/{hmac}/{email}", w.middleware(false, w.loadList(w.confirmJoin)))
+	mux.HandleFunc("GET  /leave/{list}", w.middleware(false, w.askLeave))
+	mux.HandleFunc("POST /leave/{list}", w.middleware(false, w.askLeave))
+	mux.HandleFunc("GET  /leave/{list}/{timestamp}/{hmac}/{email}", w.middleware(false, w.loadList(w.confirmLeave)))
+	mux.HandleFunc("POST /leave/{list}/{timestamp}/{hmac}/{email}", w.middleware(false, w.loadList(w.confirmLeave)))
 
 	// logged-in users
-	router.GET("/list/:list", w.middleware(true, w.loadList(w.list)))
-	getAndPost("/login", w.middleware(false, w.login))
-	router.GET("/logout", w.middleware(true, w.logout))
-	router.GET("/my", w.middleware(true, w.myLists))
-	getAndPost("/my/:list", w.middleware(true, w.leave))
+	mux.HandleFunc("GET  /list/{list}", w.middleware(true, w.loadList(w.list)))
+	mux.HandleFunc("GET  /login", w.middleware(false, w.login))
+	mux.HandleFunc("POST /login", w.middleware(false, w.login))
+	mux.HandleFunc("GET  /logout", w.middleware(true, w.logout))
+	mux.HandleFunc("GET  /my", w.middleware(true, w.myLists))
+	mux.HandleFunc("GET  /my/{list}", w.middleware(true, w.leave))
+	mux.HandleFunc("POST /my/{list}", w.middleware(true, w.leave))
 
 	// superadmin
-	router.GET("/all", w.middleware(true, w.all))
-	getAndPost("/create", w.middleware(true, w.create))
+	mux.HandleFunc("GET  /all", w.middleware(true, w.all))
+	mux.HandleFunc("GET  /create", w.middleware(true, w.create))
+	mux.HandleFunc("POST /create", w.middleware(true, w.create))
 
 	// admins
-	getAndPost("/delete/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.delete))))
-	router.GET("/members/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.members))))
-	getAndPost("/members/:list/add", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAdd))))
-	router.POST("/members/:list/add/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAddStagingPost))))
-	getAndPost("/members/:list/remove", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemove))))
-	router.POST("/members/:list/remove/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemoveStagingPost))))
-	getAndPost("/member/:list/:email", w.middleware(true, w.loadList(w.requireAdminPermission(w.member))))
-	getAndPost("/settings/:list", w.middleware(true, w.loadList(w.requireAdminPermission(w.settings))))
+	mux.HandleFunc("GET  /delete/{list}", w.middleware(true, w.loadList(w.requireAdminPermission(w.delete))))
+	mux.HandleFunc("POST /delete/{list}", w.middleware(true, w.loadList(w.requireAdminPermission(w.delete))))
+	mux.HandleFunc("GET  /members/{list}", w.middleware(true, w.loadList(w.requireAdminPermission(w.members))))
+	mux.HandleFunc("GET  /members/{list}/add", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAdd))))
+	mux.HandleFunc("POST /members/{list}/add", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAdd))))
+	mux.HandleFunc("POST /members/{list}/add/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersAddStagingPost))))
+	mux.HandleFunc("GET  /members/{list}/remove", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemove))))
+	mux.HandleFunc("POST /members/{list}/remove", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemove))))
+	mux.HandleFunc("POST /members/{list}/remove/staging", w.middleware(true, w.loadList(w.requireAdminPermission(w.membersRemoveStagingPost))))
+	mux.HandleFunc("GET  /member/{list}/{email}", w.middleware(true, w.loadList(w.requireAdminPermission(w.member))))
+	mux.HandleFunc("POST /member/{list}/{email}", w.middleware(true, w.loadList(w.requireAdminPermission(w.member))))
+	mux.HandleFunc("GET  /settings/{list}", w.middleware(true, w.loadList(w.requireAdminPermission(w.settings))))
+	mux.HandleFunc("POST /settings/{list}", w.middleware(true, w.loadList(w.requireAdminPermission(w.settings))))
 
 	// moderators
-	getAndPost("/knowns/:list", w.middleware(true, w.loadList(w.requireModPermission(w.knowns))))
-	getAndPost("/mod/:list", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
-	getAndPost("/mod/:list/:page", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
-	router.GET("/view/:list/:emlfilename", w.middleware(true, w.loadList(w.requireModPermission(w.view))))
+	mux.HandleFunc("GET  /knowns/{list}", w.middleware(true, w.loadList(w.requireModPermission(w.knowns))))
+	mux.HandleFunc("POST /knowns/{list}", w.middleware(true, w.loadList(w.requireModPermission(w.knowns))))
+	mux.HandleFunc("GET  /mod/{list}", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	mux.HandleFunc("POST /mod/{list}", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	mux.HandleFunc("GET  /mod/{list}/{page}", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	mux.HandleFunc("POST /mod/{list}/{page}", w.middleware(true, w.loadList(w.requireModPermission(w.mod))))
+	mux.HandleFunc("GET  /view/{list}/{emlfilename}", w.middleware(true, w.loadList(w.requireModPermission(w.view))))
 
 	return &http.Server{
-		Handler:      sessionManager.LoadAndSave(router),
+		Handler:      sessionManager.LoadAndSave(mux),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 	}
@@ -316,7 +323,7 @@ func (w Web) loadList(f func(*Context, *ulist.List) error) func(*Context) error 
 
 	return func(ctx *Context) error {
 
-		listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+		listAddr, err := mailutil.ParseAddress(ctx.r.PathValue("list"))
 		if err != nil {
 			return ErrNoList
 		}
@@ -743,7 +750,7 @@ func (w Web) membersRemoveStagingPost(ctx *Context, list *ulist.List) error {
 
 func (w Web) member(ctx *Context, list *ulist.List) error {
 
-	member, err := mailutil.ParseAddress(ctx.ps.ByName("email"))
+	member, err := mailutil.ParseAddress(ctx.r.PathValue("email"))
 	if err != nil {
 		return err
 	}
@@ -937,7 +944,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 	// page
 
-	page, err := strconv.Atoi(ctx.ps.ByName("page"))
+	page, err := strconv.Atoi(ctx.r.PathValue("page"))
 	if err != nil {
 		page = 1
 	}
@@ -1017,7 +1024,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 
 func (w Web) view(ctx *Context, list *ulist.List) error {
 
-	emlFilename := ctx.ps.ByName("emlfilename")
+	emlFilename := ctx.r.PathValue("emlfilename")
 	if strings.Contains(emlFilename, "..") || strings.Contains(emlFilename, "/") {
 		return errors.New("filename contains forbidden characters")
 	}
@@ -1028,19 +1035,19 @@ func (w Web) view(ctx *Context, list *ulist.List) error {
 
 // join and leave
 
-func (w Web) parseEmailTimestampHMAC(ps httprouter.Params) (email *mailutil.Addr, timestamp int64, hmac []byte, err error) {
+func (w Web) parseEmailTimestampHMAC(r *http.Request) (email *mailutil.Addr, timestamp int64, hmac []byte, err error) {
 
-	email, err = mailutil.ParseAddress(ps.ByName("email"))
+	email, err = mailutil.ParseAddress(r.PathValue("email"))
 	if err != nil {
 		return
 	}
 
-	timestamp, err = strconv.ParseInt(ps.ByName("timestamp"), 10, 64)
+	timestamp, err = strconv.ParseInt(r.PathValue("timestamp"), 10, 64)
 	if err != nil {
 		return
 	}
 
-	hmac, err = base64.RawURLEncoding.DecodeString(ps.ByName("hmac"))
+	hmac, err = base64.RawURLEncoding.DecodeString(r.PathValue("hmac"))
 	return
 }
 
@@ -1119,7 +1126,7 @@ func (w Web) leave(ctx *Context) error {
 
 	// We must not reveal whether the list exists!
 
-	listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+	listAddr, err := mailutil.ParseAddress(ctx.r.PathValue("list"))
 	if err != nil {
 		return err
 	}
@@ -1157,7 +1164,7 @@ func (w Web) leave(ctx *Context) error {
 	return ctx.Execute(html.Leave, html.LeaveData{
 		Auth:        auth,
 		Email:       ctx.User.RFC5322AddrSpec(),
-		ListAddress: ctx.ps.ByName("list"),
+		ListAddress: ctx.r.PathValue("list"),
 	})
 }
 
@@ -1165,7 +1172,7 @@ func (w Web) askLeave(ctx *Context) error {
 
 	// We must not reveal whether the list exists!
 
-	listAddr, err := mailutil.ParseAddress(ctx.ps.ByName("list"))
+	listAddr, err := mailutil.ParseAddress(ctx.r.PathValue("list"))
 	if err != nil {
 		return err
 	}
@@ -1183,7 +1190,7 @@ func (w Web) askLeave(ctx *Context) error {
 	}
 
 	data := html.LeaveAskData{
-		ListAddress: ctx.ps.ByName("list"), // use user input only, don't reveal whether the list exists
+		ListAddress: ctx.r.PathValue("list"), // use user input only, don't reveal whether the list exists
 		Email:       ctx.r.PostFormValue("email"),
 	}
 
@@ -1222,7 +1229,7 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 
 	// get address, validate HMAC
 
-	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.ps)
+	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.r)
 	if err != nil {
 		return err
 	}
@@ -1269,7 +1276,7 @@ func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 
 	// get address, validate HMAC
 
-	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.ps)
+	addr, timestamp, inputHMAC, err := w.parseEmailTimestampHMAC(ctx.r)
 	if err != nil {
 		return err
 	}

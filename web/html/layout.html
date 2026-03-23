@@ -13,26 +13,26 @@
 	<nav class="navbar navbar-expand-md bg-dark navbar-dark justify-content-md-center">
 		<ul class="navbar-nav">
 			<li class="nav-item">
-				<a class="nav-link" href="/">Public lists</a>
+				<a class="nav-link" href="/">{{$.Tr "Public lists"}}</a>
 			</li>
 			{{if .LoggedIn}}
 				<li class="nav-item">
-					<a class="nav-link" href="/my">My lists</a>
+					<a class="nav-link" href="/my">{{$.Tr "My lists"}}</a>
 				</li>
 				{{if .IsSuperadmin}}
 					<li class="nav-item">
-						<a class="nav-link" href="/all">All lists</a>
+						<a class="nav-link" href="/all">{{$.Tr "All lists"}}</a>
 					</li>
 					<li class="nav-item">
-						<a class="nav-link" href="/create">Create list</a>
+						<a class="nav-link" href="/create">{{$.Tr "Create list"}}</a>
 					</li>
 				{{end}}
 				<li class="nav-item">
-					<a class="nav-link" href="/logout">Logout ({{.User}})</a>
+					<a class="nav-link" href="/logout">{{$.Tr "Logout"}} ({{.User}})</a>
 				</li>
 			{{else}}
 				<li class="nav-item">
-					<a class="nav-link" href="/login">Login</a>
+					<a class="nav-link" href="/login">{{$.Tr "Login"}}</a>
 				</li>
 			{{end}}
 		</ul>
@@ -47,7 +47,7 @@
 </html>
 
 {{define "addrs-card"}}
-	{{if gt (len .) 10}}
+	{{if gt (len .Addrs) 10}}
 	<style>
 		label:hover { cursor: pointer; }
 		#collapsed-addrs { display: none; }
@@ -56,11 +56,11 @@
 	{{end}}
 	<div class="card mb-4">
 		<label for="collapse-addrs" class="card-body mb-0">
-			{{len .}} email addresses
+			{{$.Tr "%d email addresses" (len .Addrs)}}
 		</label>
 		<input type="checkbox" class="d-none" id="collapse-addrs">
 		<div class="card-footer" id="collapsed-addrs">
-			{{range .}}
+			{{range .Addrs}}
 				{{.}}<br>
 			{{end}}
 		</div>
@@ -72,23 +72,23 @@
 	<ul class="nav nav-tabs my-3">
 		{{if (or .Auth.Moderate .Auth.Admin)}}
 			<li class="nav-item">
-				<a class="nav-link {{if ActiveTab "mod" .}}active{{end}}" href="/mod/{{.Auth.ListInfo.RFC5322AddrSpec}}">Moderation requests</a>
+				<a class="nav-link {{if ActiveTab "mod" .}}active{{end}}" href="/mod/{{.Auth.ListInfo.RFC5322AddrSpec}}">{{$.Tr "Moderation requests"}}</a>
 			</li>
 			<li class="nav-item">
-				<a class="nav-link {{if ActiveTab "knowns" .}}active{{end}}" href="/knowns/{{.Auth.ListInfo.RFC5322AddrSpec}}">Known senders</a>
+				<a class="nav-link {{if ActiveTab "knowns" .}}active{{end}}" href="/knowns/{{.Auth.ListInfo.RFC5322AddrSpec}}">{{$.Tr "Known senders"}}</a>
 			</li>
 		{{end}}
 		{{if .Auth.Admin}}
 			<li class="nav-item">
-				<a class="nav-link {{if ActiveTab "members" .}}active{{end}}" href="/members/{{.Auth.ListInfo.RFC5322AddrSpec}}">Members</a>
+				<a class="nav-link {{if ActiveTab "members" .}}active{{end}}" href="/members/{{.Auth.ListInfo.RFC5322AddrSpec}}">{{$.Tr "Members"}}</a>
 			</li>
 			<li class="nav-item">
-				<a class="nav-link {{if ActiveTab "settings" .}}active{{end}}" href="/settings/{{.Auth.ListInfo.RFC5322AddrSpec}}">Settings</a>
+				<a class="nav-link {{if ActiveTab "settings" .}}active{{end}}" href="/settings/{{.Auth.ListInfo.RFC5322AddrSpec}}">{{$.Tr "Settings"}}</a>
 			</li>
 		{{end}}
 		{{if .Auth.Member}}
 			<li class="nav-item">
-				<a class="nav-link {{if ActiveTab "leave" .}}active{{end}}" href="/my/{{.Auth.ListInfo.RFC5322AddrSpec}}">Leave</a>
+				<a class="nav-link {{if ActiveTab "leave" .}}active{{end}}" href="/my/{{.Auth.ListInfo.RFC5322AddrSpec}}">{{$.Tr "Leave"}}</a>
 			</li>
 		{{end}}
 	</ul>

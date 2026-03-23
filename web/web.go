@@ -65,6 +65,11 @@ type Context struct {
 	Data          interface{} // for template
 }
 
+// workaround
+func (ctx *Context) Tr(format string, a ...interface{}) string {
+	return fmt.Sprintf(format, a...) // TODO
+}
+
 // implement Alerter
 func (ctx *Context) Alertf(format string, a ...interface{}) {
 	ctx.addNotification(fmt.Sprintf(format, a...), "danger")
@@ -174,7 +179,10 @@ func (web Web) middleware(mustBeLoggedIn bool, f func(ctx *Context) error) func(
 			if err != ErrUnauthorized && err != ErrNoList {
 				log.Printf("    web: %v", err)
 			}
-			_ = ctx.Execute(html.Error, err)
+			_ = ctx.Execute(html.Error, html.ErrorData{
+				Lang: html.MakeLang(ctx.r),
+				Err:  err,
+			})
 		}
 	}
 }
@@ -367,6 +375,7 @@ func (w Web) myLists(ctx *Context) error {
 	}
 
 	return ctx.Execute(html.My, html.MyData{
+		Lang:            html.MakeLang(ctx.r),
 		Lists:           memberships,
 		StorageFolderer: w.Ulist,
 	})
@@ -404,6 +413,7 @@ func (w Web) login(ctx *Context) error {
 	}
 
 	data := html.LoginData{
+		Lang:     html.MakeLang(ctx.r),
 		CanLogin: w.AuthenticationAvailable() || w.Ulist.DummyMode,
 		Mail:     ctx.r.PostFormValue("email"),
 	}
@@ -487,6 +497,7 @@ func (w Web) settings(ctx *Context, list *ulist.List) error {
 	}
 
 	return ctx.Execute(html.Settings, html.SettingsData{
+		Lang: html.MakeLang(ctx.r),
 		Auth: auth,
 		List: list,
 	})
@@ -504,6 +515,7 @@ func (w Web) all(ctx *Context) error {
 	}
 
 	return ctx.Execute(html.All, html.AllData{
+		Lang:            html.MakeLang(ctx.r),
 		Lists:           allLists,
 		StorageFolderer: w.Ulist,
 	})
@@ -515,7 +527,9 @@ func (w Web) create(ctx *Context) error {
 		return errors.New("Unauthorized")
 	}
 
-	data := html.CreateData{}
+	data := html.CreateData{
+		Lang: html.MakeLang(ctx.r),
+	}
 
 	data.Address = ctx.r.PostFormValue("address")
 	data.Name = ctx.r.PostFormValue("name")
@@ -557,7 +571,10 @@ func (w Web) delete(ctx *Context, list *ulist.List) error {
 		}
 	}
 
-	return ctx.Execute(html.Delete, list)
+	return ctx.Execute(html.Delete, html.DeleteData{
+		Lang: html.MakeLang(ctx.r),
+		List: list,
+	})
 }
 
 func (w Web) members(ctx *Context, list *ulist.List) error {
@@ -573,6 +590,7 @@ func (w Web) members(ctx *Context, list *ulist.List) error {
 	}
 
 	return ctx.Execute(html.Members, html.MembersData{
+		Lang:    html.MakeLang(ctx.r),
 		Auth:    auth,
 		List:    list,
 		Members: members,
@@ -587,6 +605,7 @@ func (w Web) membersAdd(ctx *Context, list *ulist.List) error {
 	}
 
 	var data = &html.MembersAddRemoveData{
+		Lang: html.MakeLang(ctx.r),
 		Auth: auth,
 		List: list,
 	}
@@ -595,6 +614,7 @@ func (w Web) membersAdd(ctx *Context, list *ulist.List) error {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
 			return ctx.Execute(html.MembersAddStaging, &html.MembersAddRemoveStagingData{
+				Lang:  html.MakeLang(ctx.r),
 				Auth:  auth,
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
@@ -671,6 +691,7 @@ func (w Web) membersRemove(ctx *Context, list *ulist.List) error {
 	}
 
 	var data = &html.MembersAddRemoveData{
+		Lang: html.MakeLang(ctx.r),
 		Auth: auth,
 		List: list,
 	}
@@ -679,6 +700,7 @@ func (w Web) membersRemove(ctx *Context, list *ulist.List) error {
 		addrs, errs := mailutil.ParseAddresses(ctx.r.PostFormValue("addrs"), ulist.WebBatchLimit)
 		if len(addrs) > 0 && len(errs) == 0 {
 			return ctx.Execute(html.MembersRemoveStaging, &html.MembersAddRemoveStagingData{
+				Lang:  html.MakeLang(ctx.r),
 				Auth:  auth,
 				List:  list,
 				Addrs: mailutil.RFC5322AddrSpecs(addrs),
@@ -780,6 +802,7 @@ func (w Web) member(ctx *Context, list *ulist.List) error {
 	}
 
 	data := html.MemberData{
+		Lang:   html.MakeLang(ctx.r),
 		List:   list,
 		Member: m,
 	}
@@ -829,6 +852,7 @@ func (w Web) knowns(ctx *Context, list *ulist.List) error {
 	}
 
 	return ctx.Execute(html.Knowns, html.KnownsData{
+		Lang:   html.MakeLang(ctx.r),
 		Auth:   auth,
 		Knowns: knowns,
 	})
@@ -965,6 +989,7 @@ func (w Web) mod(ctx *Context, list *ulist.List) error {
 	}
 
 	data := html.ModData{
+		Lang: html.MakeLang(ctx.r),
 		Auth: auth,
 		List: list,
 		Page: page,
@@ -1054,6 +1079,7 @@ func (w Web) parseEmailTimestampHMAC(r *http.Request) (email *mailutil.Addr, tim
 func (w Web) public(ctx *Context) error {
 
 	data := html.PublicData{
+		Lang:    html.MakeLang(ctx.r),
 		MyLists: make(map[string]interface{}),
 	}
 
@@ -1094,6 +1120,7 @@ func (w Web) askJoin(ctx *Context, list *ulist.List) error {
 	}
 
 	data := html.JoinAskData{
+		Lang:        html.MakeLang(ctx.r),
 		Email:       ctx.r.PostFormValue("email"),
 		ListAddress: list.RFC5322AddrSpec(),
 	}
@@ -1162,6 +1189,7 @@ func (w Web) leave(ctx *Context) error {
 	}
 
 	return ctx.Execute(html.Leave, html.LeaveData{
+		Lang:        html.MakeLang(ctx.r),
 		Auth:        auth,
 		Email:       ctx.User.RFC5322AddrSpec(),
 		ListAddress: ctx.r.PathValue("list"),
@@ -1190,6 +1218,7 @@ func (w Web) askLeave(ctx *Context) error {
 	}
 
 	data := html.LeaveAskData{
+		Lang:        html.MakeLang(ctx.r),
 		ListAddress: ctx.r.PathValue("list"), // use user input only, don't reveal whether the list exists
 		Email:       ctx.r.PostFormValue("email"),
 	}
@@ -1265,6 +1294,7 @@ func (w Web) confirmJoin(ctx *Context, list *ulist.List) error {
 	// else load template with button
 
 	data := html.JoinConfirmData{
+		Lang:          html.MakeLang(ctx.r),
 		ListAddress:   list.RFC5322AddrSpec(),
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}
@@ -1312,6 +1342,7 @@ func (w Web) confirmLeave(ctx *Context, list *ulist.List) error {
 	// else load template with button
 
 	data := html.LeaveConfirmData{
+		Lang:          html.MakeLang(ctx.r),
 		ListAddress:   list.RFC5322AddrSpec(),
 		MemberAddress: addr.RFC5322AddrSpec(),
 	}

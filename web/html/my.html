@@ -1,5 +1,5 @@
 {{define "content"}}
-	<h1>My mailing lists</h1>
+	<h1>{{$.Tr "My mailing lists"}}</h1>
 	{{with .Lists}}
 		<div class="list-group mb-4">
 			{{$domain := ""}}
@@ -19,6 +19,6 @@
 			{{end}}
 		</div>
 	{{else}}
-		<p>No lists.</p>
+		<p>{{$.Tr "No lists."}}</p>
 	{{end}}
 {{end}}

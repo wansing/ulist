@@ -1,11 +1,11 @@
 {{define "content"}}
-	<h1>Confirm join</h1>
+	<h1>{{$.Tr "Confirm Join"}}</h1>
 	<form action="" method="post">
 		<p>
-			<button name="confirm_join" value="yes" type="submit" class="btn btn-primary">Add {{.MemberAddress}} to the mailing list {{.ListAddress}}</button>
+			<button name="confirm_join" value="yes" type="submit" class="btn btn-primary">{{$.Tr "Add %s to the mailing list %s" .MemberAddress .ListAddress}}</button>
 		</p>
 	</form>
 	<p>
-		<a href="/">No, don't join</a>
+		<a href="/">{{$.Tr "Cancel"}}</a>
 	</p>
 {{end}}

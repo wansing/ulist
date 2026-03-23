@@ -1,14 +1,14 @@
 {{define "content"}}
-	<h1>Join {{.ListAddress}}</h1>
-	<p>The mailing list {{.ListAddress}} allows everyone to join. If you enter your email address here, you will receive a confirmation link.</p>
+	<h1>{{$.Tr "Join %s" .ListAddress}}</h1>
+	<p>{{$.Tr "In order to join, please enter your email address. We will send a confirmation link to your email address."}}</p>
 	<form action="" method="post">
 		<div class="form-group">
-			<label>Email address</label>
+			<label>{{$.Tr "Email address"}}</label>
 			<input name="email" type="email" class="form-control" placeholder="Email address" value="{{.Email}}">
 		</div>
 		<div class="form-group" style="display: none;">
 			{{CreateCaptcha}}
 		</div>
-		<button name="join" value="1" type="submit" class="btn btn-primary">Join</button>
+		<button name="join" value="1" type="submit" class="btn btn-primary">{{$.Tr "Get confirmation link"}}</button>
 	</form>
 {{end}}

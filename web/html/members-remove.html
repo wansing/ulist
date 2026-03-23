@@ -3,20 +3,20 @@
 	<!-- it's easier to copy the headline and nav than to nest templates -->
 	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">List</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">{{$.Tr "List"}}</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">Add</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">{{$.Tr "Add"}}</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">Remove</a>
+			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">{{$.Tr "Remove"}}</a>
 		</li>
 	</ul>
 
 	<form action="" method="post">
 		<div class="form-group">
-			<textarea name="addrs" class="form-control" placeholder="Email addresses (up to {{BatchLimit}}, one RFC 5322 address-list per line)" rows="4">{{.Addrs}}</textarea>
+			<textarea name="addrs" class="form-control" placeholder="{{$.Tr "Email addresses (up to %v, one RFC 5322 address-list per line)" BatchLimit}}" rows="4">{{.Addrs}}</textarea>
 		</div>
-		<button name="remove" value="1" type="submit" class="btn btn-danger">Prepare</button>
+		<button name="remove" value="1" type="submit" class="btn btn-danger">{{$.Tr "Next"}}</button>
 	</form>
 {{end}}

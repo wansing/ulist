@@ -13,50 +13,50 @@
 			{{range .Messages}}
 				<div class="card mb-3">
 					<div class="card-body">
-						<h5 class="card-title"><a href="/view/{{PathEscape $.List.RFC5322AddrSpec}}/{{.Filename}}">{{with RobustWordDecode (.Header.Get "Subject")}}{{.}}{{else}}Unnamed email{{end}}</a></h5>
+						<h5 class="card-title"><a href="/view/{{PathEscape $.List.RFC5322AddrSpec}}/{{.Filename}}">{{with RobustWordDecode (.Header.Get "Subject")}}{{.}}{{else}}{{$.Tr "Unnamed email"}}{{end}}</a></h5>
 						<p class="card-text">
 							{{with .Err}}
-								<em>Error: {{.}}</em>
+								<em>{{$.Tr "Error"}}: {{.}}</em>
 							{{else}}
 								From: {{.Header.Get "From"}}<br> <!-- an email header has a single "From" field which can contain multiple addresses -->
 								{{with .Header.Get "Sender"}}
-									Sender: {{.}}<br>
+									{{$.Tr "Sender"}}: {{.}}<br>
 								{{end}}
 								To: {{.Header.Get "To"}}<br> <!-- an email header has a single "To" field which can contain multiple addresses -->
 								{{with .Header.Get "Cc"}}
 									Cc: {{.}}<br>
 								{{end}}
-								Date: {{.Header.Get "Date"}}<br>
+								{{$.Tr "Date"}}: {{.Header.Get "Date"}}<br>
 							{{end}}
 						</p>
 					</div>
 					<div class="card-footer">
 						<div class="form-check form-check-inline">
 							<input class="form-check-input"  id="delete-{{.Filename}}" type="radio" name="action-{{.Filename}}" value="delete">
-							<label class="form-check-label" for="delete-{{.Filename}}">Delete</label>
+							<label class="form-check-label" for="delete-{{.Filename}}">{{$.Tr "Delete"}}</label>
 							{{if and .SingleFromStr $.List.ActionKnown.EqualsReject}}
 								<div class="form-check form-check-inline ifchecked">
 									&ensp;
 									<input class="form-check-input"  id="addknown-delete-{{.Filename}}" type="checkbox" name="addknown-delete-{{.Filename}}" value="on">
 										<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
-									<label class="form-check-label" for="addknown-delete-{{.Filename}}">add {{.SingleFromStr}} to known senders</label>
+									<label class="form-check-label" for="addknown-delete-{{.Filename}}">{{$.Tr "Add %s to known senders" .SingleFromStr}}</label>
 								</div>
 							{{end}}
 						</div>
 						<div class="form-check form-check-inline">
 							<input class="form-check-input"  id="postpone-{{.Filename}}" type="radio" name="action-{{.Filename}}" value="postpone" checked>
-							<label class="form-check-label" for="postpone-{{.Filename}}">Postpone decision</label>
+							<label class="form-check-label" for="postpone-{{.Filename}}">{{$.Tr "Postpone decision"}}</label>
 						</div>
 						{{if not .Err}}
 							<div class="form-check form-check-inline">
 								<input class="form-check-input"  id="pass-{{.Filename}}" type="radio" name="action-{{.Filename}}" value="pass">
-								<label class="form-check-label" for="pass-{{.Filename}}">Pass </label>
+								<label class="form-check-label" for="pass-{{.Filename}}">{{$.Tr "Pass"}} </label>
 								{{if and .SingleFromStr $.List.ActionKnown.EqualsPass}}
 									<div class="form-check form-check-inline ifchecked">
 										&ensp;
 										<input class="form-check-input"  id="addknown-pass-{{.Filename}}" type="checkbox" name="addknown-pass-{{.Filename}}" value="on">
 											<!-- value is irrelevant, unchecked checkboxes aren't sent at all -->
-										<label class="form-check-label" for="addknown-pass-{{.Filename}}">add {{.SingleFromStr}} to known senders</label>
+										<label class="form-check-label" for="addknown-pass-{{.Filename}}">{{$.Tr "Add %s to known senders" .SingleFromStr}}</label>
 									</div>
 								{{end}}
 							</div>
@@ -64,7 +64,7 @@
 					</div>
 				</div>
 			{{end}}
-			<button name="apply" value="1" type="submit" class="btn btn-primary">Apply</button>
+			<button name="apply" value="1" type="submit" class="btn btn-primary">{{$.Tr "Apply"}}</button>
 		</form>
 		{{if gt (len .PageLinks) 1}}
 			<nav class="mt-3">
@@ -78,6 +78,6 @@
 			</nav>
 		{{end}}
 	{{else}}
-		<p>No open moderation requests at the moment.</p>
+		<p>{{$.Tr "No open moderation requests at the moment."}}</p>
 	{{end}}
 {{end}}

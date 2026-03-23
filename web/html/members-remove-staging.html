@@ -3,41 +3,41 @@
 	<!-- it's easier to copy the headline and nav than to nest templates -->
 	<ul class="nav nav-tabs mb-3">
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">List</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}">{{$.Tr "List"}}</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">Add</a>
+			<a class="nav-link" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/add">{{$.Tr "Add"}}</a>
 		</li>
 		<li class="nav-item">
-			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">Remove</a>
+			<a class="nav-link active" href="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove">{{$.Tr "Remove"}}</a>
 		</li>
 	</ul>
 
 	<form action="/members/{{PathEscape .List.RFC5322AddrSpec}}/remove/staging" method="post">
 		<input type="hidden" name="addrs" value="{{.AddrsString}}">
-		{{template "addrs-card" .Addrs}}
+		{{template "addrs-card" .}}
 		<div class="form-group form-check">
 			<input class="form-check-input" type="radio" name="stage" id="checkback" value="checkback" onchange="document.getElementById('gdpr-note').style.display = 'none'">
 			<label class="form-check-label" for="checkback">
-				Send a check back email with a confirmation link. The link is valid for seven days and not revocable.
+				{{$.Tr "Send a check back email with a confirmation link. The link is valid for seven days and not revocable."}}
 			</label>
 		</div>
 		<div class="form-group form-check">
 			<input class="form-check-input" type="radio" name="stage" id="signoff" value="signoff" checked onchange="document.getElementById('gdpr-note').style.display = 'block'">
 			<label class="form-check-label" for="signoff">
-				Remove the members instantly and send a goodbye email.
+				{{$.Tr "Remove the members instantly and send a goodbye email."}}
 			</label>
 		</div>
 		<div class="form-group form-check">
 			<input class="form-check-input" type="radio" name="stage" id="silent" value="silent" onchange="document.getElementById('gdpr-note').style.display = 'block'">
 			<label class="form-check-label" for="silent">
-				Remove the members instantly. Do not send a goodbye email.
+				{{$.Tr "Remove the members instantly. Do not send a goodbye email."}}
 			</label>
 		</div>
 		<div class="form-group" id="gdpr-note"><!-- initially: signoff is checked, gdpr-note is displayed -->
 			<input class="form-control" name="gdpr-note" placeholder="GDPR note (optional)">
 			<!-- is not preserved across errors at the moment, as we don't expect errors here -->
 		</div>
-		<button name="remove" value="1" type="submit" class="btn btn-danger">Remove</button>
+		<button name="remove" value="1" type="submit" class="btn btn-danger">{{$.Tr "Remove"}}</button>
 	</form>
 {{end}}

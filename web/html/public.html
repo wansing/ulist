@@ -1,11 +1,11 @@
 {{define "content"}}
-	<h1>Lists</h1>
+	<h1>{{$.Tr "Lists"}}</h1>
 	{{with .PublicLists}}
 		<table class="table">
 			<thead>
 				<tr>
-					<th>Address</th>
-					<th>Name</th>
+					<th>{{$.Tr "Address"}}</th>
+					<th>{{$.Tr "Name"}}</th>
 					<th></th>
 				</tr>
 			</thead>
@@ -24,6 +24,6 @@
 			</tbody>
 		</table>
 	{{else}}
-		<p>No lists.</p>
+		<p>{{$.Tr "No lists."}}</p>
 	{{end}}
 {{end}}

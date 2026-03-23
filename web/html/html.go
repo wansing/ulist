@@ -79,71 +79,94 @@ var (
 )
 
 type AllData struct {
+	Lang
 	Lists           []ulist.ListInfo
 	StorageFolderer interface{ StorageFolder(ulist.ListInfo) string }
 }
 
 type CreateData struct {
+	Lang
 	Address   string
 	Name      string
 	AdminMods string
 }
 
+type DeleteData struct {
+	Lang
+	List *ulist.List
+}
+
+type ErrorData struct {
+	Lang
+	Err error
+}
+
 type JoinAskData struct {
+	Lang
 	Email       string
 	ListAddress string
 }
 
 type JoinConfirmData struct {
+	Lang
 	ListAddress   string
 	MemberAddress string
 }
 
 type KnownsData struct {
+	Lang
 	Auth   ulist.Membership
 	Knowns []string
 }
 
 type LeaveData struct {
+	Lang
 	Auth        ulist.Membership
 	Email       string
 	ListAddress string
 }
 
 type LeaveAskData struct {
+	Lang
 	Email string
 	// use user input only, don't reveal whether the list exists
 	ListAddress string
 }
 
 type LeaveConfirmData struct {
+	Lang
 	ListAddress   string
 	MemberAddress string
 }
 
 type LoginData struct {
+	Lang
 	CanLogin bool
 	Mail     string
 }
 
 type MemberData struct {
+	Lang
 	List   *ulist.List
 	Member ulist.Membership
 }
 
 type MembersData struct {
+	Lang
 	Auth    ulist.Membership
 	List    *ulist.List
 	Members []ulist.Membership
 }
 
 type MembersAddRemoveData struct {
+	Lang
 	Auth  ulist.Membership
 	List  *ulist.List
 	Addrs string
 }
 
 type MembersAddRemoveStagingData struct {
+	Lang
 	Auth  ulist.Membership
 	List  *ulist.List
 	Addrs []string // just addr-spec because this it what is stored in the database, and because will be parsed again
@@ -154,6 +177,7 @@ func (data *MembersAddRemoveStagingData) AddrsString() string {
 }
 
 type ModData struct {
+	Lang
 	Auth      ulist.Membership
 	List      *ulist.List
 	Page      int
@@ -162,6 +186,7 @@ type ModData struct {
 }
 
 type MyData struct {
+	Lang
 	Lists           []ulist.Membership
 	StorageFolderer interface{ StorageFolder(ulist.ListInfo) string }
 }
@@ -172,11 +197,13 @@ type PageLink struct {
 }
 
 type PublicData struct {
+	Lang
 	PublicLists []ulist.ListInfo
 	MyLists     map[string]interface{}
 }
 
 type SettingsData struct {
+	Lang
 	Auth ulist.Membership
 	List *ulist.List
 }

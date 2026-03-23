@@ -1,0 +1,607 @@
+{
+    "language": "en-US",
+    "messages": [
+        {
+            "id": "All mailing lists",
+            "message": "All mailing lists",
+            "translation": "All mailing lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "No lists.",
+            "message": "No lists.",
+            "translation": "No lists.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Create a new mailing list",
+            "message": "Create a new mailing list",
+            "translation": "Create a new mailing list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "List address (domain must be configured on this server)",
+            "message": "List address (domain must be configured on this server)",
+            "translation": "List address (domain must be configured on this server)",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "List address",
+            "message": "List address",
+            "translation": "List address",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "List name",
+            "message": "List name",
+            "translation": "List name",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Members which can administrate and moderate",
+            "message": "Members which can administrate and moderate",
+            "translation": "Members which can administrate and moderate",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Create list",
+            "message": "Create list",
+            "translation": "Create list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Delete mailing list %s",
+            "message": "Delete mailing list %s",
+            "translation": "Delete mailing list %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Yes, delete the mailing list %s",
+            "message": "Yes, delete the mailing list %s",
+            "translation": "Yes, delete the mailing list %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Error",
+            "message": "Error",
+            "translation": "Error",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "An error occurred.",
+            "message": "An error occurred.",
+            "translation": "An error occurred.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Go back",
+            "message": "Go back",
+            "translation": "Go back",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "or",
+            "message": "or",
+            "translation": "or",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "go to the main page",
+            "message": "go to the main page",
+            "translation": "go to the main page",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Join %s",
+            "message": "Join %s",
+            "translation": "Join %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "In order to join, please enter your email address. We will send a confirmation link to your email address.",
+            "message": "In order to join, please enter your email address. We will send a confirmation link to your email address.",
+            "translation": "In order to join, please enter your email address. We will send a confirmation link to your email address.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Email address",
+            "message": "Email address",
+            "translation": "Email address",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Get confirmation link",
+            "message": "Get confirmation link",
+            "translation": "Get confirmation link",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Confirm Join",
+            "message": "Confirm Join",
+            "translation": "Confirm Join",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Add %s to the mailing list %s",
+            "message": "Add %s to the mailing list %s",
+            "translation": "Add %s to the mailing list %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Cancel",
+            "message": "Cancel",
+            "translation": "Cancel",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Email addresses (up to %v, one RFC 5322 address-list per line)",
+            "message": "Email addresses (up to %v, one RFC 5322 address-list per line)",
+            "translation": "Email addresses (up to %v, one RFC 5322 address-list per line)",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Add senders",
+            "message": "Add senders",
+            "translation": "Add senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove senders",
+            "message": "Remove senders",
+            "translation": "Remove senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Known Senders",
+            "message": "Known Senders",
+            "translation": "Known Senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Moderation requests",
+            "message": "Moderation requests",
+            "translation": "Moderation requests",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Known senders",
+            "message": "Known senders",
+            "translation": "Known senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Members",
+            "message": "Members",
+            "translation": "Members",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Settings",
+            "message": "Settings",
+            "translation": "Settings",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Leave",
+            "message": "Leave",
+            "translation": "Leave",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Public lists",
+            "message": "Public lists",
+            "translation": "Public lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "My lists",
+            "message": "My lists",
+            "translation": "My lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "All lists",
+            "message": "All lists",
+            "translation": "All lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Logout",
+            "message": "Logout",
+            "translation": "Logout",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Login",
+            "message": "Login",
+            "translation": "Login",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "%d email addresses",
+            "message": "%d email addresses",
+            "translation": "%d email addresses",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Leave %s",
+            "message": "Leave %s",
+            "translation": "Leave %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Confirm leave",
+            "message": "Confirm leave",
+            "translation": "Confirm leave",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove %s from the mailing list %s",
+            "message": "Remove %s from the mailing list %s",
+            "translation": "Remove %s from the mailing list %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove me (%s) from list %s",
+            "message": "Remove me (%s) from list %s",
+            "translation": "Remove me (%s) from list %s",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Password",
+            "message": "Password",
+            "translation": "Password",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Login is disabled.",
+            "message": "Login is disabled.",
+            "translation": "Login is disabled.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Back to member list",
+            "message": "Back to member list",
+            "translation": "Back to member list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Receive mails",
+            "message": "Receive mails",
+            "translation": "Receive mails",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Moderate the list",
+            "message": "Moderate the list",
+            "translation": "Moderate the list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Notify on moderation requests",
+            "message": "Notify on moderation requests",
+            "translation": "Notify on moderation requests",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Administrate the list",
+            "message": "Administrate the list",
+            "translation": "Administrate the list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Receive bounce emails",
+            "message": "Receive bounce emails",
+            "translation": "Receive bounce emails",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Save",
+            "message": "Save",
+            "translation": "Save",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "List",
+            "message": "List",
+            "translation": "List",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Add",
+            "message": "Add",
+            "translation": "Add",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove",
+            "message": "Remove",
+            "translation": "Remove",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.",
+            "message": "Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translation": "Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "The new members have consented. Add them instantly and send a welcome email.",
+            "message": "The new members have consented. Add them instantly and send a welcome email.",
+            "translation": "The new members have consented. Add them instantly and send a welcome email.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "The new members have consented. Add them instantly. Do not send a welcome email.",
+            "message": "The new members have consented. Add them instantly. Do not send a welcome email.",
+            "translation": "The new members have consented. Add them instantly. Do not send a welcome email.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Next",
+            "message": "Next",
+            "translation": "Next",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Send a check back email with a confirmation link. The link is valid for seven days and not revocable.",
+            "message": "Send a check back email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translation": "Send a check back email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove the members instantly and send a goodbye email.",
+            "message": "Remove the members instantly and send a goodbye email.",
+            "translation": "Remove the members instantly and send a goodbye email.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Remove the members instantly. Do not send a goodbye email.",
+            "message": "Remove the members instantly. Do not send a goodbye email.",
+            "translation": "Remove the members instantly. Do not send a goodbye email.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "The list has %d members.",
+            "message": "The list has %d members.",
+            "translation": "The list has %d members.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Address",
+            "message": "Address",
+            "translation": "Address",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Moderate",
+            "message": "Moderate",
+            "translation": "Moderate",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Notify on moderation",
+            "message": "Notify on moderation",
+            "translation": "Notify on moderation",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Admin",
+            "message": "Admin",
+            "translation": "Admin",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Notify on bounce",
+            "message": "Notify on bounce",
+            "translation": "Notify on bounce",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Edit",
+            "message": "Edit",
+            "translation": "Edit",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Unnamed email",
+            "message": "Unnamed email",
+            "translation": "Unnamed email",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Sender",
+            "message": "Sender",
+            "translation": "Sender",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Date",
+            "message": "Date",
+            "translation": "Date",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Delete",
+            "message": "Delete",
+            "translation": "Delete",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Add %s to known senders",
+            "message": "Add %s to known senders",
+            "translation": "Add %s to known senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Postpone decision",
+            "message": "Postpone decision",
+            "translation": "Postpone decision",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Pass",
+            "message": "Pass",
+            "translation": "Pass",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Apply",
+            "message": "Apply",
+            "translation": "Apply",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "No open moderation requests at the moment.",
+            "message": "No open moderation requests at the moment.",
+            "translation": "No open moderation requests at the moment.",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "My mailing lists",
+            "message": "My mailing lists",
+            "translation": "My mailing lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Lists",
+            "message": "Lists",
+            "translation": "Lists",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Name",
+            "message": "Name",
+            "translation": "Name",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Public signup",
+            "message": "Public signup",
+            "translation": "Public signup",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Hide sender address",
+            "message": "Hide sender address",
+            "translation": "Hide sender address",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Mails from moderators",
+            "message": "Mails from moderators",
+            "translation": "Mails from moderators",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Mails from members",
+            "message": "Mails from members",
+            "translation": "Mails from members",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Mails from known senders",
+            "message": "Mails from known senders",
+            "translation": "Mails from known senders",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Mails from unknown addresses",
+            "message": "Mails from unknown addresses",
+            "translation": "Mails from unknown addresses",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
+            "id": "Delete this mailing list",
+            "message": "Delete this mailing list",
+            "translation": "Delete this mailing list",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        }
+    ]
+}

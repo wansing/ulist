@@ -1,0 +1,435 @@
+{
+    "language": "de-DE",
+    "messages": [
+        {
+            "id": "All mailing lists",
+            "message": "All mailing lists",
+            "translation": "Alle Mailinglisten"
+        },
+        {
+            "id": "No lists.",
+            "message": "No lists.",
+            "translation": "Keine Listen vorhanden."
+        },
+        {
+            "id": "Create a new mailing list",
+            "message": "Create a new mailing list",
+            "translation": "Neue Mailingliste anlegen"
+        },
+        {
+            "id": "List address (domain must be configured on this server)",
+            "message": "List address (domain must be configured on this server)",
+            "translation": "Listen-Adresse (Domain muss auf dem Server eingerichtet sein)"
+        },
+        {
+            "id": "List address",
+            "message": "List address",
+            "translation": "Adresse der Liste"
+        },
+        {
+            "id": "List name",
+            "message": "List name",
+            "translation": "Name der Liste"
+        },
+        {
+            "id": "Members which can administrate and moderate",
+            "message": "Members which can administrate and moderate",
+            "translation": "Mitglieder, die administrieren und moderieren dürfen"
+        },
+        {
+            "id": "Create list",
+            "message": "Create list",
+            "translation": "Liste anlegen"
+        },
+        {
+            "id": "Delete mailing list %s",
+            "message": "Delete mailing list %s",
+            "translation": "Mailingliste %s löschen"
+        },
+        {
+            "id": "Yes, delete the mailing list %s",
+            "message": "Yes, delete the mailing list %s",
+            "translation": "Ja, lösche die Mailingliste %s"
+        },
+        {
+            "id": "Error",
+            "message": "Error",
+            "translation": "Fehler"
+        },
+        {
+            "id": "An error occurred.",
+            "message": "An error occurred.",
+            "translation": "Ein Fehler ist aufgetreten."
+        },
+        {
+            "id": "Go back",
+            "message": "Go back",
+            "translation": "Zurück"
+        },
+        {
+            "id": "or",
+            "message": "or",
+            "translation": "order"
+        },
+        {
+            "id": "go to the main page",
+            "message": "go to the main page",
+            "translation": "gehe zur Hauptseite"
+        },
+        {
+            "id": "Join %s",
+            "message": "Join %s",
+            "translation": "%s beitreten"
+        },
+        {
+            "id": "In order to join, please enter your email address. We will send a confirmation link to your email address.",
+            "message": "In order to join, please enter your email address. We will send a confirmation link to your email address.",
+            "translation": "Um beizutreten, gib bitte deine E-Mail-Adresse ein. Wir werden einen Bestätigungslink an deine E-Mail-Adresse senden."
+        },
+        {
+            "id": "Email address",
+            "message": "Email address",
+            "translation": "E-Mail-Adresse"
+        },
+        {
+            "id": "Get confirmation link",
+            "message": "Get confirmation link",
+            "translation": "Bestätigungslink anfordern"
+        },
+        {
+            "id": "Confirm Join",
+            "message": "Confirm Join",
+            "translation": "Beitritt bestätigen"
+        },
+        {
+            "id": "Add %s to the mailing list %s",
+            "message": "Add %s to the mailing list %s",
+            "translation": "%s zur Mailingliste %s hinzufügen"
+        },
+        {
+            "id": "Cancel",
+            "message": "Cancel",
+            "translation": "Abbrechen"
+        },
+        {
+            "id": "Email addresses (up to %v, one RFC 5322 address-list per line)",
+            "message": "Email addresses (up to %v, one RFC 5322 address-list per line)",
+            "translation": "E-Mail-Adressen (bis zu %v, eine RFC-5322-Adresse pro Zeile)"
+        },
+        {
+            "id": "Add senders",
+            "message": "Add senders",
+            "translation": "Absendeadressen hinzufügen"
+        },
+        {
+            "id": "Remove senders",
+            "message": "Remove senders",
+            "translation": "Absendeadressen entfernen"
+        },
+        {
+            "id": "Known Senders",
+            "message": "Known Senders",
+            "translation": "Bekannte Absendeadressen"
+        },
+        {
+            "id": "Moderation requests",
+            "message": "Moderation requests",
+            "translation": "Moderationsanfragen"
+        },
+        {
+            "id": "Known senders",
+            "message": "Known senders",
+            "translation": "Bekannte Absendeadressen"
+        },
+        {
+            "id": "Members",
+            "message": "Members",
+            "translation": "Mitglieder"
+        },
+        {
+            "id": "Settings",
+            "message": "Settings",
+            "translation": "Einstellungen"
+        },
+        {
+            "id": "Leave",
+            "message": "Leave",
+            "translation": "Verlassen"
+        },
+        {
+            "id": "Public lists",
+            "message": "Public lists",
+            "translation": "Öffentliche Listen"
+        },
+        {
+            "id": "My lists",
+            "message": "My lists",
+            "translation": "Meine Listen"
+        },
+        {
+            "id": "All lists",
+            "message": "All lists",
+            "translation": "Alle Listen"
+        },
+        {
+            "id": "Logout",
+            "message": "Logout",
+            "translation": "Ausloggen"
+        },
+        {
+            "id": "Login",
+            "message": "Login",
+            "translation": "Einloggen"
+        },
+        {
+            "id": "%d email addresses",
+            "message": "%d email addresses",
+            "translation": "%d E-Mail-Adressen"
+        },
+        {
+            "id": "Leave %s",
+            "message": "Leave %s",
+            "translation": "%s verlassen"
+        },
+        {
+            "id": "Confirm leave",
+            "message": "Confirm leave",
+            "translation": "Verlassen bestätigen"
+        },
+        {
+            "id": "Remove %s from the mailing list %s",
+            "message": "Remove %s from the mailing list %s",
+            "translation": "%s von der Mailingliste %s entfernen"
+        },
+        {
+            "id": "Remove me (%s) from list %s",
+            "message": "Remove me (%s) from list %s",
+            "translation": "Entferne mich (%s) von der Mailingliste %s"
+        },
+        {
+            "id": "Password",
+            "message": "Password",
+            "translation": "Passwort"
+        },
+        {
+            "id": "Login is disabled.",
+            "message": "Login is disabled.",
+            "translation": "Login ist deaktiviert"
+        },
+        {
+            "id": "Back to member list",
+            "message": "Back to member list",
+            "translation": "Zurück zur Mitgliederliste"
+        },
+        {
+            "id": "Receive mails",
+            "message": "Receive mails",
+            "translation": "Mails erhalten"
+        },
+        {
+            "id": "Moderate the list",
+            "message": "Moderate the list",
+            "translation": "Moderation der Liste"
+        },
+        {
+            "id": "Notify on moderation requests",
+            "message": "Notify on moderation requests",
+            "translation": "Benachrichtigung bei Moderationsanfragen"
+        },
+        {
+            "id": "Administrate the list",
+            "message": "Administrate the list",
+            "translation": "Administration der Liste"
+        },
+        {
+            "id": "Receive bounce emails",
+            "message": "Receive bounce emails",
+            "translation": "Bounce-E-Mails erhalten"
+        },
+        {
+            "id": "Save",
+            "message": "Save",
+            "translation": "Speichern"
+        },
+        {
+            "id": "List",
+            "message": "List",
+            "translation": "Liste"
+        },
+        {
+            "id": "Add",
+            "message": "Add",
+            "translation": "Hinzufügen"
+        },
+        {
+            "id": "Remove",
+            "message": "Remove",
+            "translation": "Entfernen"
+        },
+        {
+            "id": "Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.",
+            "message": "Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translation": "Sende eine Einladungs-Mail mit einem Bestätigungslink. Der Link ist sieben Tage lang gültig und nicht widerrufbar."
+        },
+        {
+            "id": "The new members have consented. Add them instantly and send a welcome email.",
+            "message": "The new members have consented. Add them instantly and send a welcome email.",
+            "translation": "Die neuen Mitglieder haben zugestimmt. Füge sie hinzu und sende eine Willkommens-Mail."
+        },
+        {
+            "id": "The new members have consented. Add them instantly. Do not send a welcome email.",
+            "message": "The new members have consented. Add them instantly. Do not send a welcome email.",
+            "translation": "Die neuen Mitglieder haben zugestimmt. Füge sie hinzu, aber sende keine Willkommens-Mail."
+        },
+        {
+            "id": "Next",
+            "message": "Next",
+            "translation": "Weiter"
+        },
+        {
+            "id": "Send a check back email with a confirmation link. The link is valid for seven days and not revocable.",
+            "message": "Send a check back email with a confirmation link. The link is valid for seven days and not revocable.",
+            "translation": "Sende eine Rückfrage-Mail mit einem Bestätigungslink. Der Link ist sieben Tage lang gültig und nicht widerrufbar."
+        },
+        {
+            "id": "Remove the members instantly and send a goodbye email.",
+            "message": "Remove the members instantly and send a goodbye email.",
+            "translation": "Entferne die Mitglieder und sende eine Abschieds-Mail."
+        },
+        {
+            "id": "Remove the members instantly. Do not send a goodbye email.",
+            "message": "Remove the members instantly. Do not send a goodbye email.",
+            "translation": "Entferne die Mitglieder, aber sende keine Abschieds-Mail."
+        },
+        {
+            "id": "The list has %d members.",
+            "message": "The list has %d members.",
+            "translation": "Die Liste hat %d Mitglieder."
+        },
+        {
+            "id": "Address",
+            "message": "Address",
+            "translation": "Adresse"
+        },
+        {
+            "id": "Moderate",
+            "message": "Moderate",
+            "translation": "Moderieren"
+        },
+        {
+            "id": "Notify on moderation",
+            "message": "Notify on moderation",
+            "translation": "Bei Moderationsanfrage benachrichtigen"
+        },
+        {
+            "id": "Admin",
+            "message": "Admin",
+            "translation": "Admin"
+        },
+        {
+            "id": "Notify on bounce",
+            "message": "Notify on bounce",
+            "translation": "Bei Bounce benachrichtigen"
+        },
+        {
+            "id": "Edit",
+            "message": "Edit",
+            "translation": "Bearbeiten"
+        },
+        {
+            "id": "Unnamed email",
+            "message": "Unnamed email",
+            "translation": "Unbenannte E-Mail"
+        },
+        {
+            "id": "Sender",
+            "message": "Sender",
+            "translation": "Absendeadresse"
+        },
+        {
+            "id": "Date",
+            "message": "Date",
+            "translation": "Datum"
+        },
+        {
+            "id": "Delete",
+            "message": "Delete",
+            "translation": "Löschen"
+        },
+        {
+            "id": "Add %s to known senders",
+            "message": "Add %s to known senders",
+            "translation": "%s zur Liste bekannter Absendeadressen hinzufügen"
+        },
+        {
+            "id": "Postpone decision",
+            "message": "Postpone decision",
+            "translation": "Entscheidung verschieben"
+        },
+        {
+            "id": "Pass",
+            "message": "Pass",
+            "translation": "Freischalten"
+        },
+        {
+            "id": "Apply",
+            "message": "Apply",
+            "translation": "Anwenden"
+        },
+        {
+            "id": "No open moderation requests at the moment.",
+            "message": "No open moderation requests at the moment.",
+            "translation": "Derzeit gibt es keine offenen Moderationsanfragen."
+        },
+        {
+            "id": "My mailing lists",
+            "message": "My mailing lists",
+            "translation": "Meine Mailinglisten"
+        },
+        {
+            "id": "Lists",
+            "message": "Lists",
+            "translation": "Mailinglisten"
+        },
+        {
+            "id": "Name",
+            "message": "Name",
+            "translation": "Name"
+        },
+        {
+            "id": "Public signup",
+            "message": "Public signup",
+            "translation": "Öffentlich"
+        },
+        {
+            "id": "Hide sender address",
+            "message": "Hide sender address",
+            "translation": "Absendeadresse verstecken"
+        },
+        {
+            "id": "Mails from moderators",
+            "message": "Mails from moderators",
+            "translation": "E-Mails von Moderator:innen"
+        },
+        {
+            "id": "Mails from members",
+            "message": "Mails from members",
+            "translation": "E-Mails von Mitgliedern"
+        },
+        {
+            "id": "Mails from known senders",
+            "message": "Mails from known senders",
+            "translation": "E-Mails von bekannten Absendeadressen"
+        },
+        {
+            "id": "Mails from unknown addresses",
+            "message": "Mails from unknown addresses",
+            "translation": "E-Mails von unbekannten Leuten"
+        },
+        {
+            "id": "Delete this mailing list",
+            "message": "Delete this mailing list",
+            "translation": "Diese Mailingliste löschen"
+        }
+    ]
+}

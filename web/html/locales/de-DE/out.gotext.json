@@ -132,6 +132,11 @@
             "translation": "Bekannte Absendeadressen"
         },
         {
+            "id": "%d email addresses",
+            "message": "%d email addresses",
+            "translation": "%d E-Mail-Adressen"
+        },
+        {
             "id": "Moderation requests",
             "message": "Moderation requests",
             "translation": "Moderationsanfragen"
@@ -182,14 +187,14 @@
             "translation": "Einloggen"
         },
         {
-            "id": "%d email addresses",
-            "message": "%d email addresses",
-            "translation": "%d E-Mail-Adressen"
-        },
-        {
             "id": "Leave %s",
             "message": "Leave %s",
             "translation": "%s verlassen"
+        },
+        {
+            "id": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "message": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "translation": "Um die Liste zu verlassen, gib bitte deine E-Mail-Adresse ein. Wir werden einen Bestätigungslink an deine E-Mail-Adresse senden."
         },
         {
             "id": "Confirm leave",

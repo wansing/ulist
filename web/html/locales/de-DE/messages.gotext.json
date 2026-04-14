@@ -132,6 +132,31 @@
             "translation": "Bekannte Absendeadressen"
         },
         {
+            "id": "Public lists",
+            "message": "Public lists",
+            "translation": "Öffentliche Listen"
+        },
+        {
+            "id": "My lists",
+            "message": "My lists",
+            "translation": "Meine Listen"
+        },
+        {
+            "id": "All lists",
+            "message": "All lists",
+            "translation": "Alle Listen"
+        },
+        {
+            "id": "Logout",
+            "message": "Logout",
+            "translation": "Ausloggen"
+        },
+        {
+            "id": "Login",
+            "message": "Login",
+            "translation": "Einloggen"
+        },
+        {
             "id": "%d email addresses",
             "message": "%d email addresses",
             "translation": "%d E-Mail-Adressen"
@@ -162,34 +187,14 @@
             "translation": "Verlassen"
         },
         {
-            "id": "Public lists",
-            "message": "Public lists",
-            "translation": "Öffentliche Listen"
-        },
-        {
-            "id": "My lists",
-            "message": "My lists",
-            "translation": "Meine Listen"
-        },
-        {
-            "id": "All lists",
-            "message": "All lists",
-            "translation": "Alle Listen"
-        },
-        {
-            "id": "Logout",
-            "message": "Logout",
-            "translation": "Ausloggen"
-        },
-        {
-            "id": "Login",
-            "message": "Login",
-            "translation": "Einloggen"
-        },
-        {
             "id": "Leave %s",
             "message": "Leave %s",
             "translation": "%s verlassen"
+        },
+        {
+            "id": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "message": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "translation": "Um die Liste zu verlassen, gib bitte deine E-Mail-Adresse ein. Wir werden einen Bestätigungslink an deine E-Mail-Adresse senden."
         },
         {
             "id": "Confirm leave",

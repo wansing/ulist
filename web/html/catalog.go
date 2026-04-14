@@ -39,95 +39,96 @@ func init() {
 }
 
 var messageKeyToIndex = map[string]int{
-	"%d email addresses":            36,
-	"Add":                           51,
-	"Add %s to known senders":       71,
+	"%d email addresses":            26,
+	"Add":                           52,
+	"Add %s to known senders":       72,
 	"Add %s to the mailing list %s": 20,
 	"Add senders":                   23,
-	"Address":                       61,
-	"Admin":                         64,
-	"Administrate the list":         47,
-	"All lists":                     33,
+	"Address":                       62,
+	"Admin":                         65,
+	"Administrate the list":         48,
+	"All lists":                     34,
 	"All mailing lists":             0,
 	"An error occurred.":            11,
-	"Apply":                         74,
-	"Back to member list":           43,
+	"Apply":                         75,
+	"Back to member list":           44,
 	"Cancel":                        21,
 	"Confirm Join":                  19,
-	"Confirm leave":                 38,
+	"Confirm leave":                 39,
 	"Create a new mailing list":     2,
 	"Create list":                   7,
-	"Date":                          69,
-	"Delete":                        70,
+	"Date":                          70,
+	"Delete":                        71,
 	"Delete mailing list %s":        8,
-	"Delete this mailing list":      85,
-	"Edit":                          66,
+	"Delete this mailing list":      86,
+	"Edit":                          67,
 	"Email address":                 17,
 	"Email addresses (up to %v, one RFC 5322 address-list per line)": 22,
 	"Error":                 10,
 	"Get confirmation link": 18,
 	"Go back":               12,
-	"Hide sender address":   80,
-	"In order to join, please enter your email address. We will send a confirmation link to your email address.": 16,
+	"Hide sender address":   81,
+	"In order to join, please enter your email address. We will send a confirmation link to your email address.":  16,
+	"In order to leave, please enter your email address. We will send a confirmation link to your email address.": 38,
 	"Join %s":       15,
 	"Known Senders": 25,
-	"Known senders": 27,
-	"Leave":         30,
+	"Known senders": 28,
+	"Leave":         31,
 	"Leave %s":      37,
-	"List":          50,
+	"List":          51,
 	"List address":  4,
 	"List address (domain must be configured on this server)": 3,
 	"List name":                    5,
-	"Lists":                        77,
-	"Login":                        35,
-	"Login is disabled.":           42,
-	"Logout":                       34,
-	"Mails from known senders":     83,
-	"Mails from members":           82,
-	"Mails from moderators":        81,
-	"Mails from unknown addresses": 84,
-	"Members":                      28,
+	"Lists":                        78,
+	"Login":                        36,
+	"Login is disabled.":           43,
+	"Logout":                       35,
+	"Mails from known senders":     84,
+	"Mails from members":           83,
+	"Mails from moderators":        82,
+	"Mails from unknown addresses": 85,
+	"Members":                      29,
 	"Members which can administrate and moderate": 6,
-	"Moderate":            62,
-	"Moderate the list":   45,
-	"Moderation requests": 26,
-	"My lists":            32,
-	"My mailing lists":    76,
-	"Name":                78,
-	"Next":                56,
+	"Moderate":            63,
+	"Moderate the list":   46,
+	"Moderation requests": 27,
+	"My lists":            33,
+	"My mailing lists":    77,
+	"Name":                79,
+	"Next":                57,
 	"No lists.":           1,
-	"No open moderation requests at the moment.": 75,
-	"Notify on bounce":                           65,
-	"Notify on moderation":                       63,
-	"Notify on moderation requests":              46,
-	"Pass":                                       73,
-	"Password":                                   41,
-	"Postpone decision":                          72,
-	"Public lists":                               31,
-	"Public signup":                              79,
-	"Receive bounce emails":                      48,
-	"Receive mails":                              44,
-	"Remove":                                     52,
-	"Remove %s from the mailing list %s":         39,
-	"Remove me (%s) from list %s":                40,
+	"No open moderation requests at the moment.": 76,
+	"Notify on bounce":                           66,
+	"Notify on moderation":                       64,
+	"Notify on moderation requests":              47,
+	"Pass":                                       74,
+	"Password":                                   42,
+	"Postpone decision":                          73,
+	"Public lists":                               32,
+	"Public signup":                              80,
+	"Receive bounce emails":                      49,
+	"Receive mails":                              45,
+	"Remove":                                     53,
+	"Remove %s from the mailing list %s":         40,
+	"Remove me (%s) from list %s":                41,
 	"Remove senders":                             24,
-	"Remove the members instantly and send a goodbye email.":     58,
-	"Remove the members instantly. Do not send a goodbye email.": 59,
-	"Save": 49,
-	"Send a check back email with a confirmation link. The link is valid for seven days and not revocable.":  57,
-	"Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.": 53,
-	"Sender":                   68,
-	"Settings":                 29,
-	"The list has %d members.": 60,
-	"The new members have consented. Add them instantly and send a welcome email.":     54,
-	"The new members have consented. Add them instantly. Do not send a welcome email.": 55,
-	"Unnamed email":                   67,
+	"Remove the members instantly and send a goodbye email.":     59,
+	"Remove the members instantly. Do not send a goodbye email.": 60,
+	"Save": 50,
+	"Send a check back email with a confirmation link. The link is valid for seven days and not revocable.":  58,
+	"Send an invitation email with a confirmation link. The link is valid for seven days and not revocable.": 54,
+	"Sender":                   69,
+	"Settings":                 30,
+	"The list has %d members.": 61,
+	"The new members have consented. Add them instantly and send a welcome email.":     55,
+	"The new members have consented. Add them instantly. Do not send a welcome email.": 56,
+	"Unnamed email":                   68,
 	"Yes, delete the mailing list %s": 9,
 	"go to the main page":             14,
 	"or":                              13,
 }
 
-var de_DEIndex = []uint32{ // 87 elements
+var de_DEIndex = []uint32{ // 88 elements
 	// Entry 0 - 1F
 	0x00000000, 0x00000013, 0x0000002b, 0x00000045,
 	0x00000083, 0x00000095, 0x000000a4, 0x000000da,
@@ -135,27 +136,27 @@ var de_DEIndex = []uint32{ // 87 elements
 	0x00000144, 0x0000014c, 0x00000152, 0x00000166,
 	0x00000173, 0x000001ea, 0x000001f9, 0x00000215,
 	0x0000022a, 0x0000024d, 0x00000257, 0x00000294,
-	0x000002b0, 0x000002ca, 0x000002e3, 0x000002f7,
-	0x00000310, 0x0000031b, 0x00000329, 0x00000333,
+	0x000002b0, 0x000002ca, 0x000002e3, 0x000002f6,
+	0x0000030a, 0x00000323, 0x0000032e, 0x0000033c,
 	// Entry 20 - 3F
-	0x00000347, 0x00000354, 0x00000360, 0x0000036a,
-	0x00000374, 0x00000387, 0x00000394, 0x000003aa,
-	0x000003cf, 0x000003fa, 0x00000403, 0x00000419,
-	0x00000435, 0x00000444, 0x00000459, 0x00000482,
-	0x0000049b, 0x000004b3, 0x000004bd, 0x000004c3,
-	0x000004cf, 0x000004d9, 0x0000054e, 0x000005a6,
-	0x00000601, 0x00000608, 0x0000067d, 0x000006b4,
-	0x000006ee, 0x0000070b, 0x00000713, 0x0000071e,
+	0x00000346, 0x0000035a, 0x00000367, 0x00000373,
+	0x0000037d, 0x00000387, 0x00000394, 0x00000416,
+	0x0000042c, 0x00000451, 0x0000047c, 0x00000485,
+	0x0000049b, 0x000004b7, 0x000004c6, 0x000004db,
+	0x00000504, 0x0000051d, 0x00000535, 0x0000053f,
+	0x00000545, 0x00000551, 0x0000055b, 0x000005d0,
+	0x00000628, 0x00000683, 0x0000068a, 0x000006ff,
+	0x00000736, 0x00000770, 0x0000078d, 0x00000795,
 	// Entry 40 - 5F
-	0x00000745, 0x0000074b, 0x00000766, 0x00000771,
-	0x00000783, 0x00000792, 0x00000798, 0x000007a1,
-	0x000007d4, 0x000007ed, 0x000007fa, 0x00000803,
-	0x00000836, 0x0000084a, 0x00000858, 0x0000085d,
-	0x00000869, 0x00000883, 0x0000089f, 0x000008b7,
-	0x000008dd, 0x000008fc, 0x00000918,
-} // Size: 372 bytes
+	0x000007a0, 0x000007c7, 0x000007cd, 0x000007e8,
+	0x000007f3, 0x00000805, 0x00000814, 0x0000081a,
+	0x00000823, 0x00000856, 0x0000086f, 0x0000087c,
+	0x00000885, 0x000008b8, 0x000008cc, 0x000008da,
+	0x000008df, 0x000008eb, 0x00000905, 0x00000921,
+	0x00000939, 0x0000095f, 0x0000097e, 0x0000099a,
+} // Size: 376 bytes
 
-const de_DEData string = "" + // Size: 2328 bytes
+const de_DEData string = "" + // Size: 2458 bytes
 	"\x02Alle Mailinglisten\x02Keine Listen vorhanden.\x02Neue Mailingliste a" +
 	"nlegen\x02Listen-Adresse (Domain muss auf dem Server eingerichtet sein)" +
 	"\x02Adresse der Liste\x02Name der Liste\x02Mitglieder, die administriere" +
@@ -167,33 +168,35 @@ const de_DEData string = "" + // Size: 2328 bytes
 	"k anfordern\x02Beitritt bestätigen\x02%s zur Mailingliste %s hinzufügen" +
 	"\x02Abbrechen\x02E-Mail-Adressen (bis zu %v, eine RFC-5322-Adresse pro Z" +
 	"eile)\x02Absendeadressen hinzufügen\x02Absendeadressen entfernen\x02Beka" +
-	"nnte Absendeadressen\x02Moderationsanfragen\x02Bekannte Absendeadressen" +
-	"\x02Mitglieder\x02Einstellungen\x02Verlassen\x02Öffentliche Listen\x02Me" +
-	"ine Listen\x02Alle Listen\x02Ausloggen\x02Einloggen\x02%d E-Mail-Adresse" +
-	"n\x02%s verlassen\x02Verlassen bestätigen\x02%s von der Mailingliste %s " +
-	"entfernen\x02Entferne mich (%s) von der Mailingliste %s\x02Passwort\x02L" +
-	"ogin ist deaktiviert\x02Zurück zur Mitgliederliste\x02Mails erhalten\x02" +
-	"Moderation der Liste\x02Benachrichtigung bei Moderationsanfragen\x02Admi" +
-	"nistration der Liste\x02Bounce-E-Mails erhalten\x02Speichern\x02Liste" +
-	"\x02Hinzufügen\x02Entfernen\x02Sende eine Einladungs-Mail mit einem Best" +
-	"ätigungslink. Der Link ist sieben Tage lang gültig und nicht widerrufba" +
-	"r.\x02Die neuen Mitglieder haben zugestimmt. Füge sie hinzu und sende ei" +
-	"ne Willkommens-Mail.\x02Die neuen Mitglieder haben zugestimmt. Füge sie " +
-	"hinzu, aber sende keine Willkommens-Mail.\x02Weiter\x02Sende eine Rückfr" +
-	"age-Mail mit einem Bestätigungslink. Der Link ist sieben Tage lang gülti" +
-	"g und nicht widerrufbar.\x02Entferne die Mitglieder und sende eine Absch" +
-	"ieds-Mail.\x02Entferne die Mitglieder, aber sende keine Abschieds-Mail." +
-	"\x02Die Liste hat %d Mitglieder.\x02Adresse\x02Moderieren\x02Bei Moderat" +
-	"ionsanfrage benachrichtigen\x02Admin\x02Bei Bounce benachrichtigen\x02Be" +
-	"arbeiten\x02Unbenannte E-Mail\x02Absendeadresse\x02Datum\x02Löschen\x02%" +
-	"s zur Liste bekannter Absendeadressen hinzufügen\x02Entscheidung verschi" +
-	"eben\x02Freischalten\x02Anwenden\x02Derzeit gibt es keine offenen Modera" +
-	"tionsanfragen.\x02Meine Mailinglisten\x02Mailinglisten\x02Name\x02Öffent" +
-	"lich\x02Absendeadresse verstecken\x02E-Mails von Moderator:innen\x02E-Ma" +
-	"ils von Mitgliedern\x02E-Mails von bekannten Absendeadressen\x02E-Mails " +
-	"von unbekannten Leuten\x02Diese Mailingliste löschen"
+	"nnte Absendeadressen\x02%d E-Mail-Adressen\x02Moderationsanfragen\x02Bek" +
+	"annte Absendeadressen\x02Mitglieder\x02Einstellungen\x02Verlassen\x02Öff" +
+	"entliche Listen\x02Meine Listen\x02Alle Listen\x02Ausloggen\x02Einloggen" +
+	"\x02%s verlassen\x02Um die Liste zu verlassen, gib bitte deine E-Mail-Ad" +
+	"resse ein. Wir werden einen Bestätigungslink an deine E-Mail-Adresse sen" +
+	"den.\x02Verlassen bestätigen\x02%s von der Mailingliste %s entfernen\x02" +
+	"Entferne mich (%s) von der Mailingliste %s\x02Passwort\x02Login ist deak" +
+	"tiviert\x02Zurück zur Mitgliederliste\x02Mails erhalten\x02Moderation de" +
+	"r Liste\x02Benachrichtigung bei Moderationsanfragen\x02Administration de" +
+	"r Liste\x02Bounce-E-Mails erhalten\x02Speichern\x02Liste\x02Hinzufügen" +
+	"\x02Entfernen\x02Sende eine Einladungs-Mail mit einem Bestätigungslink. " +
+	"Der Link ist sieben Tage lang gültig und nicht widerrufbar.\x02Die neuen" +
+	" Mitglieder haben zugestimmt. Füge sie hinzu und sende eine Willkommens-" +
+	"Mail.\x02Die neuen Mitglieder haben zugestimmt. Füge sie hinzu, aber sen" +
+	"de keine Willkommens-Mail.\x02Weiter\x02Sende eine Rückfrage-Mail mit ei" +
+	"nem Bestätigungslink. Der Link ist sieben Tage lang gültig und nicht wid" +
+	"errufbar.\x02Entferne die Mitglieder und sende eine Abschieds-Mail.\x02E" +
+	"ntferne die Mitglieder, aber sende keine Abschieds-Mail.\x02Die Liste ha" +
+	"t %d Mitglieder.\x02Adresse\x02Moderieren\x02Bei Moderationsanfrage bena" +
+	"chrichtigen\x02Admin\x02Bei Bounce benachrichtigen\x02Bearbeiten\x02Unbe" +
+	"nannte E-Mail\x02Absendeadresse\x02Datum\x02Löschen\x02%s zur Liste beka" +
+	"nnter Absendeadressen hinzufügen\x02Entscheidung verschieben\x02Freischa" +
+	"lten\x02Anwenden\x02Derzeit gibt es keine offenen Moderationsanfragen." +
+	"\x02Meine Mailinglisten\x02Mailinglisten\x02Name\x02Öffentlich\x02Absend" +
+	"eadresse verstecken\x02E-Mails von Moderator:innen\x02E-Mails von Mitgli" +
+	"edern\x02E-Mails von bekannten Absendeadressen\x02E-Mails von unbekannte" +
+	"n Leuten\x02Diese Mailingliste löschen"
 
-var en_USIndex = []uint32{ // 87 elements
+var en_USIndex = []uint32{ // 88 elements
 	// Entry 0 - 1F
 	0x00000000, 0x00000012, 0x0000001c, 0x00000036,
 	0x0000006e, 0x0000007b, 0x00000085, 0x000000b1,
@@ -201,27 +204,27 @@ var en_USIndex = []uint32{ // 87 elements
 	0x0000010d, 0x00000115, 0x00000118, 0x0000012c,
 	0x00000134, 0x0000019f, 0x000001ad, 0x000001c3,
 	0x000001d0, 0x000001ee, 0x000001f5, 0x00000234,
-	0x00000240, 0x0000024f, 0x0000025d, 0x00000271,
-	0x0000027f, 0x00000287, 0x00000290, 0x00000296,
+	0x00000240, 0x0000024f, 0x0000025d, 0x00000270,
+	0x00000284, 0x00000292, 0x0000029a, 0x000002a3,
 	// Entry 20 - 3F
-	0x000002a3, 0x000002ac, 0x000002b6, 0x000002bd,
-	0x000002c3, 0x000002d6, 0x000002df, 0x000002ed,
-	0x00000310, 0x0000032c, 0x00000335, 0x00000348,
-	0x0000035c, 0x0000036a, 0x0000037c, 0x0000039a,
-	0x000003b0, 0x000003c6, 0x000003cb, 0x000003d0,
-	0x000003d4, 0x000003db, 0x00000442, 0x0000048f,
-	0x000004e0, 0x000004e5, 0x0000054b, 0x00000582,
-	0x000005bd, 0x000005d6, 0x000005de, 0x000005e7,
+	0x000002a9, 0x000002b6, 0x000002bf, 0x000002c9,
+	0x000002d0, 0x000002d6, 0x000002df, 0x0000034b,
+	0x00000359, 0x0000037c, 0x00000398, 0x000003a1,
+	0x000003b4, 0x000003c8, 0x000003d6, 0x000003e8,
+	0x00000406, 0x0000041c, 0x00000432, 0x00000437,
+	0x0000043c, 0x00000440, 0x00000447, 0x000004ae,
+	0x000004fb, 0x0000054c, 0x00000551, 0x000005b7,
+	0x000005ee, 0x00000629, 0x00000642, 0x0000064a,
 	// Entry 40 - 5F
-	0x000005fc, 0x00000602, 0x00000613, 0x00000618,
-	0x00000626, 0x0000062d, 0x00000632, 0x00000639,
-	0x00000651, 0x00000663, 0x00000668, 0x0000066e,
-	0x00000699, 0x000006aa, 0x000006b0, 0x000006b5,
-	0x000006c3, 0x000006d7, 0x000006ed, 0x00000700,
-	0x00000719, 0x00000736, 0x0000074f,
-} // Size: 372 bytes
+	0x00000653, 0x00000668, 0x0000066e, 0x0000067f,
+	0x00000684, 0x00000692, 0x00000699, 0x0000069e,
+	0x000006a5, 0x000006bd, 0x000006cf, 0x000006d4,
+	0x000006da, 0x00000705, 0x00000716, 0x0000071c,
+	0x00000721, 0x0000072f, 0x00000743, 0x00000759,
+	0x0000076c, 0x00000785, 0x000007a2, 0x000007bb,
+} // Size: 376 bytes
 
-const en_USData string = "" + // Size: 1871 bytes
+const en_USData string = "" + // Size: 1979 bytes
 	"\x02All mailing lists\x02No lists.\x02Create a new mailing list\x02List " +
 	"address (domain must be configured on this server)\x02List address\x02Li" +
 	"st name\x02Members which can administrate and moderate\x02Create list" +
@@ -231,26 +234,28 @@ const en_USData string = "" + // Size: 1871 bytes
 	"onfirmation link to your email address.\x02Email address\x02Get confirma" +
 	"tion link\x02Confirm Join\x02Add %s to the mailing list %s\x02Cancel\x02" +
 	"Email addresses (up to %v, one RFC 5322 address-list per line)\x02Add se" +
-	"nders\x02Remove senders\x02Known Senders\x02Moderation requests\x02Known" +
-	" senders\x02Members\x02Settings\x02Leave\x02Public lists\x02My lists\x02" +
-	"All lists\x02Logout\x02Login\x02%d email addresses\x02Leave %s\x02Confir" +
-	"m leave\x02Remove %s from the mailing list %s\x02Remove me (%s) from lis" +
-	"t %s\x02Password\x02Login is disabled.\x02Back to member list\x02Receive" +
-	" mails\x02Moderate the list\x02Notify on moderation requests\x02Administ" +
-	"rate the list\x02Receive bounce emails\x02Save\x02List\x02Add\x02Remove" +
-	"\x02Send an invitation email with a confirmation link. The link is valid" +
-	" for seven days and not revocable.\x02The new members have consented. Ad" +
-	"d them instantly and send a welcome email.\x02The new members have conse" +
-	"nted. Add them instantly. Do not send a welcome email.\x02Next\x02Send a" +
-	" check back email with a confirmation link. The link is valid for seven " +
-	"days and not revocable.\x02Remove the members instantly and send a goodb" +
-	"ye email.\x02Remove the members instantly. Do not send a goodbye email." +
-	"\x02The list has %d members.\x02Address\x02Moderate\x02Notify on moderat" +
-	"ion\x02Admin\x02Notify on bounce\x02Edit\x02Unnamed email\x02Sender\x02D" +
-	"ate\x02Delete\x02Add %s to known senders\x02Postpone decision\x02Pass" +
-	"\x02Apply\x02No open moderation requests at the moment.\x02My mailing li" +
-	"sts\x02Lists\x02Name\x02Public signup\x02Hide sender address\x02Mails fr" +
-	"om moderators\x02Mails from members\x02Mails from known senders\x02Mails" +
-	" from unknown addresses\x02Delete this mailing list"
+	"nders\x02Remove senders\x02Known Senders\x02%d email addresses\x02Modera" +
+	"tion requests\x02Known senders\x02Members\x02Settings\x02Leave\x02Public" +
+	" lists\x02My lists\x02All lists\x02Logout\x02Login\x02Leave %s\x02In ord" +
+	"er to leave, please enter your email address. We will send a confirmatio" +
+	"n link to your email address.\x02Confirm leave\x02Remove %s from the mai" +
+	"ling list %s\x02Remove me (%s) from list %s\x02Password\x02Login is disa" +
+	"bled.\x02Back to member list\x02Receive mails\x02Moderate the list\x02No" +
+	"tify on moderation requests\x02Administrate the list\x02Receive bounce e" +
+	"mails\x02Save\x02List\x02Add\x02Remove\x02Send an invitation email with " +
+	"a confirmation link. The link is valid for seven days and not revocable." +
+	"\x02The new members have consented. Add them instantly and send a welcom" +
+	"e email.\x02The new members have consented. Add them instantly. Do not s" +
+	"end a welcome email.\x02Next\x02Send a check back email with a confirmat" +
+	"ion link. The link is valid for seven days and not revocable.\x02Remove " +
+	"the members instantly and send a goodbye email.\x02Remove the members in" +
+	"stantly. Do not send a goodbye email.\x02The list has %d members.\x02Add" +
+	"ress\x02Moderate\x02Notify on moderation\x02Admin\x02Notify on bounce" +
+	"\x02Edit\x02Unnamed email\x02Sender\x02Date\x02Delete\x02Add %s to known" +
+	" senders\x02Postpone decision\x02Pass\x02Apply\x02No open moderation req" +
+	"uests at the moment.\x02My mailing lists\x02Lists\x02Name\x02Public sign" +
+	"up\x02Hide sender address\x02Mails from moderators\x02Mails from members" +
+	"\x02Mails from known senders\x02Mails from unknown addresses\x02Delete t" +
+	"his mailing list"
 
-	// Total table size 4943 bytes (4KiB); checksum: E1565CEF
+	// Total table size 5189 bytes (5KiB); checksum: D55A8990

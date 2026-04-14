@@ -184,6 +184,13 @@
             "fuzzy": true
         },
         {
+            "id": "%d email addresses",
+            "message": "%d email addresses",
+            "translation": "%d email addresses",
+            "translatorComment": "Copied from source.",
+            "fuzzy": true
+        },
+        {
             "id": "Moderation requests",
             "message": "Moderation requests",
             "translation": "Moderation requests",
@@ -254,16 +261,16 @@
             "fuzzy": true
         },
         {
-            "id": "%d email addresses",
-            "message": "%d email addresses",
-            "translation": "%d email addresses",
+            "id": "Leave %s",
+            "message": "Leave %s",
+            "translation": "Leave %s",
             "translatorComment": "Copied from source.",
             "fuzzy": true
         },
         {
-            "id": "Leave %s",
-            "message": "Leave %s",
-            "translation": "Leave %s",
+            "id": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "message": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
+            "translation": "In order to leave, please enter your email address. We will send a confirmation link to your email address.",
             "translatorComment": "Copied from source.",
             "fuzzy": true
         },
